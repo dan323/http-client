@@ -53,3 +53,19 @@ class RequestSessionTest {
         }
     }
 }
+
+class RunAllTest {
+    @Test fun reportsFailuresAndContinues() {
+        val executor = HttpExecutor { HttpResponse(204, emptyList(), ByteArray(0), 1) }
+        val session = RequestSession(RequestRunner(executor) { error("no files") }, executor) { _, _ -> null }
+        val seen = mutableListOf<com.dan323.httpclient.core.application.RunOutcome>()
+        val outcomes = session.runAll(
+            listOf(RequestTemplate(null, "GET", "http://h/{{nope}}"), RequestTemplate(null, "GET", "http://h")),
+            emptyMap(),
+        ) { seen += it }
+        assertEquals(2, outcomes.size)
+        assertEquals(outcomes, seen)
+        assertEquals("Undefined variable: nope", (outcomes[0] as com.dan323.httpclient.core.application.RunOutcome.Failure).message)
+        assertEquals(204, (outcomes[1] as com.dan323.httpclient.core.application.RunOutcome.Success).response.statusCode)
+    }
+}

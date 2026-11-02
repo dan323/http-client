@@ -23,6 +23,21 @@ class RequestSession(
         return response
     }
 
+    /** Runs [requests] in order, reporting each outcome as it completes; a failure does not stop the rest. */
+    fun runAll(
+        requests: List<RequestTemplate>,
+        variables: Map<String, String>,
+        onOutcome: (RunOutcome) -> Unit = {},
+    ): List<RunOutcome> = requests.map { r ->
+        val outcome = try {
+            RunOutcome.Success(r, run(r, variables))
+        } catch (e: Exception) {
+            RunOutcome.Failure(r, e.message ?: e::class.simpleName ?: "error")
+        }
+        onOutcome(outcome)
+        outcome
+    }
+
     private fun reference(name: String): String? {
         val split = name.indexOf(".response.")
         if (split <= 0) return null
