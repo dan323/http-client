@@ -16,14 +16,14 @@ class HttpFileParser : ParseHttpFile {
     private val knownMethods = setOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "CONNECT")
 
     override fun parse(text: String): HttpFile {
-        val blocks = mutableListOf<MutableList<String>>(mutableListOf())
-        for (line in text.lines()) {
-            if (line.startsWith("###")) blocks += mutableListOf<String>() else blocks.last() += line
+        val blocks = mutableListOf(0 to mutableListOf<String>())
+        text.lines().forEachIndexed { index, line ->
+            if (line.startsWith("###")) blocks += (index + 1) to mutableListOf<String>() else blocks.last().second += line
         }
-        return HttpFile(blocks.mapNotNull(::parseBlock))
+        return HttpFile(blocks.mapNotNull { (start, lines) -> parseBlock(lines, start) })
     }
 
-    private fun parseBlock(lines: List<String>): RequestTemplate? {
+    private fun parseBlock(lines: List<String>, startLine: Int): RequestTemplate? {
         var name: String? = null
         var i = 0
         // Leading comments / blanks, picking up @name.
@@ -65,6 +65,6 @@ class HttpFileParser : ParseHttpFile {
                 Body.FromFile(bodyLines.first().trim().removePrefix("<").trim())
             else -> Body.Text(bodyLines.joinToString("\n"))
         }
-        return RequestTemplate(name, method, url, headers, body)
+        return RequestTemplate(name, method, url, headers, body, startLine)
     }
 }
