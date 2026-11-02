@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Desktop app (`desktop` module, Compose Multiplatform): open/edit/save `.http` files, environment picker, send one or all requests, response viewer; DMG/MSI/DEB packaging. READMEs for `desktop` and `intellij-plugin`.
+- `RequestSession.runAll` and `RunOutcome`, shared by the CLI, plugin and desktop app.
 - IntelliJ plugin (`intellij-plugin` module): `.http` file type, "Run HTTP Request" (Ctrl+Alt+Enter) for the request at the caret, environment picker, and an "HTTP Response" tool window.
 - IntelliJ plugin: syntax highlighting, gutter run icons, pretty-printed JSON responses.
 - `RequestTemplate.startLine`; dependency selection (`withDependencies`) moved from the CLI into `core`.
