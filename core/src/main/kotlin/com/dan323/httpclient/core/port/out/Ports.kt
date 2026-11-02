@@ -18,3 +18,8 @@ fun interface FileReader {
 fun interface EnvironmentRepository {
     fun load(): List<Environment>
 }
+
+/** Extracts a value from a JSON document with a JSONPath-style expression (`$.a.b[0]`); null if absent. */
+fun interface JsonExtractor {
+    fun extract(json: String, path: String): String?
+}

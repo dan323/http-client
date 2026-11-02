@@ -18,11 +18,12 @@ object VariableResolver {
     /**
      * Replaces `{{name}}` from [variables], or `{{$uuid}}`-style dynamic variables;
      * throws if a variable is undefined so mistakes are not sent silently.
+     * [extra] is consulted after [variables] and before the dynamic variables.
      */
-    fun resolve(text: String, variables: Map<String, String>): String =
+    fun resolve(text: String, variables: Map<String, String>, extra: (String) -> String? = { null }): String =
         pattern.replace(text) { m ->
             val name = m.groupValues[1]
-            variables[name] ?: dynamic[name]?.invoke() ?: throw UndefinedVariableException(name)
+            variables[name] ?: extra(name) ?: dynamic[name]?.invoke() ?: throw UndefinedVariableException(name)
         }
 }
 
