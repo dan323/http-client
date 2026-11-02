@@ -7,6 +7,7 @@ import com.dan323.httpclient.adapters.LocalFileReader
 import com.dan323.httpclient.core.application.HttpFileParser
 import com.dan323.httpclient.core.application.RequestRunner
 import com.dan323.httpclient.core.application.RequestSession
+import com.dan323.httpclient.core.domain.Body
 import com.dan323.httpclient.core.domain.RequestTemplate
 import java.nio.file.Files
 import java.io.PrintStream
@@ -53,6 +54,32 @@ fun select(requests: List<RequestTemplate>, selector: String?): List<RequestTemp
     return selector.toIntOrNull()?.let { requests.getOrNull(it - 1) }?.let(::listOf)
 }
 
+private val referencePattern = Regex("""\{\{\s*([^{}\s.]+)\.response\.""")
+
+private fun RequestTemplate.referencedNames(): Set<String> {
+    val texts = listOf(url) + headers.map { it.value } + when (val b = body) {
+        is Body.Text -> listOf(b.content)
+        is Body.FromFile -> listOf(b.path)
+        null -> emptyList()
+    }
+    return texts.flatMap { t -> referencePattern.findAll(t).map { it.groupValues[1] } }.toSet()
+}
+
+/**
+ * Adds the named requests that [chosen] reads responses from (transitively), so a selected
+ * request still works when it chains on earlier ones. Everything is returned in file order.
+ */
+fun withDependencies(all: List<RequestTemplate>, chosen: List<RequestTemplate>): List<RequestTemplate> {
+    val needed = chosen.toMutableSet()
+    val queue = ArrayDeque(chosen)
+    while (queue.isNotEmpty()) {
+        for (name in queue.removeFirst().referencedNames()) {
+            all.filter { it.name == name }.forEach { if (needed.add(it)) queue.addLast(it) }
+        }
+    }
+    return all.filter { it in needed }
+}
+
 fun main(args: Array<String>) {
     exitProcess(run(args.toList(), System.out, System.err))
 }
@@ -74,7 +101,8 @@ fun run(args: List<String>, out: PrintStream, err: PrintStream): Int {
         JsonEnvironmentRepository(dir).load().firstOrNull { it.name == opts.env }?.variables
             ?: return fail(err, "Unknown environment: ${opts.env}")
     }
-    val chosen = select(requests, opts.request) ?: return fail(err, "No such request: ${opts.request}")
+    val chosen = select(requests, opts.request)?.let { withDependencies(requests, it) }
+        ?: return fail(err, "No such request: ${opts.request}")
     val executor = JdkHttpExecutor()
     val session = RequestSession(RequestRunner(executor, LocalFileReader(dir)), executor, KotlinxJsonExtractor())
 

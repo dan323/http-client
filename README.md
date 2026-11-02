@@ -21,7 +21,7 @@ Documentation: [features](docs/features.md) · [changelog](CHANGELOG.md)
 ```
 
 - `--env NAME` — use variables from `NAME` in `http-client.env.json` (next to the file).
-- `--request X` — run only the request with `# @name X`, or the Nth request (1-based).
+- `--request X` — run only the request with `# @name X`, or the Nth request (1-based), plus any requests it chains on.
 - `--list` — list the requests in the file and exit.
 
 `./gradlew :cli:installDist` builds a standalone `httpc` launcher in `cli/build/install/httpc/bin`.
