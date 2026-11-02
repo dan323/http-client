@@ -15,6 +15,8 @@ data class RequestTemplate(
     val url: String,
     val headers: List<Header> = emptyList(),
     val body: Body? = null,
+    /** 0-based line in the source where this request's block begins (after the preceding `###`). */
+    val startLine: Int = 0,
 )
 
 /** A request with all variables substituted, ready to send. */

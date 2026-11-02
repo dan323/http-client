@@ -60,4 +60,10 @@ class HttpFileParserTest {
         assertEquals("t", sent!!.headers.single().value)
         assertFailsWith<UndefinedVariableException> { runner.run(t, mapOf("host" to "h")) }
     }
+
+    @Test
+    fun `records the start line of each request block`() {
+        val file = parser.parse("GET http://a\n\n###\n\n# @name b\nGET http://b\n")
+        assertEquals(listOf(0, 3), file.requests.map { it.startLine })
+    }
 }
