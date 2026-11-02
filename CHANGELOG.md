@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- `--request` now also runs the requests the selected one chains on.
 - Request chaining: later requests can reference earlier named responses with
   `{{name.response.body.$.path}}`, `{{name.response.body.*}}`,
   `{{name.response.headers.Header}}` and `{{name.response.status}}`.

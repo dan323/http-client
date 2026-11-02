@@ -79,6 +79,14 @@ class EndToEndTest {
         assertContains(r.out, "GET zzz")
     }
 
+    @Test fun selectedRequestRunsItsPrerequisites() {
+        val f = httpFile("# @name login\nPOST {{base}}/login\n\n###\n# @name me\nGET {{base}}/echo\nX-Token: {{login.response.body.$.token}}\n")
+        val r = cli(f, "--env", "dev", "--request", "me")
+        assertEquals(0, r.code, r.err)
+        assertContains(r.out, "### login")
+        assertContains(r.out, "GET zzz")
+    }
+
     @Test fun reportsErrorsWithExitCodeOne() {
         val f = httpFile("GET {{nope}}/x\n")
         val r = cli(f, "--env", "dev")

@@ -74,7 +74,7 @@ httpc <file.http> [--env NAME] [--request NAME|INDEX] [--list]
 | Option        | Effect                                               |
 |---------------|------------------------------------------------------|
 | `--env NAME`  | use variables from `NAME` in `http-client.env.json`  |
-| `--request X` | run only the request named `X`, or the Nth (1-based) |
+| `--request X` | run the request named `X`, or the Nth (1-based), plus the requests it chains on |
 | `--list`      | list requests and exit                               |
 
 For each request the output is the status line with timing, the response headers, then the body.
@@ -83,7 +83,7 @@ Exit codes: `0` success, `1` a request or setup failed, `2` bad arguments.
 Run with `./gradlew :cli:run --args="requests.http --env dev"`, or build a launcher with
 `./gradlew :cli:installDist` (output in `cli/build/install/httpc/bin`).
 
-Limitation: `--request` runs only the selected request, so it cannot use responses from requests that were not run.
+`--request` also runs the named requests the selected one reads responses from (transitively), in file order, so chaining keeps working.
 
 ## Not yet implemented
 
