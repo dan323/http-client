@@ -5,9 +5,9 @@ import com.dan323.httpclient.adapters.JsonEnvironmentRepository
 import com.dan323.httpclient.adapters.LocalFileReader
 import com.dan323.httpclient.core.application.HttpFileParser
 import com.dan323.httpclient.core.application.RequestRunner
-import com.dan323.httpclient.core.application.UndefinedVariableException
 import com.dan323.httpclient.core.domain.RequestTemplate
 import java.nio.file.Files
+import java.io.PrintStream
 import java.nio.file.Path
 import kotlin.system.exitProcess
 
@@ -52,43 +52,46 @@ fun select(requests: List<RequestTemplate>, selector: String?): List<RequestTemp
 }
 
 fun main(args: Array<String>) {
-    val opts = parseArgs(args.toList()) ?: run { System.err.println(USAGE); exitProcess(2) }
-    if (!Files.isRegularFile(opts.file)) fail("No such file: ${opts.file}")
+    exitProcess(run(args.toList(), System.out, System.err))
+}
+
+/** Runs the CLI and returns the process exit code: 0 ok, 1 failure, 2 bad usage. */
+fun run(args: List<String>, out: PrintStream, err: PrintStream): Int {
+    val opts = parseArgs(args) ?: run { err.println(USAGE); return 2 }
+    if (!Files.isRegularFile(opts.file)) return fail(err, "No such file: ${opts.file}")
 
     val dir = opts.file.toAbsolutePath().parent
     val requests = HttpFileParser().parse(Files.readString(opts.file)).requests
 
     if (opts.list) {
-        requests.forEachIndexed { i, r -> println("${i + 1}. ${r.name ?: "-"}  ${r.method} ${r.url}") }
-        return
+        requests.forEachIndexed { i, r -> out.println("${i + 1}. ${r.name ?: "-"}  ${r.method} ${r.url}") }
+        return 0
     }
 
     val variables = if (opts.env == null) emptyMap() else {
         JsonEnvironmentRepository(dir).load().firstOrNull { it.name == opts.env }?.variables
-            ?: fail("Unknown environment: ${opts.env}")
+            ?: return fail(err, "Unknown environment: ${opts.env}")
     }
-    val chosen = select(requests, opts.request) ?: fail("No such request: ${opts.request}")
+    val chosen = select(requests, opts.request) ?: return fail(err, "No such request: ${opts.request}")
     val runner = RequestRunner(JdkHttpExecutor(), LocalFileReader(dir))
 
     var failed = false
     for (r in chosen) {
-        println("### ${r.name ?: "${r.method} ${r.url}"}")
+        out.println("### ${r.name ?: "${r.method} ${r.url}"}")
         try {
             val resp = runner.run(r, variables)
-            println("HTTP ${resp.statusCode} (${resp.durationMillis} ms)")
-            resp.headers.forEach { println("${it.name}: ${it.value}") }
-            println()
-            println(resp.bodyAsString())
-        } catch (e: UndefinedVariableException) {
-            System.err.println("Error: ${e.message}"); failed = true
+            out.println("HTTP ${resp.statusCode} (${resp.durationMillis} ms)")
+            resp.headers.forEach { out.println("${it.name}: ${it.value}") }
+            out.println()
+            out.println(resp.bodyAsString())
         } catch (e: Exception) {
-            System.err.println("Error: ${e.message ?: e::class.simpleName}"); failed = true
+            err.println("Error: ${e.message ?: e::class.simpleName}"); failed = true
         }
     }
-    if (failed) exitProcess(1)
+    return if (failed) 1 else 0
 }
 
-private fun fail(message: String): Nothing {
-    System.err.println("Error: $message")
-    exitProcess(1)
+private fun fail(err: PrintStream, message: String): Int {
+    err.println("Error: $message")
+    return 1
 }
