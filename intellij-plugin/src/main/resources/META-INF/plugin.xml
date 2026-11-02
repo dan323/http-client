@@ -1,0 +1,34 @@
+<idea-plugin>
+    <id>com.dan323.httpclient</id>
+    <name>HTTP Client</name>
+    <vendor>dan323</vendor>
+    <description>Run requests from JetBrains-style .http files in any IntelliJ-based IDE.</description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <fileType name="HTTP Client File" language="HttpClientFile" extensions="http" implementationClass="com.dan323.httpclient.intellij.HttpFileType"
+                  fieldName="INSTANCE"/>
+        <lang.parserDefinition language="HttpClientFile"
+                               implementationClass="com.dan323.httpclient.intellij.HttpParserDefinition"/>
+        <lang.syntaxHighlighterFactory language="HttpClientFile"
+                                       implementationClass="com.dan323.httpclient.intellij.HttpSyntaxHighlighterFactory"/>
+        <runLineMarkerContributor language="HttpClientFile"
+                                  implementationClass="com.dan323.httpclient.intellij.RunLineMarker"/>
+        <toolWindow id="HTTP Response" anchor="bottom" secondary="true"
+                    factoryClass="com.dan323.httpclient.intellij.ResponseToolWindowFactory"/>
+        <projectService serviceImplementation="com.dan323.httpclient.intellij.HttpClientService"/>
+    </extensions>
+
+    <actions>
+        <action id="httpclient.RunRequest" class="com.dan323.httpclient.intellij.RunRequestAction"
+                text="Run HTTP Request" description="Run the request at the caret">
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt ENTER"/>
+        </action>
+        <action id="httpclient.SelectEnvironment" class="com.dan323.httpclient.intellij.SelectEnvironmentAction"
+                text="Select HTTP Environment" description="Choose the environment for HTTP requests">
+            <add-to-group group-id="EditorPopupMenu" anchor="after" relative-to-action="httpclient.RunRequest"/>
+        </action>
+    </actions>
+</idea-plugin>

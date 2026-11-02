@@ -25,3 +25,11 @@ class KotlinxJsonExtractorTest {
         assertNull(x.extract("not json", "$.a"))
     }
 }
+
+class JsonPrettyTest {
+    @Test fun indentsJsonAndIgnoresOtherText() {
+        assertEquals("{\n    \"a\": 1\n}", prettyJson("""{"a":1}"""))
+        assertNull(prettyJson("plain"))
+        assertNull(prettyJson("{broken"))
+    }
+}

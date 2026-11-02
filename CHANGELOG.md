@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- IntelliJ plugin (`intellij-plugin` module): `.http` file type, "Run HTTP Request" (Ctrl+Alt+Enter) for the request at the caret, environment picker, and an "HTTP Response" tool window.
+- IntelliJ plugin: syntax highlighting, gutter run icons, pretty-printed JSON responses.
+- `RequestTemplate.startLine`; dependency selection (`withDependencies`) moved from the CLI into `core`.
 - `--request` now also runs the requests the selected one chains on.
 - Request chaining: later requests can reference earlier named responses with
   `{{name.response.body.$.path}}`, `{{name.response.body.*}}`,
