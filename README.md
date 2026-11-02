@@ -7,7 +7,7 @@ Hexagonal layout:
 - `core/` — domain, application services (`HttpFileParser`, `VariableResolver`, `RequestRunner`) and ports. No third-party dependencies.
 - `adapters/` — driven adapters: `JdkHttpExecutor`, `LocalFileReader`, `JsonEnvironmentRepository` (`http-client.env.json` + `.private.env.json`).
 - `cli/` — command-line front end (`httpc`).
-- `intellij-plugin/` — (planned) IDE front end.
+- `intellij-plugin/` — IntelliJ plugin (works in Community editions). Build with `./gradlew :intellij-plugin:buildPlugin`; set `ideaPath` in `gradle.properties` to a local IDE install.
 - `desktop/` — (planned) standalone front end.
 
 Run tests: `./gradlew test`.

@@ -85,6 +85,21 @@ Run with `./gradlew :cli:run --args="requests.http --env dev"`, or build a launc
 
 `--request` also runs the named requests the selected one reads responses from (transitively), in file order, so chaining keeps working.
 
+## IntelliJ plugin
+
+Works in any IntelliJ-based IDE, including Community (it depends only on the platform module).
+
+- Open a `.http` file, put the caret in a request and press **Ctrl+Alt+Enter** (or use *Run HTTP Request* in the editor context menu).
+- *Select HTTP Environment* in the context menu picks the environment from `http-client.env.json`.
+- Results appear in the **HTTP Response** tool window. Chained prerequisites run first, as in the CLI.
+
+- `.http` files get syntax highlighting (methods, URLs, header names, `{{variables}}`, comments, `###` separators, `< file` bodies).
+- A green run icon in the gutter on each request line runs that request.
+- JSON response bodies are pretty-printed.
+
+The response is shown as plain text for now.
+Do not install it next to the bundled HTTP Client plugin of IntelliJ Ultimate, since both claim `.http` files.
+
 ## Not yet implemented
 
-Response handlers and assertions, authentication helpers, the desktop UI and the IntelliJ plugin.
+Response handlers and assertions, authentication helpers and the desktop UI.
