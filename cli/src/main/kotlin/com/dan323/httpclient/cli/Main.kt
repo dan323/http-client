@@ -2,9 +2,11 @@ package com.dan323.httpclient.cli
 
 import com.dan323.httpclient.adapters.JdkHttpExecutor
 import com.dan323.httpclient.adapters.JsonEnvironmentRepository
+import com.dan323.httpclient.adapters.KotlinxJsonExtractor
 import com.dan323.httpclient.adapters.LocalFileReader
 import com.dan323.httpclient.core.application.HttpFileParser
 import com.dan323.httpclient.core.application.RequestRunner
+import com.dan323.httpclient.core.application.RequestSession
 import com.dan323.httpclient.core.domain.RequestTemplate
 import java.nio.file.Files
 import java.io.PrintStream
@@ -73,13 +75,14 @@ fun run(args: List<String>, out: PrintStream, err: PrintStream): Int {
             ?: return fail(err, "Unknown environment: ${opts.env}")
     }
     val chosen = select(requests, opts.request) ?: return fail(err, "No such request: ${opts.request}")
-    val runner = RequestRunner(JdkHttpExecutor(), LocalFileReader(dir))
+    val executor = JdkHttpExecutor()
+    val session = RequestSession(RequestRunner(executor, LocalFileReader(dir)), executor, KotlinxJsonExtractor())
 
     var failed = false
     for (r in chosen) {
         out.println("### ${r.name ?: "${r.method} ${r.url}"}")
         try {
-            val resp = runner.run(r, variables)
+            val resp = session.run(r, variables)
             out.println("HTTP ${resp.statusCode} (${resp.durationMillis} ms)")
             resp.headers.forEach { out.println("${it.name}: ${it.value}") }
             out.println()

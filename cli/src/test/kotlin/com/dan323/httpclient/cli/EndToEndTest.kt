@@ -24,6 +24,11 @@ class EndToEndTest {
             ex.sendResponseHeaders(201, reply.size.toLong())
             ex.responseBody.use { it.write(reply) }
         }
+        server.createContext("/login") { ex ->
+            val reply = """{"token":"zzz"}""".toByteArray()
+            ex.sendResponseHeaders(200, reply.size.toLong())
+            ex.responseBody.use { it.write(reply) }
+        }
         server.start()
         val port = server.address.port
         Files.writeString(dir.resolve("http-client.env.json"), """{"dev":{"base":"http://127.0.0.1:$port","token":"abc"}}""")
@@ -65,6 +70,13 @@ class EndToEndTest {
         assertEquals(0, r.code, r.err)
         assertContains(r.out, "DELETE")
         assertEquals(false, r.out.contains("### one"))
+    }
+
+    @Test fun chainsResponsesIntoLaterRequests() {
+        val f = httpFile("# @name login\nPOST {{base}}/login\n\n###\nGET {{base}}/echo\nX-Token: {{login.response.body.$.token}}\n")
+        val r = cli(f, "--env", "dev")
+        assertEquals(0, r.code, r.err)
+        assertContains(r.out, "GET zzz")
     }
 
     @Test fun reportsErrorsWithExitCodeOne() {

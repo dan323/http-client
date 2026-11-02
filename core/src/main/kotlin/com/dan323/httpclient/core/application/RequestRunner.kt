@@ -16,14 +16,14 @@ class RequestRunner(
     override fun run(template: RequestTemplate, variables: Map<String, String>): HttpResponse =
         executor.execute(resolve(template, variables))
 
-    fun resolve(t: RequestTemplate, vars: Map<String, String>): HttpRequest = HttpRequest(
+    fun resolve(t: RequestTemplate, vars: Map<String, String>, extra: (String) -> String? = { null }): HttpRequest = HttpRequest(
         method = t.method,
-        url = VariableResolver.resolve(t.url, vars),
-        headers = t.headers.map { Header(it.name, VariableResolver.resolve(it.value, vars)) },
+        url = VariableResolver.resolve(t.url, vars, extra),
+        headers = t.headers.map { Header(it.name, VariableResolver.resolve(it.value, vars, extra)) },
         body = when (val b = t.body) {
             null -> null
-            is Body.Text -> VariableResolver.resolve(b.content, vars).toByteArray()
-            is Body.FromFile -> files.read(VariableResolver.resolve(b.path, vars))
+            is Body.Text -> VariableResolver.resolve(b.content, vars, extra).toByteArray()
+            is Body.FromFile -> files.read(VariableResolver.resolve(b.path, vars, extra))
         },
     )
 }
