@@ -8,6 +8,7 @@ import com.dan323.httpclient.adapters.prettyJson
 import com.dan323.httpclient.core.application.HttpFileParser
 import com.dan323.httpclient.core.application.RequestRunner
 import com.dan323.httpclient.core.application.RequestSession
+import com.dan323.httpclient.core.application.RunOutcome
 import com.dan323.httpclient.core.application.withDependencies
 import com.dan323.httpclient.core.domain.Environment
 import com.dan323.httpclient.core.domain.RequestTemplate
@@ -45,16 +46,17 @@ class HttpClientService(private val project: Project) {
         val executor = JdkHttpExecutor()
         val session = RequestSession(RequestRunner(executor, LocalFileReader(dir)), executor, KotlinxJsonExtractor())
         val out = StringBuilder()
-        for (r in withDependencies(requests, listOf(current))) {
-            out.append("### ").append(describe(r)).append('\n')
-            try {
-                val resp = session.run(r, variables)
-                out.append("HTTP ${resp.statusCode} (${resp.durationMillis} ms)\n")
-                resp.headers.forEach { out.append("${it.name}: ${it.value}\n") }
-                val body = resp.bodyAsString()
-                out.append('\n').append(prettyJson(body) ?: body).append('\n')
-            } catch (e: Exception) {
-                out.append("Error: ${e.message ?: e::class.simpleName}\n")
+        session.runAll(withDependencies(requests, listOf(current)), variables) { outcome ->
+            out.append("### ").append(describe(outcome.request)).append('\n')
+            when (outcome) {
+                is RunOutcome.Success -> {
+                    val resp = outcome.response
+                    out.append("HTTP ${resp.statusCode} (${resp.durationMillis} ms)\n")
+                    resp.headers.forEach { out.append("${it.name}: ${it.value}\n") }
+                    val body = resp.bodyAsString()
+                    out.append('\n').append(prettyJson(body) ?: body).append('\n')
+                }
+                is RunOutcome.Failure -> out.append("Error: ${outcome.message}\n")
             }
             publish(out.toString())
         }

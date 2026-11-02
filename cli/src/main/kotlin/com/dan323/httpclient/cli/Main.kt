@@ -7,6 +7,7 @@ import com.dan323.httpclient.adapters.LocalFileReader
 import com.dan323.httpclient.core.application.HttpFileParser
 import com.dan323.httpclient.core.application.RequestRunner
 import com.dan323.httpclient.core.application.RequestSession
+import com.dan323.httpclient.core.application.RunOutcome
 import com.dan323.httpclient.core.application.withDependencies
 import com.dan323.httpclient.core.domain.RequestTemplate
 import java.nio.file.Files
@@ -80,19 +81,21 @@ fun run(args: List<String>, out: PrintStream, err: PrintStream): Int {
     val executor = JdkHttpExecutor()
     val session = RequestSession(RequestRunner(executor, LocalFileReader(dir)), executor, KotlinxJsonExtractor())
 
-    var failed = false
-    for (r in chosen) {
+    val outcomes = session.runAll(chosen, variables) { outcome ->
+        val r = outcome.request
         out.println("### ${r.name ?: "${r.method} ${r.url}"}")
-        try {
-            val resp = session.run(r, variables)
-            out.println("HTTP ${resp.statusCode} (${resp.durationMillis} ms)")
-            resp.headers.forEach { out.println("${it.name}: ${it.value}") }
-            out.println()
-            out.println(resp.bodyAsString())
-        } catch (e: Exception) {
-            err.println("Error: ${e.message ?: e::class.simpleName}"); failed = true
+        when (outcome) {
+            is RunOutcome.Success -> {
+                val resp = outcome.response
+                out.println("HTTP ${resp.statusCode} (${resp.durationMillis} ms)")
+                resp.headers.forEach { out.println("${it.name}: ${it.value}") }
+                out.println()
+                out.println(resp.bodyAsString())
+            }
+            is RunOutcome.Failure -> err.println("Error: ${outcome.message}")
         }
     }
+    val failed = outcomes.any { it is RunOutcome.Failure }
     return if (failed) 1 else 0
 }
 
