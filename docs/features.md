@@ -85,6 +85,10 @@ Run with `./gradlew :cli:run --args="requests.http --env dev"`, or build a launc
 
 `--request` also runs the named requests the selected one reads responses from (transitively), in file order, so chaining keeps working.
 
+## Desktop app
+
+A standalone window for Windows, macOS and Linux: file editor, request list, environment picker, and a response viewer. See [desktop/README.md](../desktop/README.md).
+
 ## IntelliJ plugin
 
 Works in any IntelliJ-based IDE, including Community (it depends only on the platform module).
@@ -102,4 +106,4 @@ Do not install it next to the bundled HTTP Client plugin of IntelliJ Ultimate, s
 
 ## Not yet implemented
 
-Response handlers and assertions, authentication helpers and the desktop UI.
+Response handlers and assertions, and authentication helpers.
