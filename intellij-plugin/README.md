@@ -45,7 +45,25 @@ Ultimate's `HTTP` language, but both plugins still claim `*.http`.
 
 ## Status
 
-Compiles, passes `verifyPluginStructure` and the lexer tests. It has **not** been run in an IDE yet:
-the gutter icons, highlighting and tool window are untested by hand, and the bundled
-kotlinx-serialization could conflict with the IDE's own copy. No completion or navigation for
-`{{variables}}` yet.
+Verified (T21, IntelliJ IDEA Ultimate 2026.1.5 as the build target, `since-build` 261, no `until-build`):
+
+- `buildPlugin`, `verifyPluginStructure` and the lexer tests pass; `plugin.xml` is patched correctly.
+- `runIde` starts the sandbox IDE, loads "HTTP Client (0.2.0)" and `idea.log` shows no errors or plugin
+  problems from this plugin (the only warnings are unrelated Ultimate-only bundled plugins and the JetBrains
+  Station socket).
+- **kotlinx-serialization conflict fixed:** the IDE ships its own `kotlinx-serialization` jars, so the plugin
+  distribution no longer bundles 1.9.0 (they are excluded from `runtimeClasspath` in `build.gradle.kts`; the zip
+  now holds only `core`, `adapters` and the plugin jar). Kotlin stdlib is also not bundled.
+  `verifyPluginProjectConfiguration` still warns about the stdlib; the suggested
+  `kotlin.stdlib.default.dependency=false` is a global property that would break the other modules, so it is not set.
+
+Not verified (the sandbox IDE exited by itself after about 16 seconds in the agent environment, with no
+visible window or interaction):
+
+- Highlighting colors, gutter run icons, the "HTTP Response" tool window and the run/environment actions.
+- Behavior in a real Community edition. The sandbox is Ultimate, which also bundles an HTTP Client plugin that
+  claims `*.http`; test with that plugin disabled and in an actual Community install.
+- Whether the IDE's serialization version is binary compatible with what `adapters` was compiled against
+  (1.9.0) when a request actually runs.
+
+No completion or navigation for `{{variables}}` yet.
