@@ -16,7 +16,12 @@ class RequestRunner(
     override fun run(template: RequestTemplate, variables: Map<String, String>): HttpResponse =
         executor.execute(resolve(template, variables))
 
-    fun resolve(t: RequestTemplate, vars: Map<String, String>, extra: (String) -> String? = { null }): HttpRequest = HttpRequest(
+    fun resolve(t: RequestTemplate, env: Map<String, String>, extra: (String) -> String? = { null }): HttpRequest {
+        val vars = VariableResolver.withFileVariables(env, t.fileVariables)
+        return build(t, vars, extra)
+    }
+
+    private fun build(t: RequestTemplate, vars: Map<String, String>, extra: (String) -> String?): HttpRequest = HttpRequest(
         method = t.method,
         url = VariableResolver.resolve(t.url, vars, extra),
         headers = t.headers.map { Header(it.name, VariableResolver.resolve(it.value, vars, extra)) },

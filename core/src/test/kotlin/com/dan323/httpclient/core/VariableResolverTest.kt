@@ -36,4 +36,22 @@ class VariableResolverTest {
     @Test fun valuesWithRegexSpecialCharsAreLiteral() {
         assertEquals("a\$1\\b", VariableResolver.resolve("{{v}}", mapOf("v" to "a\$1\\b")))
     }
+
+    @Test fun fileVariablesOverrideEnvironmentAndSeeEarlierOnes() {
+        val layered = VariableResolver.withFileVariables(
+            mapOf("host" to "env", "user" to "bob"),
+            linkedMapOf("host" to "http://{{user}}", "url" to "{{host}}/x"),
+        )
+        assertEquals("http://bob", layered["host"])
+        assertEquals("http://bob/x", layered["url"])
+    }
+
+    @Test fun fileVariableMayReferenceDynamicVariable() {
+        val vars = VariableResolver.withFileVariables(emptyMap(), mapOf("id" to "{{\$uuid}}"))
+        assertEquals(36, VariableResolver.resolve("{{id}}", vars).length)
+    }
+
+    @Test fun cyclicVariablesTerminate() {
+        assertFailsWith<UndefinedVariableException> { VariableResolver.resolve("{{a}}", mapOf("a" to "{{a}}{{b}}")) }
+    }
 }
