@@ -13,8 +13,9 @@ import com.dan323.httpclient.core.port.out.JsonExtractor
 class RequestSession(
     private val runner: RequestRunner,
     private val executor: HttpExecutor,
-    private val json: JsonExtractor,
+    json: JsonExtractor,
 ) {
+    private val extractor = ResponseExtractor(json)
     private val responses = mutableMapOf<String, HttpResponse>()
 
     fun run(template: RequestTemplate, variables: Map<String, String>): HttpResponse {
@@ -64,12 +65,6 @@ class RequestSession(
         if (split <= 0) return null
         val response = responses[name.substring(0, split)] ?: return null
         val what = name.substring(split + ".response.".length)
-        return when {
-            what == "status" -> response.statusCode.toString()
-            what == "body.*" -> response.bodyAsString()
-            what.startsWith("body.") -> json.extract(response.bodyAsString(), what.removePrefix("body."))
-            what.startsWith("headers.") -> response.header(what.removePrefix("headers."))
-            else -> null
-        }
+        return extractor.extract(response, what)
     }
 }
