@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Desktop response viewer: status badge, Body/Headers tabs, collapsible syntax-colored JSON tree, Raw view and Copy.
+- Desktop: syntax highlighting in the editor, Ctrl/Cmd+S and Ctrl/Cmd+Enter shortcuts, opening a file from a launch argument, file-dialog errors shown in the UI, and headless UI tests.
+- `HttpLineLexer` in `core`, shared by the desktop editor and the IntelliJ plugin lexer.
 - `mock-server` module (httpbin-style, JDK only) and `samples/` `.http` files that run against it offline; `SamplesTest` keeps them working.
 - Desktop app (`desktop` module, Compose Multiplatform): open/edit/save `.http` files, environment picker, send one or all requests, response viewer; DMG/MSI/DEB packaging. READMEs for `desktop` and `intellij-plugin`.
 - `RequestSession.runAll` and `RunOutcome`, shared by the CLI, plugin and desktop app.
