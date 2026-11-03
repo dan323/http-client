@@ -46,4 +46,10 @@ class HttpLineLexerTest {
         tokens.zipWithNext().forEach { (a, b) -> assert(a.end <= b.start) { "$a overlaps $b" } }
         assertEquals(text.length - text.count { it == '\n' }, tokens.sumOf { it.end - it.start })
     }
+
+    @Test
+    fun `request lines include bare URLs that start with a variable`() {
+        val text = "# @name a\n{{host}}/get\nAccept: x\n\n{{body}}\n###\nPOST {{host}}/p\n\n{{x}}\n"
+        assertEquals(setOf(1, 6), HttpLineLexer.requestLines(text))
+    }
 }

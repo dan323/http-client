@@ -9,6 +9,12 @@ All notable changes to this project are documented here. The format follows
 - `ResponseExtractor` in `core` (T4): status, header, JSONPath, XPath (`body./x`, `body.xpath:`) and regex (`body.regex:`) lookups on a response, used by `{{name.response...}}` chaining and reusable by assertions. XPath and regex use the JDK only; DOCTYPE is rejected.
 - Parser: `@var = value` file variables (override environment values, may reference other variables) and `# @setting [value]` directives, exposed as `RequestTemplate.fileVariables` / `settings` and `HttpFile.variables` (T1).
 
+### Fixed
+- IntelliJ plugin: stop bundling kotlinx-serialization in the plugin zip (the IDE provides it), avoiding a class conflict.
+
+### Changed
+- IntelliJ plugin sandbox verified to load without errors in IDEA 2026.1.5 (T21); GUI behavior still unverified, see `intellij-plugin/README.md`.
+
 ## [0.2.0] - 2026-11-03
 
 ### Added
