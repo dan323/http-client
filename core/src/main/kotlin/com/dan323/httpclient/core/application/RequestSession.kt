@@ -38,6 +38,27 @@ class RequestSession(
         outcome
     }
 
+    /**
+     * Runs [current] after the named requests it chains on ([withDependencies]). Dependencies that already
+     * ran in this session are not sent again: their stored response is reused. [current] is always sent.
+     * [onReused] is told first which requests were skipped.
+     */
+    fun runChained(
+        all: List<RequestTemplate>,
+        current: RequestTemplate,
+        variables: Map<String, String>,
+        onReused: (List<RequestTemplate>) -> Unit = {},
+        onOutcome: (RunOutcome) -> Unit = {},
+    ): List<RunOutcome> {
+        val chain = withDependencies(all, listOf(current))
+        val (reused, toSend) = chain.partition { it !== current && it.name?.let(::hasResponse) == true }
+        onReused(reused)
+        return runAll(toSend, variables, onOutcome)
+    }
+
+    /** True once a request with this `@name` has run in this session. */
+    fun hasResponse(name: String): Boolean = name in responses
+
     private fun reference(name: String): String? {
         val split = name.indexOf(".response.")
         if (split <= 0) return null
