@@ -2,6 +2,7 @@ package com.dan323.httpclient.desktop
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -47,18 +48,18 @@ import java.awt.FileDialog
 import java.awt.Frame
 import java.nio.file.Path
 
-private val mono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp)
+internal val mono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp)
 
 @Composable
-fun RowScope.App(state: AppState) {
+fun RowScope.App(state: AppState, parent: Frame? = null) {
     val scope = rememberCoroutineScope()
-    var showHeaders by remember { mutableStateOf(false) }
+    val dark = isSystemInDarkTheme()
 
     // Left: file, environment and request list.
     Column(Modifier.width(300.dp).fillMaxHeight().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { chooseFile("Open .http file", save = false)?.let(state::open) }) { Text("Open…") }
-            OutlinedButton(onClick = { chooseFile("New .http file", save = true)?.let(state::create) }) { Text("New…") }
+            Button(onClick = { state.pick { chooseFile(parent, "Open .http file", save = false) }?.let(state::open) }) { Text("Open…") }
+            OutlinedButton(onClick = { state.pick { chooseFile(parent, "New .http file", save = true) }?.let(state::create) }) { Text("New…") }
         }
         Text(state.file?.fileName?.toString()?.plus(if (state.dirty) " •" else "") ?: "No file open", fontWeight = FontWeight.Bold)
         EnvironmentPicker(state)
@@ -97,22 +98,22 @@ fun RowScope.App(state: AppState) {
             onValueChange = state::edit,
             enabled = state.file != null,
             textStyle = mono,
+            visualTransformation = remember(dark) { HttpVisualTransformation(if (dark) HighlightPalette.Dark else HighlightPalette.Light) },
             placeholder = { Text("Open or create a .http file") },
             modifier = Modifier.fillMaxSize().padding(top = 8.dp),
         )
     }
 
     // Right: responses.
-    Column(Modifier.weight(1f).fillMaxHeight().padding(12.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Response", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
-            Spacer(Modifier.weight(1f))
-            Checkbox(checked = showHeaders, onCheckedChange = { showHeaders = it })
-            Text("Headers", modifier = Modifier.padding(top = 12.dp))
+    Column(Modifier.weight(1.2f).fillMaxHeight().padding(12.dp)) {
+        Text("Response", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp))
+        if (state.outcomes.isEmpty()) {
+            Text(
+                if (state.running) "Sending…" else "Select a request and press Send (Ctrl/Cmd+Enter).",
+                color = MaterialTheme.colorScheme.outline,
+            )
         }
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            state.outcomes.forEach { OutcomeView(it, showHeaders) }
-        }
+        ResponsePane(state.outcomes, Modifier.fillMaxSize())
     }
 }
 
@@ -130,32 +131,8 @@ private fun EnvironmentPicker(state: AppState) {
     }
 }
 
-@Composable
-private fun OutcomeView(outcome: RunOutcome, showHeaders: Boolean) {
-    val r = outcome.request
-    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        Text("${r.name ?: "${r.method} ${r.url}"}", fontWeight = FontWeight.SemiBold)
-        when (outcome) {
-            is RunOutcome.Failure -> Text("Error: ${outcome.message}", color = MaterialTheme.colorScheme.error)
-            is RunOutcome.Success -> {
-                val resp = outcome.response
-                val color = if (resp.statusCode < 400) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
-                Text("HTTP ${resp.statusCode} · ${resp.durationMillis} ms · ${resp.body.size} bytes", color = color)
-                SelectionContainer {
-                    Column {
-                        if (showHeaders) Text(resp.headers.joinToString("\n") { "${it.name}: ${it.value}" }, style = mono)
-                        val body = resp.bodyAsString()
-                        Text(prettyJson(body) ?: body, style = mono, modifier = Modifier.padding(top = 4.dp))
-                    }
-                }
-            }
-        }
-        HorizontalDivider(Modifier.padding(top = 8.dp))
-    }
-}
-
-private fun chooseFile(title: String, save: Boolean): Path? {
-    val dialog = FileDialog(null as Frame?, title, if (save) FileDialog.SAVE else FileDialog.LOAD)
+private fun chooseFile(parent: Frame?, title: String, save: Boolean): Path? {
+    val dialog = FileDialog(parent, title, if (save) FileDialog.SAVE else FileDialog.LOAD)
     if (!save) dialog.setFilenameFilter { _, name -> name.endsWith(".http") }
     dialog.isVisible = true
     val name = dialog.file ?: return null
