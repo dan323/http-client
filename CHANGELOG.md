@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-03
+
 ### Added
 - Desktop response viewer: status badge, Body/Headers tabs, collapsible syntax-colored JSON tree, Raw view and Copy.
 - Desktop: syntax highlighting in the editor, Ctrl/Cmd+S and Ctrl/Cmd+Enter shortcuts, opening a file from a launch argument, file-dialog errors shown in the UI, and headless UI tests.
@@ -27,10 +29,11 @@ All notable changes to this project are documented here. The format follows
 - `CLAUDE.md` guidance for Claude Code.
 
 ### Changed
+- Added `docs/PLAN.md`: feature list, deduplicated tasks and a 3-lane timeline.
 - CLI logic moved from `main` into a testable `run(args, out, err): Int`.
 - README documents the CLI and links to the feature docs.
 
-## [0.1.0-SNAPSHOT]
+## [0.1.0]
 
 ### Added
 - Hexagonal scaffold: `core` (domain, application services, ports) and `adapters`.
