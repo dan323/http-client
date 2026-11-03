@@ -1,0 +1,15 @@
+# Environment and dynamic variables. Run with: --env dev
+# @name dynamic
+GET {{base}}/anything/{{$uuid}}?ts={{$timestamp}}&n={{$randomInt}}
+
+###
+# Needs "password" in http-client.private.env.json (see the .example file); fails without it.
+# @name form
+POST {{base}}/post
+Content-Type: application/x-www-form-urlencoded
+
+user={{user}}&password={{password}}
+
+###
+# @name undefined-variable (expected to fail: "Undefined variable: nope")
+GET {{base}}/get?x={{nope}}

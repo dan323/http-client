@@ -1,0 +1,29 @@
+# Request chaining. Run with: --env dev --request use-token
+# (--request use-token also runs "login" first)
+# @name login
+POST {{base}}/post
+Content-Type: application/json
+
+{ "token": "secret-{{$randomInt}}", "user": "{{user}}" }
+
+###
+# @name use-token
+GET {{base}}/bearer
+Authorization: Bearer {{login.response.body.$.json.token}}
+
+###
+# @name echo-header
+GET {{base}}/anything
+X-Login-Status: {{login.response.status}}
+X-Content-Type: {{login.response.headers.content-type}}
+
+###
+# @name whole-body
+POST {{base}}/post
+Content-Type: application/json
+
+{{login.response.body.*}}
+
+###
+# @name missing-path (expected to fail: path does not exist)
+GET {{base}}/get?x={{login.response.body.$.nope}}

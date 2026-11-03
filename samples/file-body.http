@@ -1,0 +1,6 @@
+# Body loaded from a file next to this .http file. Run with: --env dev
+# @name from-file
+POST {{base}}/post
+Content-Type: application/json
+
+< ./payload.json
