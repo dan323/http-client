@@ -17,6 +17,10 @@ data class RequestTemplate(
     val body: Body? = null,
     /** 0-based line in the source where this request's block begins (after the preceding `###`). */
     val startLine: Int = 0,
+    /** `# @setting [value]` directives other than `@name`, e.g. `timeout` to `5` or `no-redirect` to `""`. */
+    val settings: Map<String, String> = emptyMap(),
+    /** File variables (`@var = value`) defined at or before this request; they override environment values. */
+    val fileVariables: Map<String, String> = emptyMap(),
 )
 
 /** A request with all variables substituted, ready to send. */
@@ -37,7 +41,7 @@ data class HttpResponse(
     fun bodyAsString(): String = body.toString(Charsets.UTF_8)
 }
 
-data class HttpFile(val requests: List<RequestTemplate>)
+data class HttpFile(val requests: List<RequestTemplate>, val variables: Map<String, String> = emptyMap())
 
 /** Named variable set, e.g. `dev` from http-client.env.json. */
 data class Environment(val name: String, val variables: Map<String, String>)
