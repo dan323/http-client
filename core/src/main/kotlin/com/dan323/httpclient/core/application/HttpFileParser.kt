@@ -8,11 +8,13 @@ import com.dan323.httpclient.core.port.`in`.ParseHttpFile
 
 /**
  * Parser for the JetBrains `.http` format: requests separated by `###`,
- * `# @name x` request names, `//` and `#` comments, `< path` file bodies.
+ * `# @name x` request names, `@var = value` file variables, `# @setting [value]` directives, `//` and `#` comments, `< path` file bodies.
  */
 class HttpFileParser : ParseHttpFile {
     private val requestLine = Regex("""^([A-Za-z]+)\s+(\S.*?)(?:\s+HTTP/\S+)?$""")
     private val nameTag = Regex("""^(?:#|//)\s*@name\s+(\S+)""")
+    private val variableLine = Regex("""^@([^\s=]+)\s*=\s*(.*)$""")
+    private val settingTag = Regex("""^(?:#|//)\s*@([A-Za-z][\w-]*)(?:\s+(.*))?$""")
     private val knownMethods = setOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "CONNECT")
 
     override fun parse(text: String): HttpFile {
@@ -20,18 +22,26 @@ class HttpFileParser : ParseHttpFile {
         text.lines().forEachIndexed { index, line ->
             if (line.startsWith("###")) blocks += (index + 1) to mutableListOf<String>() else blocks.last().second += line
         }
-        return HttpFile(blocks.mapNotNull { (start, lines) -> parseBlock(lines, start) })
+        // File variables apply from their line to the end of the file; a redefinition replaces the value.
+        val fileVariables = linkedMapOf<String, String>()
+        val requests = blocks.mapNotNull { (start, lines) -> parseBlock(lines, start, fileVariables) }
+        return HttpFile(requests, fileVariables.toMap())
     }
 
-    private fun parseBlock(lines: List<String>, startLine: Int): RequestTemplate? {
+    private fun parseBlock(lines: List<String>, startLine: Int, fileVariables: MutableMap<String, String>): RequestTemplate? {
         var name: String? = null
+        val settings = linkedMapOf<String, String>()
         var i = 0
         // Leading comments / blanks, picking up @name.
         while (i < lines.size) {
             val l = lines[i].trim()
             if (l.isEmpty()) { i++; continue }
+            variableLine.matchEntire(l)?.let { fileVariables[it.groupValues[1]] = it.groupValues[2].trim(); i++; continue }
             if (l.startsWith("#") || l.startsWith("//")) {
                 nameTag.find(l)?.let { name = it.groupValues[1] }
+                settingTag.matchEntire(l)?.let { m ->
+                    if (m.groupValues[1] != "name") settings[m.groupValues[1]] = m.groupValues[2].trim()
+                }
                 i++; continue
             }
             break
@@ -65,6 +75,6 @@ class HttpFileParser : ParseHttpFile {
                 Body.FromFile(bodyLines.first().trim().removePrefix("<").trim())
             else -> Body.Text(bodyLines.joinToString("\n"))
         }
-        return RequestTemplate(name, method, url, headers, body, startLine)
+        return RequestTemplate(name, method, url, headers, body, startLine, settings, fileVariables.toMap())
     }
 }

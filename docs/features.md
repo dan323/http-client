@@ -40,6 +40,26 @@ Put environments next to the `.http` file and pick one with `--env`:
 
 `http-client.private.env.json` uses the same shape for secrets; its values override the shared file.
 
+### File variables
+
+`@name = value` lines define variables inside the `.http` file. They apply to the requests from that line to the end
+of the file; defining the same name again replaces the value from there on. File variables override environment
+values, and a value may use `{{...}}` (environment variables, earlier file variables, dynamic variables, response
+references).
+
+```
+@host = http://localhost:8080
+@user = {{$uuid}}
+
+GET {{host}}/users/{{user}}
+```
+
+### Request settings
+
+`# @setting [value]` (or `// @setting`) lines before a request line attach settings to it: for example
+`# @timeout 5`, `# @no-redirect`, `# @no-cookie-jar`. The parser records them on the request
+(`RequestTemplate.settings`); acting on them is done by later work (timeouts, redirects, cookie jar).
+
 ### Dynamic variables
 
 Each occurrence is evaluated separately. A variable you define with the same name wins.
