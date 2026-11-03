@@ -14,7 +14,7 @@ Hexagonal layout:
 
 Run tests: `./gradlew test`.
 
-Documentation: [features](docs/features.md) · [changelog](CHANGELOG.md)
+Documentation: [features](docs/features.md) · [plan](docs/PLAN.md) · [changelog](CHANGELOG.md)
 
 ## CLI
 
