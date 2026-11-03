@@ -6,6 +6,7 @@ plugins {
 
 dependencies {
     implementation(project(":adapters"))
+    testImplementation(project(":mock-server"))
     testImplementation(kotlin("test"))
 }
 

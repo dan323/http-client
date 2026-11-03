@@ -8,6 +8,8 @@ Hexagonal layout:
 - `adapters/` — driven adapters: `JdkHttpExecutor`, `LocalFileReader`, `JsonEnvironmentRepository` (`http-client.env.json` + `.private.env.json`).
 - `cli/` — command-line front end (`httpc`).
 - `desktop/` — standalone Compose Desktop app for Windows, macOS and Linux ([README](desktop/README.md)).
+- `mock-server/` — local httpbin-style server used by `samples/` (`./gradlew :mock-server:run`).
+- `samples/` — `.http` files for manual testing ([README](samples/README.md)).
 - `intellij-plugin/` — IntelliJ plugin ([README](intellij-plugin/README.md)) (works in Community editions). Build with `./gradlew :intellij-plugin:buildPlugin`; set `ideaPath` in `gradle.properties` to a local IDE install.
 
 Run tests: `./gradlew test`.

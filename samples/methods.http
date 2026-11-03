@@ -1,0 +1,28 @@
+# Other methods. Run with: --env dev
+PUT {{base}}/put
+Content-Type: text/plain
+
+replacing
+
+###
+PATCH {{base}}/patch
+Content-Type: application/json
+
+{"patched": true}
+
+###
+DELETE {{base}}/delete
+
+###
+HEAD {{base}}/get
+
+###
+OPTIONS {{base}}/get
+
+###
+# @name not-found (4xx is shown, not treated as a failure)
+GET {{base}}/status/404
+
+###
+# @name redirect (redirects are followed)
+GET {{base}}/redirect/2

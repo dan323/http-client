@@ -1,0 +1,24 @@
+# Basic requests. Run with: --env dev
+# @name get
+GET {{base}}/get?user={{user}}
+Accept: application/json
+
+###
+# @name post-json
+POST {{base}}/post
+Content-Type: application/json
+
+{
+  "user": "{{user}}",
+  "id": "{{$uuid}}"
+}
+
+###
+// A line without a method is a GET
+{{base}}/status/204
+
+###
+# @name headers
+GET {{base}}/headers
+X-Custom: hello
+X-Request-Time: {{$isoTimestamp}}
