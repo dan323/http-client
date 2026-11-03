@@ -67,6 +67,14 @@ class AppState {
         }
     }
 
+    /** Runs a file chooser, turning any failure (no display, dialog error) into a visible message. */
+    fun pick(chooser: () -> Path?): Path? = try {
+        chooser()
+    } catch (e: Throwable) {
+        message = "Could not show the file dialog: ${e.message ?: e::class.simpleName}"
+        null
+    }
+
     private fun refreshEnvironments() {
         val path = file ?: return
         environments = Workspace.environmentNames(path)

@@ -14,9 +14,12 @@ repositories {
 
 dependencies {
     implementation(project(":adapters"))
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
     testImplementation(kotlin("test"))
+    testImplementation(compose.desktop.uiTestJUnit4)
+    testImplementation(project(":mock-server"))
 }
 
 compose.desktop {
