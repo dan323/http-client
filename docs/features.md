@@ -40,6 +40,26 @@ Put environments next to the `.http` file and pick one with `--env`:
 
 `http-client.private.env.json` uses the same shape for secrets; its values override the shared file.
 
+### File variables
+
+`@name = value` lines define variables inside the `.http` file. They apply to the requests from that line to the end
+of the file; defining the same name again replaces the value from there on. File variables override environment
+values, and a value may use `{{...}}` (environment variables, earlier file variables, dynamic variables, response
+references).
+
+```
+@host = http://localhost:8080
+@user = {{$uuid}}
+
+GET {{host}}/users/{{user}}
+```
+
+### Request settings
+
+`# @setting [value]` (or `// @setting`) lines before a request line attach settings to it: for example
+`# @timeout 5`, `# @no-redirect`, `# @no-cookie-jar`. The parser records them on the request
+(`RequestTemplate.settings`); acting on them is done by later work (timeouts, redirects, cookie jar).
+
 ### Dynamic variables
 
 Each occurrence is evaluated separately. A variable you define with the same name wins.
@@ -61,6 +81,10 @@ Requests run in file order. Once a **named** request has run, later requests can
 | `{{login.response.body.*}}`       | whole body                           |
 | `{{login.response.headers.X-Id}}` | header value (case-insensitive)      |
 | `{{login.response.status}}`       | status code                          |
+| `{{page.response.body.//a/@href}}` | XPath over an XML body (also `body.xpath:count(//a)`) |
+| `{{page.response.body.regex:id=(\d+)}}` | regex over the body: group 1 if present, else the whole match |
+
+The same expressions (via `ResponseExtractor` in `core`) are what assertions will use.
 
 Supported JSONPath subset: `$`, `.key`, `['key']`, `[index]`. Objects and arrays are returned as JSON text.
 Referencing a request that has not run, or a path that does not exist, is an error.
