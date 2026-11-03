@@ -17,6 +17,15 @@ dependencies {
     }
 }
 
+// The IDE ships its own kotlinx-serialization (and Kotlin stdlib); bundling a second copy in the plugin
+// distribution risks class conflicts, so the plugin uses the IDE's.
+configurations.named("runtimeClasspath") {
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-serialization-json-jvm")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-serialization-core-jvm")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-serialization-json")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-serialization-core")
+}
+
 intellijPlatform {
     pluginConfiguration {
         name = "HTTP Client"
