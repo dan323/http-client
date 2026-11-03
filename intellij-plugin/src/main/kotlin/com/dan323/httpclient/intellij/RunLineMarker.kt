@@ -1,35 +1,38 @@
 package com.dan323.httpclient.intellij
 
+import com.dan323.httpclient.core.application.HttpLineLexer
 import com.intellij.execution.lineMarker.RunLineMarkerContributor
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.psi.PsiElement
-import com.intellij.psi.util.PsiTreeUtil
-import com.intellij.psi.PsiWhiteSpace
+import com.intellij.psi.PsiFile
+import com.intellij.psi.util.CachedValueProvider
+import com.intellij.psi.util.CachedValuesManager
 
-/** Run icon in the gutter on the first token of each request line. */
+/** Run icon in the gutter on the first token of each request line (with or without a method). */
 class RunLineMarker : RunLineMarkerContributor() {
     override fun getInfo(element: PsiElement): Info? {
-        val type = element.node?.elementType
-        val isStart = type == HttpTokens.METHOD ||
-            (type == HttpTokens.URL && PsiTreeUtil.skipWhitespacesBackward(element)?.node?.elementType != HttpTokens.METHOD &&
-                element.prevLeafOnLineIsBlank())
-        if (!isStart) return null
+        if (element.firstChild != null) return null // leaves only
+        val file = element.containingFile ?: return null
+        val text = file.text
         val offset = element.textRange.startOffset
-        val file = element.containingFile
+        val lineStart = text.lastIndexOf('\n', offset - 1) + 1
+        // Only the first non-blank token of a line can carry the icon.
+        if (text.substring(lineStart, offset).isNotBlank()) return null
+        val line = text.take(offset).count { it == '\n' }
+        if (line !in requestLines(file)) return null
+
         val action = object : AnAction("Run HTTP Request", null, AllIcons.RunConfigurations.TestState.Run) {
             override fun actionPerformed(e: AnActionEvent) {
                 val vfile = file.virtualFile ?: file.originalFile.virtualFile ?: return
-                val text = file.text
-                runRequest(file.project, vfile, text, text.take(offset).count { it == '\n' })
+                runRequest(file.project, vfile, file.text, line)
             }
         }
         return Info(AllIcons.RunConfigurations.TestState.Run, arrayOf(action)) { "Run HTTP Request" }
     }
 
-    private fun PsiElement.prevLeafOnLineIsBlank(): Boolean {
-        val prev = prevSibling ?: return true
-        return prev is PsiWhiteSpace && (prev.prevSibling == null || prev.text.contains('\n') || prev.prevSibling.node.elementType != HttpTokens.METHOD)
+    private fun requestLines(file: PsiFile): Set<Int> = CachedValuesManager.getCachedValue(file) {
+        CachedValueProvider.Result.create(HttpLineLexer.requestLines(file.text), file)
     }
 }

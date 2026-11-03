@@ -83,4 +83,16 @@ object HttpLineLexer {
         }
         return out
     }
+
+    /** Zero-based line numbers of the request lines (method + URL, or a bare URL meaning GET). */
+    fun requestLines(text: String): Set<Int> {
+        val out = mutableSetOf<Int>()
+        var mode = BEFORE
+        text.split('\n').forEachIndexed { index, line ->
+            val r = lexLine(line, mode)
+            if (mode == BEFORE && r.nextMode == HEADERS) out += index
+            mode = r.nextMode
+        }
+        return out
+    }
 }
