@@ -42,6 +42,8 @@ data class RequestOptions(
     val followRedirects: Boolean = true,
     /** HTTP proxy, or null for a direct connection. */
     val proxy: ProxyAddress? = null,
+    /** False (`@no-cookie-jar`) means the session's cookie jar neither sends nor stores cookies for this request. */
+    val useCookieJar: Boolean = true,
 )
 
 /** A validated HTTP proxy endpoint. */

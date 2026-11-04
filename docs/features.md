@@ -66,7 +66,17 @@ GET {{host}}/users/{{user}}
 
 Setting names are case-insensitive and unknown ones are ignored. Invalid values (including a blank `@proxy`) fail when the request is resolved with an `Invalid @timeout` / `@proxy` / `@no-redirect` error, before anything is sent. `JdkHttpExecutor` reuses one derived client per (redirect policy, proxy) and copies the injected client's connect timeout, SSL, authenticator, cookie handler, executor and HTTP version; request priority cannot be copied.
 
-`@no-cookie-jar` is recorded but acted on by later work (cookie jar).
+- `# @no-cookie-jar`: do not use the cookie jar for this request (see below). Same optional `true`/`false` value as `@no-redirect`.
+
+### Cookie jar
+
+Each `RequestSession` (one CLI run, one desktop/plugin session) owns an in-memory `CookieJar` in `core`. `Set-Cookie` headers
+of a response are stored, and later requests in the same session to a matching host and path get a `Cookie` header, so a login
+request followed by an authenticated one just works. Sessions never share cookies and nothing is persisted to disk.
+Supported: `Domain` (host-only when absent; a host cannot set cookies for an unrelated domain), `Path`, `Max-Age`, `Expires`,
+`Secure` (sent only over https); `Max-Age=0` or a past `Expires` deletes. `# @no-cookie-jar` makes a request neither send nor store cookies.
+Limitations: a `Cookie` header written in the request is sent as is (the jar adds nothing); cookies set by intermediate redirect
+responses are not captured (the executor follows redirects itself); no public-suffix list; no SameSite handling.
 
 ### Assertions
 
