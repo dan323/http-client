@@ -29,7 +29,28 @@ data class HttpRequest(
     val url: String,
     val headers: List<Header> = emptyList(),
     val body: ByteArray? = null,
+    val options: RequestOptions = RequestOptions(),
 )
+
+/** Per-request executor settings, resolved and validated from `# @setting` directives. */
+data class RequestOptions(
+    /** Maximum time to wait for the response (headers); body streaming is not covered. Null means no timeout. */
+    val timeoutMillis: Long? = null,
+    /** False disables following redirects (`@no-redirect`); true leaves the executor's own redirect policy. */
+    val followRedirects: Boolean = true,
+    /** HTTP proxy, or null for a direct connection. */
+    val proxy: ProxyAddress? = null,
+)
+
+/** A validated HTTP proxy endpoint. */
+data class ProxyAddress(val host: String, val port: Int) {
+    init {
+        require(host.isNotBlank()) { "Invalid @proxy value: empty host" }
+        require(port in 1..65535) { "Invalid @proxy value: port $port out of range" }
+    }
+
+    override fun toString() = if (':' in host) "[$host]:$port" else "$host:$port"
+}
 
 data class HttpResponse(
     val statusCode: Int,
