@@ -2,7 +2,7 @@
 
 Standalone desktop front end for the HTTP client, built with
 [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) for Desktop.
-It runs on Windows, macOS and Linux and reuses `core` and `adapters` unchanged.
+It runs on Windows, macOS and Linux and reuses `core` and `adapters` unchanged; JSON tree flattening and status/size formatting come from the shared `view-model` module.
 
 ## What it does
 
@@ -50,7 +50,7 @@ Not verified: the native Open…/New… file dialogs, the Windows MSI, and how i
 - `Workspace.kt` — parsing and running requests (no UI).
 - `AppState.kt` — Compose state: open file, editor text, selection, environment, outcomes.
 - `App.kt` / `Main.kt` — the Compose UI and window (`AppRoot` is the testable content).
-- `ResponsePane.kt` / `JsonTree.kt` — the response viewer and the collapsible JSON tree (flattening is pure and tested).
+- `ResponsePane.kt` — the response viewer and the collapsible JSON tree; the pure logic (JSON flattening in `JsonTree.kt`, status/size/duration labels) lives in the shared `view-model` module and is tested there. Durations are shown as `1.5 s` (or `2m 5s`) instead of `1500 ms`, and numbers are always formatted with `.` regardless of the system locale.
 - `SyntaxHighlighting.kt` — colors tokens from `core`'s shared `HttpLineLexer`.
 
 The installer version (`packageVersion` in `build.gradle.kts`) is separate from the project version,

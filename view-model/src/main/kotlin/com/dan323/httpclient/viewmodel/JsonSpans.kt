@@ -1,4 +1,4 @@
-package com.dan323.httpclient.intellij
+package com.dan323.httpclient.viewmodel
 
 enum class JsonPart { KEY, STRING, NUMBER, KEYWORD, PUNCT }
 

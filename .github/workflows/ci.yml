@@ -22,7 +22,7 @@ jobs:
       # The IntelliJ plugin module needs a local IDE (ideaPath), so its tests are not run here yet.
       # The desktop UI tests are headless but still want an X display on Linux.
       - name: Test
-        run: xvfb-run -a ./gradlew :core:test :adapters:test :cli:test :mock-server:test :desktop:test --console=plain
+        run: xvfb-run -a ./gradlew :core:test :adapters:test :cli:test :mock-server:test :desktop:test :view-model:test --console=plain
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4

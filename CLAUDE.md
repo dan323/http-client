@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-A Postman-style HTTP client compatible with the JetBrains `.http` file format. Kotlin (JVM 21 toolchain), Gradle Kotlin DSL multi-module build. Modules: `core`, `adapters`, front ends `cli`, `desktop` (Compose Desktop) and `intellij-plugin`, plus `mock-server` (httpbin-style server for `samples/`). Each module has its own README where relevant; see `docs/features.md` for the `.http` features.
+A Postman-style HTTP client compatible with the JetBrains `.http` file format. Kotlin (JVM 21 toolchain), Gradle Kotlin DSL multi-module build. Modules: `core`, `adapters`, front ends `cli`, `desktop` (Compose Desktop) and `intellij-plugin`, plus `view-model` (UI-toolkit-free shared view logic: JSON tree/spans, status and size formatting) and `mock-server` (httpbin-style server for `samples/`). Each module has its own README where relevant; see `docs/features.md` for the `.http` features.
 
 ## Commands
 

@@ -1,5 +1,11 @@
 package com.dan323.httpclient.intellij
 
+import com.dan323.httpclient.viewmodel.JsonPart
+import com.dan323.httpclient.viewmodel.StatusClass
+import com.dan323.httpclient.viewmodel.durationLabel
+import com.dan323.httpclient.viewmodel.jsonSpans
+import com.dan323.httpclient.viewmodel.statusClass
+import com.dan323.httpclient.viewmodel.statusText
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.editor.colors.EditorFontType
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -100,9 +106,9 @@ private fun StyledDocument.addSection(s: Section) {
         s.error != null -> add("  Error: ${s.error}\n\n", bad, bold = true)
         else -> {
             val status = s.status ?: 0
-            val color = when (status) { in 200..299 -> ok; in 300..399 -> redirect; else -> bad }
-            add("  $status", color, bold = true)
-            add("   ${s.millis} ms\n", muted)
+            val color = when (statusClass(status)) { StatusClass.SUCCESS -> ok; StatusClass.REDIRECT -> redirect; else -> bad }
+            add("  $status ${statusText(status)}".trimEnd(), color, bold = true)
+            add("   ${durationLabel(s.millis)}\n", muted)
             s.headers.forEach { (k, v) -> add("  $k", keyColor); add(": ", muted); add("$v\n") }
             add("\n")
             addJson(s.body)
