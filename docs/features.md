@@ -58,7 +58,13 @@ GET {{host}}/users/{{user}}
 
 `# @setting [value]` (or `// @setting`) lines before a request line attach settings to it: for example
 `# @timeout 5`, `# @no-redirect`, `# @no-cookie-jar`. The parser records them on the request
-(`RequestTemplate.settings`); acting on them is done by later work (timeouts, redirects, cookie jar).
+(`RequestTemplate.settings`); the following are honoured per request by the executor (carried as `HttpRequest.options`):
+
+- `# @timeout 5`: overall request timeout; plain numbers are seconds, or add `ms`, `s` or `m` (`@timeout 500ms`). Values may use `{{vars}}`.
+- `# @no-redirect`: do not follow HTTP redirects (the 3xx response is returned).
+- `# @proxy host:port`: send the request through that HTTP proxy.
+
+`@no-cookie-jar` is recorded but acted on by later work (cookie jar).
 
 ### Dynamic variables
 

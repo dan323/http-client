@@ -29,6 +29,16 @@ data class HttpRequest(
     val url: String,
     val headers: List<Header> = emptyList(),
     val body: ByteArray? = null,
+    val options: RequestOptions = RequestOptions(),
+)
+
+/** Per-request executor settings, resolved from `# @setting` directives. */
+data class RequestOptions(
+    /** Overall request timeout; null means no timeout. */
+    val timeoutMillis: Long? = null,
+    val followRedirects: Boolean = true,
+    /** Proxy as `host:port`, or null for a direct connection. */
+    val proxy: String? = null,
 )
 
 data class HttpResponse(
