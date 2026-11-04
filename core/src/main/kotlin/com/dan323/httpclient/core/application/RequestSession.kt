@@ -1,5 +1,7 @@
 package com.dan323.httpclient.core.application
 
+import com.dan323.httpclient.core.domain.Header
+import com.dan323.httpclient.core.domain.HttpRequest
 import com.dan323.httpclient.core.domain.HttpResponse
 import com.dan323.httpclient.core.domain.RequestTemplate
 import com.dan323.httpclient.core.port.out.HttpExecutor
@@ -19,8 +21,20 @@ class RequestSession(
     private val assertionEvaluator = AssertionEvaluator(extractor)
     private val responses = mutableMapOf<String, HttpResponse>()
 
+    /** Cookies from `Set-Cookie` responses, sent on later requests of this session; never shared across sessions. */
+    private val cookies = CookieJar()
+
+    /** Adds the jar's `Cookie` header unless the request opted out or sets its own `Cookie` header. */
+    private fun withCookies(r: HttpRequest): HttpRequest {
+        if (!r.options.useCookieJar || r.headers.any { it.name.equals("Cookie", ignoreCase = true) }) return r
+        val cookie = cookies.headerFor(r.url) ?: return r
+        return r.copy(headers = r.headers + Header("Cookie", cookie))
+    }
+
     fun run(template: RequestTemplate, variables: Map<String, String>): HttpResponse {
-        val response = executor.execute(runner.resolve(template, variables, ::reference))
+        val request = withCookies(runner.resolve(template, variables, ::reference))
+        val response = executor.execute(request)
+        if (request.options.useCookieJar) cookies.store(request.url, response.headers)
         template.name?.let { responses[it] = response }
         return response
     }
