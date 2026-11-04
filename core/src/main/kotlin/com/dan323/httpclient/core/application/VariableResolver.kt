@@ -1,8 +1,15 @@
 package com.dan323.httpclient.core.application
 
 object VariableResolver {
-    // Names have no spaces, except dynamic variables (`$timestamp 1 d`, `$random.integer(1, 5)`).
-    private val pattern = Regex("""\{\{\s*(\$[^{}]*?|[^{}\s]+)\s*}}""")
+    // Names have no spaces, except dynamic variables: `$` + a letter, then `(args...)`, or for the built-in
+    // ones with arguments a space and the rest (`$timestamp 1 d`, `$randomInt 1 6`), or `$processEnv NAME`.
+    // Anything else (`{{$ x}}`, `{{$x := 1}}`, multi-line text) is left as written, as before.
+    private val pattern = Regex(
+        """\{\{\s*(\${'$'}processEnv[ \t]+[^{}\s]+""" +
+            """|\${'$'}(?:(?:timestamp|isoTimestamp|randomInt|uuid|random\.\w+)(?:\s*\([^{}\r\n]*?|[ \t]+[^{}\r\n]*?)?""" +
+            """|[A-Za-z][\w.]*(?:\s*\([^{}\r\n]*?)?)""" +
+            """|[^{}\s]+)\s*}}""",
+    )
 
     /**
      * Replaces `{{name}}` from [variables], or `{{$uuid}}`-style dynamic variables;

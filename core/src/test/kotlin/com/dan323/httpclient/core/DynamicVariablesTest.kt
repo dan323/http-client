@@ -20,7 +20,12 @@ import kotlin.test.assertTrue
 class DynamicVariablesTest {
     private val clock = Clock.fixed(Instant.parse("2024-01-31T10:00:00Z"), ZoneOffset.UTC)
     private val env = mapOf("HOME_X" to "/home/x")
-    private fun dyn(seed: Int = 1) = DynamicVariables(Random(seed), clock, EnvironmentVariables { env[it] })
+    private val allowing = object : EnvironmentVariables {
+        override fun get(name: String) = env[name]
+        override fun isAllowed(name: String) = name in setOf("HOME_X", "NOPE", "TRICKY")
+        override val allowHint = "pass --allow-env NAME"
+    }
+    private fun dyn(seed: Int = 1) = DynamicVariables(Random(seed), clock, allowing)
     private fun r(text: String, d: DynamicVariables = dyn()) = VariableResolver.resolve(text, emptyMap(), dynamic = d)
 
     @Test fun seededRandomIsDeterministic() {
@@ -74,10 +79,71 @@ class DynamicVariablesTest {
         r("{{\$random.integer(0, ${Long.MAX_VALUE})}}").toLong()
     }
 
+    @Test fun longBoundaries() {
+        val max = Long.MAX_VALUE
+        val min = Long.MIN_VALUE
+        fun between(a: Long, b: Long, seed: Int = 1) = r("{{\$random.integer($a, $b)}}", dyn(seed)).toLong()
+        assertEquals(max, between(max, max))
+        assertEquals(min, between(min, min))
+        val d = dyn()
+        val top = (1..400).map { r("{{\$random.integer(${max - 2}, $max)}}", d).toLong() }.toSet()
+        assertEquals(setOf(max - 2, max - 1, max), top)
+        for (seed in 1..50) {
+            assertTrue(between(-5, max, seed) >= -5)
+            between(min, max, seed)
+            assertTrue(between(min, min + 1, seed) in min..min + 1)
+            assertTrue(between(min + 1, max, seed) >= min + 1)
+        }
+        assertEquals(max, r("{{\$randomInt $max $max}}").toLong())
+        assertTrue(r("{{\$randomInt -5 $max}}").toLong() >= -5)
+        assertTrue(invalid("{{\$random.integer($max, $min)}}").contains("from must not exceed to"))
+        assertTrue(invalid("{{\$random.integer(1, 9223372036854775808)}}").contains("not a whole number"))
+    }
+
     @Test fun randomFloat() {
         val d = dyn()
         repeat(100) { assertTrue(r("{{\$random.float(1.5, 2.5)}}", d).toDouble().let { it >= 1.5 && it < 2.5 }) }
         assertEquals("2.0", r("{{\$random.float(2, 2)}}"))
+    }
+
+    @Test fun floatIsNeverScientificNotation() {
+        assertEquals("10000000000.0", r("{{\$random.float(1e10, 1e10)}}"))
+        assertEquals("0.0005", r("{{\$random.float(5e-4, 5e-4)}}"))
+        assertEquals("0.0", r("{{\$random.float(-0.0, -0.0)}}"))
+        assertEquals("-2.5", r("{{\$random.float(-2.5, -2.5)}}"))
+        val d = dyn()
+        repeat(200) {
+            val v = r("{{\$random.float(0, 1e-5)}}", d)
+            assertTrue(Regex("-?\\d+\\.\\d+").matches(v), v)
+            assertTrue(v.toDouble() < 1e-5)
+        }
+        assertTrue(Regex("\\d+\\.\\d+").matches(r("{{\$random.float(1e300, 1e301)}}")))
+    }
+
+    @Test fun floatNeverReturnsUpperBound() {
+        val to = Math.nextUp(1.0)
+        val d = dyn()
+        repeat(500) { assertEquals(1.0, r("{{\$random.float(1.0, $to)}}", d).toDouble()) }
+    }
+
+    @Test fun defaultRandomnessWorksAndVaries() {
+        val d = DynamicVariables(clock = clock)
+        assertNotEquals(r("{{\$uuid}}", d), r("{{\$uuid}}", d))
+        assertNotEquals(r("{{\$random.alphanumeric(32)}}", d), r("{{\$random.alphanumeric(32)}}", d))
+        assertEquals(4, java.util.UUID.fromString(r("{{\$uuid}}", d)).version())
+    }
+
+    @Test fun offsetEdgeCases() {
+        val leap = DynamicVariables(Random(1), Clock.fixed(Instant.parse("2024-03-01T00:00:00Z"), ZoneOffset.UTC), allowing)
+        assertEquals("2024-02-29T00:00:00Z", r("{{\$isoTimestamp -1 d}}", leap))
+        assertEquals("2023-03-01T00:00:00Z", r("{{\$isoTimestamp -1 y}}", leap))
+        val newYear = DynamicVariables(Random(1), Clock.fixed(Instant.parse("2024-12-31T23:59:59Z"), ZoneOffset.UTC), allowing)
+        assertEquals("2025-01-01T00:00:00Z", r("{{\$isoTimestamp 1 s}}", newYear))
+        assertEquals("2024-12-30T23:59:59Z", r("{{\$isoTimestamp -1 d}}", newYear))
+        // Long.MAX ms is about 292 million years: still inside java.time's range, so it is a valid (huge) value.
+        assertTrue(r("{{\$timestamp ${Long.MAX_VALUE} ms}}").toLong() > 0)
+        assertTrue(invalid("{{\$timestamp ${Long.MAX_VALUE} d}}").contains("out of range"))
+        assertTrue(invalid("{{\$timestamp ${Long.MIN_VALUE} h}}").contains("out of range"))
     }
 
     @Test fun randomStrings() {
@@ -95,8 +161,28 @@ class DynamicVariablesTest {
         assertEquals("Undefined variable: \$env.NOPE", e.message)
     }
 
+    @Test fun envNotOnAllowlistIsRejectedWithHint() {
+        val e = assertFailsWith<InvalidDynamicVariableException> { r("{{\$env.SECRET}}") }
+        assertEquals("Invalid dynamic variable {{\$env.SECRET}}: environment variable 'SECRET' is not allowed; pass --allow-env NAME", e.message)
+    }
+
+    @Test fun processEnvAlias() {
+        assertEquals("/home/x", r("{{\$processEnv HOME_X}}"))
+        assertFailsWith<InvalidDynamicVariableException> { r("{{\$processEnv SECRET}}") }
+        assertTrue(invalid("{{\$processEnv}}").contains("\$processEnv NAME"))
+    }
+
+    @Test fun envValuesAreNotReExpanded() {
+        val tricky = object : EnvironmentVariables {
+            override fun get(name: String) = "{{\$env.HOME_X}} {{x}}"
+        }
+        val d = DynamicVariables(Random(1), clock, tricky)
+        assertEquals("{{\$env.HOME_X}} {{x}}", r("{{\$env.TRICKY}}", d))
+    }
+
     @Test fun defaultDynamicHasNoEnv() {
-        assertFailsWith<UndefinedVariableException> { VariableResolver.resolve("{{\$env.PATH}}", emptyMap()) }
+        val e = assertFailsWith<InvalidDynamicVariableException> { VariableResolver.resolve("{{\$env.PATH}}", emptyMap()) }
+        assertTrue(e.message!!.contains("not allowed"))
     }
 
     @Test fun unknownDynamicIsUndefined() {
@@ -139,6 +225,22 @@ class DynamicVariablesTest {
 
     @Test fun plainNamesWithSpacesAreStillLiteral() {
         assertEquals("{{a b}}", VariableResolver.resolve("{{a b}}", emptyMap()))
+    }
+
+    @Test fun onlyDollarFollowedByLetterIsDynamic() {
+        // Handlebars/Go-template style text is passed through untouched, as before.
+        for (text in listOf("{{\$ foo}}", "{{\$x := 1}}", "{{\$ x }}")) assertEquals(text, r(text))
+        // `$` alone or followed by a digit keeps its old behaviour: an undefined variable.
+        assertFailsWith<UndefinedVariableException> { r("{{\$}}") }
+        assertFailsWith<UndefinedVariableException> { r("{{\$1}}") }
+    }
+
+    @Test fun jsonAdjacentBracesAndMultiLineBehaveAsBefore() {
+        assertEquals("{\"a\":7}", r("{\"a\":{{\$randomInt 7 7}}}"))
+        assertEquals("v}", VariableResolver.resolve("{{x}}}", mapOf("x" to "v")))
+        // A dynamic reference never swallows following lines; text between two references stays literal.
+        assertEquals("{{\$randomInt 1\n2 3}}", r("{{\$randomInt 1\n2 3}}"))
+        assertEquals("a7\n{{\$foo\n x}}", r("a{{\$randomInt 7 7}}\n{{\$foo\n x}}"))
     }
 
     @Test fun fileVariableCanHoldDynamicWithArguments() {

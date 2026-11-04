@@ -122,7 +122,7 @@ Each occurrence is evaluated separately. A variable you define with the same nam
 | `{{$isoTimestamp}}` | current time, ISO-8601 UTC |
 | `{{$randomInt}}`    | integer from 0 to 999      |
 
-More (following the JetBrains HTTP Client names):
+More (names modelled on the JetBrains HTTP Client and Postman; see the notes below for what is ours):
 
 | Variable                          | Value                                                              |
 |-----------------------------------|--------------------------------------------------------------------|
@@ -136,7 +136,8 @@ More (following the JetBrains HTTP Client names):
 | `{{$random.uuid}}`                | same as `{{$uuid}}`                                                |
 | `{{$timestamp 1 d}}`              | Unix seconds, shifted by an offset                                 |
 | `{{$isoTimestamp -2 h}}`          | ISO-8601 UTC, shifted by an offset                                 |
-| `{{$env.NAME}}`                   | value of the OS environment variable `NAME`                        |
+| `{{$env.NAME}}`                   | OS environment variable `NAME`, only if explicitly allowed (below) |
+| `{{$processEnv NAME}}`            | alias of `{{$env.NAME}}`                                           |
 
 - **Offsets** are `<amount> <unit>` after `$timestamp` / `$isoTimestamp`: a whole number with an optional sign
   (`1`, `-2`, `+5`) and one of `ms`, `s`, `m` (minutes), `h`, `d`, `w`, `M` (calendar months), `y` (calendar years);
@@ -144,12 +145,38 @@ More (following the JetBrains HTTP Client names):
   offsets are calendar arithmetic in UTC and clamp to the end of a shorter month (31 Jan + 1 M = 29 Feb 2024).
   This mirrors the JetBrains syntax; JetBrains' `$datetime` / `$localDatetime` are not supported.
 - Arguments in `$random.*(...)` are comma separated; spaces are allowed. Wrong argument counts, non-numbers,
-  `from` greater than `to`, an unknown offset unit or a length outside 0..10000 fail with
+  `from` greater than `to`, an unknown offset unit or a length outside 0..10000 fail (in an `# @assert` line that
+  makes only that assertion invalid) with
   `Invalid dynamic variable {{...}}: <reason>`.
 - An unknown `$name` or an unset `$env.NAME` fails as `Undefined variable: <name>`.
-- `$env` reads the process environment of the CLI, desktop app or IDE (environment variables of a GUI-launched
-  IDE may differ from your shell). It is read through the `EnvironmentVariables` port in `core`
-  (`SystemEnvironmentVariables` in `adapters`); a `core` caller that passes none sees no variables.
+- **`$env` is opt-in.** A `.http` file you download or open could otherwise send `AWS_SECRET_ACCESS_KEY` or any
+  token in your environment to a server of its choosing, so no variable is readable until you allow its name
+  (exact match; everything else fails with `Invalid dynamic variable {{$env.X}}: environment variable 'X' is not
+  allowed; <how to allow it>`). An allowed name that is not set fails as `Undefined variable: $env.X`.
+  Prefer `http-client.env.json` / `.private.env.json` for secrets; use `$env` only for values you are happy to
+  expose to the files you run. How to allow names:
+  - CLI: `--allow-env NAME[,NAME]` (repeatable), e.g. `httpc api.http --allow-env API_TOKEN,HOME`.
+  - Desktop app and IntelliJ plugin (no UI for this yet): the system property `-Dhttpclient.allowEnv=NAME,NAME`
+    (for the IDE add it under Help | Edit Custom VM Options) or, if the property is absent, the environment
+    variable `HTTPC_ALLOW_ENV=NAME,NAME` of the process that starts the app/IDE. Restart to apply.
+  - Library users: `SystemEnvironmentVariables(setOf("NAME"))` from `adapters`; `core` callers that pass nothing
+    see no variables (the `EnvironmentVariables` port).
+  - Environment variables of a GUI-launched IDE may differ from your shell.
+- Values read through `$env` are used exactly where you write them and are inserted as plain text (they are not
+  scanned for `{{...}}` again). The desktop/plugin reports and CLI output show the request as written in the
+  file (with `{{$env.X}}` unresolved), not the resolved request, and error messages name the variable, never its
+  value. The server's response may of course echo what you sent.
+- **Randomness and what is ours.** `$uuid`, `$random.uuid` and the `$random.*` family use a cryptographically strong
+  generator (`SecureRandom`), which is stronger than we know JetBrains to guarantee; this was our choice, not
+  something taken from JetBrains. The offset syntax (`1 d`, `-2 h`, units `ms s m h d w M y`) is also our own design,
+  loosely inspired by JetBrains' `$timestamp`/`$isoTimestamp` offsets, and may not match it exactly.
+  `$random.float` is printed as plain decimal, never as `1.0E10`.
+- Naming: to our knowledge the JetBrains HTTP Client reads process environment with `{{$processEnv NAME}}`;
+  `{{$env.NAME}}` is the form used here and `$processEnv NAME` is accepted as an alias. We could not verify this
+  against JetBrains' current documentation, so check before moving files between tools. In JetBrains the allowlist
+  does not exist, so a file using `$processEnv` there will not need `--allow-env` but will here.
+- Only `$` followed by a letter starts a dynamic variable; `{{$ x}}`, `{{$x := 1}}` and references split over
+  several lines are left untouched, as before.
 - For tests, `DynamicVariables(random, clock, env)` makes randomness, time and environment injectable.
 
 ## Request chaining

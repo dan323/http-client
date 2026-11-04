@@ -72,8 +72,10 @@ class RequestSession(
         val vars = VariableResolver.withFileVariables(variables, r.fileVariables)
         return r.assertions.map { a ->
             try {
-                assertionEvaluator.evaluate(VariableResolver.resolve(a, vars, ::reference, runner.dynamic), response).copy(assertion = a)
+                assertionEvaluator.evaluate(runner.resolveText(a, vars, ::reference), response).copy(assertion = a)
             } catch (e: UndefinedVariableException) {
+                AssertionResult(a, false, null, null, "invalid assertion: ${e.message}")
+            } catch (e: InvalidDynamicVariableException) {
                 AssertionResult(a, false, null, null, "invalid assertion: ${e.message}")
             }
         }

@@ -8,5 +8,8 @@ GET {{base}}/anything?id={{$random.uuid}}&n={{$random.integer(10, 20)}}&f={{$ran
 GET {{base}}/anything?tomorrow={{$timestamp 1 d}}&earlier={{$timestamp -2 h}}&iso={{$isoTimestamp 1 w}}
 
 ###
-# @name unset-env (expected to fail: "Undefined variable: $env.HTTPC_SURELY_UNSET")
+# $env needs an explicit allowlist: --allow-env NAME. This request is expected to fail:
+# without it with "environment variable 'HTTPC_SURELY_UNSET' is not allowed", with
+# --allow-env HTTPC_SURELY_UNSET (and the variable unset) with "Undefined variable: $env.HTTPC_SURELY_UNSET".
+# @name unset-env
 GET {{base}}/get?x={{$env.HTTPC_SURELY_UNSET}}

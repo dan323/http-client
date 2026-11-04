@@ -5,8 +5,11 @@ import java.time.Clock
 import java.time.Duration
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
+import java.math.BigDecimal
+import java.security.SecureRandom
 import java.util.UUID
 import kotlin.random.Random
+import kotlin.random.asKotlinRandom
 
 /**
  * Evaluates `{{$...}}` dynamic variables. Randomness, clock and OS environment are injected so
@@ -19,10 +22,12 @@ import kotlin.random.Random
  * - `$randomInt` (0..999) or `$randomInt <from> <to>` (both inclusive)
  * - `$random.integer(from, to)` (inclusive), `$random.float(from, to)` (from inclusive, to exclusive),
  *   `$random.alphabetic(n)`, `$random.alphanumeric(n)`, `$random.hexadecimal(n)`, `$random.email`
- * - `$env.NAME`
+ * - `$env.NAME` (alias `$processEnv NAME`), only for names the [env] port allows
+ *
+ * [random] defaults to [SecureRandom] so `$uuid` and `$random.*` are unpredictable; tests inject a seeded one.
  */
 class DynamicVariables(
-    private val random: Random = Random.Default,
+    private val random: Random = SecureRandom().asKotlinRandom(),
     private val clock: Clock = Clock.systemUTC(),
     private val env: EnvironmentVariables = EnvironmentVariables.NONE,
 ) {
@@ -46,20 +51,35 @@ class DynamicVariables(
                 val from = double(name, a)
                 val to = double(name, b)
                 if (from > to) invalid(name, "from must not exceed to")
-                if (from == to) from.toString() else random.nextDouble(from, to).toString()
+                plain(if (from == to) from else random.nextDouble(from, to))
             }
             "\$random.alphabetic" -> chars(name, rest, ALPHA)
             "\$random.alphanumeric" -> chars(name, rest, ALPHA + DIGITS)
             "\$random.hexadecimal" -> chars(name, rest, DIGITS + "abcdef")
             else -> when {
+                head == "\$processEnv" -> {
+                    if (rest.isEmpty() || rest.any { it.isWhitespace() }) invalid(name, "expected \$processEnv NAME")
+                    envValue(name, rest)
+                }
                 head.startsWith("\$env.") -> noArgs(name, rest) {
                     val key = head.removePrefix("\$env.")
                     if (key.isEmpty()) invalid(name, "expected \$env.NAME")
-                    env.get(key) ?: throw UndefinedVariableException("\$env.$key")
+                    envValue(name, key)
                 }
                 else -> null
             }
         }
+    }
+
+    private fun envValue(name: String, key: String): String {
+        if (!env.isAllowed(key)) invalid(name, "environment variable '$key' is not allowed; ${env.allowHint}")
+        return env.get(key) ?: throw UndefinedVariableException("\$env.$key")
+    }
+
+    /** Plain decimal text (never scientific notation) that keeps at least one fractional digit. */
+    private fun plain(value: Double): String {
+        val s = BigDecimal(value.toString()).stripTrailingZeros().toPlainString()
+        return if ('.' in s) s else "$s.0"
     }
 
     private fun uuid(): String {
@@ -94,7 +114,13 @@ class DynamicVariables(
     /** Uniform integer in `from..to` inclusive. */
     private fun between(name: String, from: Long, to: Long): String {
         if (from > to) invalid(name, "from must not exceed to")
-        return (if (to == Long.MAX_VALUE) from + random.nextLong(to - from) else random.nextLong(from, to + 1)).toString()
+        return when {
+            from == to -> from
+            to < Long.MAX_VALUE -> random.nextLong(from, to + 1)
+            // `to + 1` would overflow: sample from-1 until MAX (= from-1..MAX-1) and shift up by one.
+            from > Long.MIN_VALUE -> random.nextLong(from - 1, Long.MAX_VALUE) + 1
+            else -> random.nextLong() // the whole Long range
+        }.toString()
     }
 
     private inline fun noArgs(name: String, rest: String, f: () -> String): String {

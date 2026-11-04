@@ -17,10 +17,12 @@ import java.io.PrintStream
 import java.nio.file.Path
 import kotlin.system.exitProcess
 
-private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NAME|INDEX] [--list]
+private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] [--list]
 
   --env NAME       use variables from NAME in http-client.env.json (next to the file)
   --request X      run only the request with @name X, or the Nth request (1-based)
+  --allow-env N    let {{${'$'}env.N}} read these OS environment variables (comma separated, repeatable);
+                   none are readable by default
   --list           list the requests in the file and exit"""
 
 data class Options(
@@ -28,6 +30,7 @@ data class Options(
     val env: String? = null,
     val request: String? = null,
     val list: Boolean = false,
+    val allowEnv: Set<String> = emptySet(),
 )
 
 /** Returns null (after the caller prints usage) when the arguments are invalid. */
@@ -36,17 +39,19 @@ fun parseArgs(args: List<String>): Options? {
     var env: String? = null
     var request: String? = null
     var list = false
+    val allowEnv = mutableSetOf<String>()
     var i = 0
     while (i < args.size) {
         when (val a = args[i]) {
             "--env" -> env = args.getOrNull(++i) ?: return null
             "--request" -> request = args.getOrNull(++i) ?: return null
+            "--allow-env" -> allowEnv += SystemEnvironmentVariables.parseNames(args.getOrNull(++i) ?: return null)
             "--list" -> list = true
             else -> if (a.startsWith("--") || file != null) return null else file = Path.of(a)
         }
         i++
     }
-    return Options(file ?: return null, env, request, list)
+    return Options(file ?: return null, env, request, list, allowEnv)
 }
 
 /** Picks the request selected by name or 1-based index; all requests when no selector is given. */
@@ -82,7 +87,7 @@ fun run(args: List<String>, out: PrintStream, err: PrintStream): Int {
         ?: return fail(err, "No such request: ${opts.request}")
     val chosen = withDependencies(requests, selected)
     val executor = JdkHttpExecutor()
-    val session = RequestSession(RequestRunner(executor, LocalFileReader(dir), DynamicVariables(env = SystemEnvironmentVariables())), executor, KotlinxJsonExtractor())
+    val session = RequestSession(RequestRunner(executor, LocalFileReader(dir), DynamicVariables(env = SystemEnvironmentVariables(opts.allowEnv, "pass --allow-env NAME"))), executor, KotlinxJsonExtractor())
 
     // Prerequisites run for their responses only: assertions are evaluated for the selected requests.
     val outcomes = session.runAll(chosen, variables, assertFor = { r -> selected.any { it === r } }) { outcome ->
