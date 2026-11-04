@@ -76,12 +76,14 @@ fun run(args: List<String>, out: PrintStream, err: PrintStream): Int {
         JsonEnvironmentRepository(dir).load().firstOrNull { it.name == opts.env }?.variables
             ?: return fail(err, "Unknown environment: ${opts.env}")
     }
-    val chosen = select(requests, opts.request)?.let { withDependencies(requests, it) }
+    val selected = select(requests, opts.request)
         ?: return fail(err, "No such request: ${opts.request}")
+    val chosen = withDependencies(requests, selected)
     val executor = JdkHttpExecutor()
     val session = RequestSession(RequestRunner(executor, LocalFileReader(dir)), executor, KotlinxJsonExtractor())
 
-    val outcomes = session.runAll(chosen, variables) { outcome ->
+    // Prerequisites run for their responses only: assertions are evaluated for the selected requests.
+    val outcomes = session.runAll(chosen, variables, assertFor = { r -> selected.any { it === r } }) { outcome ->
         val r = outcome.request
         out.println("### ${r.name ?: "${r.method} ${r.url}"}")
         when (outcome) {
@@ -95,11 +97,17 @@ fun run(args: List<String>, out: PrintStream, err: PrintStream): Int {
                     out.println(if (it.passed) "PASS ${it.assertion}" else "FAIL ${it.assertion} -- ${it.message}")
                 }
             }
-            is RunOutcome.Failure -> err.println("Error: ${outcome.message}")
+            is RunOutcome.Failure -> {
+                err.println("Error: ${outcome.message}")
+                outcome.request.assertions.takeIf { outcome.assertionsNotRun > 0 }?.forEach { out.println("NOT RUN $it") }
+            }
         }
     }
     val results = outcomes.filterIsInstance<RunOutcome.Success>().flatMap { it.assertions }
-    if (results.isNotEmpty()) out.println("Assertions: ${results.count { it.passed }} passed, ${results.count { !it.passed }} failed")
+    val notRun = outcomes.filterIsInstance<RunOutcome.Failure>().sumOf { it.assertionsNotRun }
+    if (results.isNotEmpty() || notRun > 0) {
+        out.println("Assertions: ${results.count { it.passed }} passed, ${results.count { !it.passed }} failed, $notRun not run")
+    }
     val failed = outcomes.any { it is RunOutcome.Failure || (it is RunOutcome.Success && !it.assertionsPassed) }
     return if (failed) 1 else 0
 }

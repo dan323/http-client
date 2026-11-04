@@ -15,5 +15,6 @@ sealed interface RunOutcome {
         val assertionsPassed: Boolean get() = assertions.all { it.passed }
     }
 
-    data class Failure(override val request: RequestTemplate, val message: String) : RunOutcome
+    /** [assertionsNotRun] counts the request's `# @assert` lines that could not be evaluated because it failed. */
+    data class Failure(override val request: RequestTemplate, val message: String, val assertionsNotRun: Int = 0) : RunOutcome
 }
