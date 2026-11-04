@@ -23,3 +23,13 @@ fun interface EnvironmentRepository {
 fun interface JsonExtractor {
     fun extract(json: String, path: String): String?
 }
+
+/** Reads process environment variables for `{{$env.NAME}}`; null if not set. */
+fun interface EnvironmentVariables {
+    fun get(name: String): String?
+
+    companion object {
+        /** No variables; the default in `core` so it stays free of I/O. */
+        val NONE: EnvironmentVariables = EnvironmentVariables { null }
+    }
+}

@@ -5,7 +5,7 @@ A Postman-style HTTP client compatible with the JetBrains `.http` file format.
 Hexagonal layout:
 
 - `core/` — domain, application services (`HttpFileParser`, `VariableResolver`, `RequestRunner`) and ports. No third-party dependencies.
-- `adapters/` — driven adapters: `JdkHttpExecutor`, `LocalFileReader`, `JsonEnvironmentRepository` (`http-client.env.json` + `.private.env.json`).
+- `adapters/` — driven adapters: `JdkHttpExecutor`, `LocalFileReader`, `JsonEnvironmentRepository` (`http-client.env.json` + `.private.env.json`), `SystemEnvironmentVariables` (`{{$env.NAME}}`).
 - `cli/` — command-line front end (`httpc`).
 - `view-model/` — pure view logic (JSON tree/colour spans, status and size formatting) shared by `desktop` and `intellij-plugin`.
 - `desktop/` — standalone Compose Desktop app for Windows, macOS and Linux ([README](desktop/README.md)).

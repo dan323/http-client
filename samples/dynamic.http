@@ -1,0 +1,12 @@
+# Dynamic variables v2. Run with: --env dev
+# @name random
+GET {{base}}/anything?id={{$random.uuid}}&n={{$random.integer(10, 20)}}&f={{$random.float(0, 1)}}&word={{$random.alphabetic(8)}}&mixed={{$random.alphanumeric(8)}}&hex={{$random.hexadecimal(6)}}&mail={{$random.email}}&small={{$randomInt 1 6}}
+
+###
+# Timestamp offsets: units ms s m h d w M y
+# @name offsets
+GET {{base}}/anything?tomorrow={{$timestamp 1 d}}&earlier={{$timestamp -2 h}}&iso={{$isoTimestamp 1 w}}
+
+###
+# @name unset-env (expected to fail: "Undefined variable: $env.HTTPC_SURELY_UNSET")
+GET {{base}}/get?x={{$env.HTTPC_SURELY_UNSET}}

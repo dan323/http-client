@@ -76,6 +76,15 @@ class SamplesTest {
         assertEquals(0, sample("assertions.http", "--request", "numbers").code)
     }
 
+    @Test fun dynamicVariablesV2() {
+        val r = sample("dynamic.http")
+        assertEquals(1, r.code)
+        assertContains(r.out, "### random")
+        assertContains(r.out, "### offsets")
+        assertContains(r.err, "Undefined variable: \$env.HTTPC_SURELY_UNSET")
+        assertFalse(r.err.contains("Invalid dynamic variable"), r.err)
+    }
+
     @Test fun fileBody() {
         val r = sample("file-body.http")
         assertEquals(0, r.code, r.err)

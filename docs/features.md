@@ -122,6 +122,36 @@ Each occurrence is evaluated separately. A variable you define with the same nam
 | `{{$isoTimestamp}}` | current time, ISO-8601 UTC |
 | `{{$randomInt}}`    | integer from 0 to 999      |
 
+More (following the JetBrains HTTP Client names):
+
+| Variable                          | Value                                                              |
+|-----------------------------------|--------------------------------------------------------------------|
+| `{{$randomInt 5 10}}`             | integer from 5 to 10, both inclusive                               |
+| `{{$random.integer(from, to)}}`   | integer, both ends inclusive                                       |
+| `{{$random.float(from, to)}}`     | decimal, `from` inclusive, `to` exclusive                          |
+| `{{$random.alphabetic(n)}}`       | `n` letters (`n` from 0 to 10000)                                  |
+| `{{$random.alphanumeric(n)}}`     | `n` letters or digits                                              |
+| `{{$random.hexadecimal(n)}}`      | `n` lowercase hex digits                                           |
+| `{{$random.email}}`               | e.g. `k3j9x0aa@qwertz.com`                                         |
+| `{{$random.uuid}}`                | same as `{{$uuid}}`                                                |
+| `{{$timestamp 1 d}}`              | Unix seconds, shifted by an offset                                 |
+| `{{$isoTimestamp -2 h}}`          | ISO-8601 UTC, shifted by an offset                                 |
+| `{{$env.NAME}}`                   | value of the OS environment variable `NAME`                        |
+
+- **Offsets** are `<amount> <unit>` after `$timestamp` / `$isoTimestamp`: a whole number with an optional sign
+  (`1`, `-2`, `+5`) and one of `ms`, `s`, `m` (minutes), `h`, `d`, `w`, `M` (calendar months), `y` (calendar years);
+  the space between them is optional (`90s`). Units are case-sensitive (`m` minutes vs `M` months). Month and year
+  offsets are calendar arithmetic in UTC and clamp to the end of a shorter month (31 Jan + 1 M = 29 Feb 2024).
+  This mirrors the JetBrains syntax; JetBrains' `$datetime` / `$localDatetime` are not supported.
+- Arguments in `$random.*(...)` are comma separated; spaces are allowed. Wrong argument counts, non-numbers,
+  `from` greater than `to`, an unknown offset unit or a length outside 0..10000 fail with
+  `Invalid dynamic variable {{...}}: <reason>`.
+- An unknown `$name` or an unset `$env.NAME` fails as `Undefined variable: <name>`.
+- `$env` reads the process environment of the CLI, desktop app or IDE (environment variables of a GUI-launched
+  IDE may differ from your shell). It is read through the `EnvironmentVariables` port in `core`
+  (`SystemEnvironmentVariables` in `adapters`); a `core` caller that passes none sees no variables.
+- For tests, `DynamicVariables(random, clock, env)` makes randomness, time and environment injectable.
+
 ## Request chaining
 
 Requests run in file order. Once a **named** request has run, later requests can use its response:
