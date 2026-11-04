@@ -65,6 +65,15 @@ class SamplesTest {
         assertContains(single.out, "\"token\": \"secret-")
     }
 
+    @Test fun assertions() {
+        val r = sample("assertions.http")
+        assertEquals(1, r.code)
+        assertContains(r.out, "PASS body.\$.json.n > 3")
+        assertContains(r.out, "FAIL body.\$.args.user == nobody")
+        assertContains(r.out, "Assertions: 10 passed, 1 failed")
+        assertEquals(0, sample("assertions.http", "--request", "numbers").code)
+    }
+
     @Test fun fileBody() {
         val r = sample("file-body.http")
         assertEquals(0, r.code, r.err)

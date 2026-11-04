@@ -87,6 +87,23 @@ class EndToEndTest {
         assertContains(r.out, "GET zzz")
     }
 
+    @Test fun passingAssertionsExitZero() {
+        val f = httpFile("# @assert status == 200\n# @assert body.$.token exists\n# @assert body.$.token == zzz\nPOST {{base}}/login\n")
+        val r = cli(f, "--env", "dev")
+        assertEquals(0, r.code, r.err)
+        assertContains(r.out, "PASS status == 200")
+        assertContains(r.out, "Assertions: 3 passed, 0 failed")
+    }
+
+    @Test fun failingAssertionExitsOne() {
+        val f = httpFile("# @assert status == 200\n# @assert status == 404\nPOST {{base}}/login\n")
+        val r = cli(f, "--env", "dev")
+        assertEquals(1, r.code)
+        assertContains(r.out, "PASS status == 200")
+        assertContains(r.out, "FAIL status == 404 -- expected status to equal 404, but was 200")
+        assertContains(r.out, "Assertions: 1 passed, 1 failed")
+    }
+
     @Test fun reportsErrorsWithExitCodeOne() {
         val f = httpFile("GET {{nope}}/x\n")
         val r = cli(f, "--env", "dev")

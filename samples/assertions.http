@@ -1,0 +1,27 @@
+# Response assertions. Run with: --env dev
+# Syntax: # @assert <expression> <operator> [expected]
+# @name ok
+# @assert status == 200
+# @assert headers.content-type contains json
+# @assert body.$.args.user exists
+# @assert body.$.url exists
+# @assert body.$.nope !exists
+# @assert body.$.url matches .*/get\?user=.*
+GET {{base}}/get?user={{user}}
+
+###
+# @name numbers
+# @assert status < 300
+# @assert body.$.json.n > 3
+# @assert body.$.json.n <= 10
+POST {{base}}/post
+Content-Type: application/json
+
+{"n": 5}
+
+###
+# This one is expected to fail (exit code 1)
+# @name expected-failure
+# @assert status == 200
+# @assert body.$.args.user == nobody
+GET {{base}}/get?user={{user}}

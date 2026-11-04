@@ -60,6 +60,28 @@ GET {{host}}/users/{{user}}
 `# @timeout 5`, `# @no-redirect`, `# @no-cookie-jar`. The parser records them on the request
 (`RequestTemplate.settings`); acting on them is done by later work (timeouts, redirects, cookie jar).
 
+### Assertions
+
+`# @assert <expression> <operator> [expected]` lines before a request line check its response. They may repeat
+and are kept apart from settings (`RequestTemplate.assertions`).
+
+```
+# @assert status == 200
+# @assert headers.content-type contains json
+# @assert body.$.id exists
+# @assert body.$.n > 3
+GET {{base}}/items/1
+```
+
+- `<expression>` is any response expression from request chaining (`status`, `headers.Name`, `body.*`,
+  `body.$.json.path`, `body./xpath`, `body.regex:...`). It must not contain spaces.
+- Operators: `==`, `!=`, `<`, `<=`, `>`, `>=` (numeric when both sides are numbers; `==`/`!=` otherwise compare text),
+  `contains`, `!contains`, `startsWith`, `endsWith`, `matches` (the whole value matches a regex), `exists`, `!exists`.
+  `expected` is the rest of the line; `exists`/`!exists` take none.
+- A value that cannot be found fails every operator except `!exists`, `!=` and `!contains`. A malformed assertion
+  fails with an "invalid assertion" message. `{{variables}}` are not substituted in assertions.
+- `RequestSession.runAll` evaluates them and attaches one `AssertionResult` (passed, expected, actual, message) each to `RunOutcome.Success.assertions`.
+
 ### Dynamic variables
 
 Each occurrence is evaluated separately. A variable you define with the same name wins.
@@ -102,7 +124,8 @@ httpc <file.http> [--env NAME] [--request NAME|INDEX] [--list]
 | `--list`      | list requests and exit                               |
 
 For each request the output is the status line with timing, the response headers, then the body.
-Exit codes: `0` success, `1` a request or setup failed, `2` bad arguments.
+After a response, each assertion is printed as `PASS ...` or `FAIL ... -- message`, and a total line follows the run.
+Exit codes: `0` success, `1` a request or setup failed or an assertion failed, `2` bad arguments.
 
 Run with `./gradlew :cli:run --args="requests.http --env dev"`, or build a launcher with
 `./gradlew :cli:installDist` (output in `cli/build/install/httpc/bin`).
@@ -130,4 +153,4 @@ Do not install it next to the bundled HTTP Client plugin of IntelliJ Ultimate, s
 
 ## Not yet implemented
 
-Response handlers and assertions, and authentication helpers.
+Response handlers, assertion display in the desktop app and plugin, and authentication helpers.

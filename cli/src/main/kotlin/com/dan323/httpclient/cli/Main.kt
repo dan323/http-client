@@ -91,11 +91,16 @@ fun run(args: List<String>, out: PrintStream, err: PrintStream): Int {
                 resp.headers.forEach { out.println("${it.name}: ${it.value}") }
                 out.println()
                 out.println(resp.bodyAsString())
+                outcome.assertions.forEach {
+                    out.println(if (it.passed) "PASS ${it.assertion}" else "FAIL ${it.assertion} -- ${it.message}")
+                }
             }
             is RunOutcome.Failure -> err.println("Error: ${outcome.message}")
         }
     }
-    val failed = outcomes.any { it is RunOutcome.Failure }
+    val results = outcomes.filterIsInstance<RunOutcome.Success>().flatMap { it.assertions }
+    if (results.isNotEmpty()) out.println("Assertions: ${results.count { it.passed }} passed, ${results.count { !it.passed }} failed")
+    val failed = outcomes.any { it is RunOutcome.Failure || (it is RunOutcome.Success && !it.assertionsPassed) }
     return if (failed) 1 else 0
 }
 
