@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
-- Assertions (T5): `# @assert <expr> <op> [expected]` directives (`RequestTemplate.assertions`), `AssertionEvaluator` in `core`, results on `RunOutcome.Success.assertions`; the CLI prints PASS/FAIL per assertion and exits 1 when one fails. Example in `samples/assertions.http`.
+- Assertions (T5): `# @assert <expr> <op> [expected]` directives (`RequestTemplate.assertions`), `AssertionEvaluator` in `core`, results on `RunOutcome.Success.assertions`; the CLI prints PASS/FAIL per assertion and exits 1 when one fails. Example in `samples/assertions.http`. Unknown expression prefixes are invalid, numbers compare exactly (BigDecimal), `{{variables}}` are substituted, quoting for expressions with spaces and for empty/literal expected values, `matches` has a 2 s guard and dot-matches-all, a missing value fails every operator but `!exists`, `--request` asserts only the selected request, and the CLI summary counts assertions not run for failed requests. `RequestSession.runAll` gained an `assertFor` parameter and `RunOutcome.Failure.assertionsNotRun`.
 - `ResponseExtractor` in `core` (T4): status, header, JSONPath, XPath (`body./x`, `body.xpath:`) and regex (`body.regex:`) lookups on a response, used by `{{name.response...}}` chaining and reusable by assertions. XPath and regex use the JDK only; DOCTYPE is rejected.
 - Parser: `@var = value` file variables (override environment values, may reference other variables) and `# @setting [value]` directives, exposed as `RequestTemplate.fileVariables` / `settings` and `HttpFile.variables` (T1).
 

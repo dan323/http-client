@@ -1,9 +1,10 @@
 # Response assertions. Run with: --env dev
-# Syntax: # @assert <expression> <operator> [expected]
+# Syntax: # @assert <expression> <operator> [expected]; {{variables}} are substituted
 # @name ok
 # @assert status == 200
 # @assert headers.content-type contains json
 # @assert body.$.args.user exists
+# @assert body.$.args.user == {{user}}
 # @assert body.$.url exists
 # @assert body.$.nope !exists
 # @assert body.$.url matches .*/get\?user=.*

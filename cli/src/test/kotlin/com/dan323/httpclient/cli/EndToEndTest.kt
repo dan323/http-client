@@ -92,7 +92,7 @@ class EndToEndTest {
         val r = cli(f, "--env", "dev")
         assertEquals(0, r.code, r.err)
         assertContains(r.out, "PASS status == 200")
-        assertContains(r.out, "Assertions: 3 passed, 0 failed")
+        assertContains(r.out, "Assertions: 3 passed, 0 failed, 0 not run")
     }
 
     @Test fun failingAssertionExitsOne() {
@@ -101,7 +101,48 @@ class EndToEndTest {
         assertEquals(1, r.code)
         assertContains(r.out, "PASS status == 200")
         assertContains(r.out, "FAIL status == 404 -- expected status to equal 404, but was 200")
-        assertContains(r.out, "Assertions: 1 passed, 1 failed")
+        assertContains(r.out, "Assertions: 1 passed, 1 failed, 0 not run")
+    }
+
+    @Test fun failedRequestAssertionsAreCountedAsNotRun() {
+        val f = httpFile(
+            "# @assert status == 200\n# @assert body.\$.token == zzz\nPOST {{base}}/login\n\n###\n" +
+                "# @assert status == 200\n# @assert status == 201\nGET {{base}}/{{undefinedVar}}\n",
+        )
+        val r = cli(f, "--env", "dev")
+        assertEquals(1, r.code)
+        assertContains(r.err, "Undefined variable: undefinedVar")
+        assertContains(r.out, "NOT RUN status == 201")
+        assertContains(r.out, "Assertions: 2 passed, 0 failed, 2 not run")
+    }
+
+    @Test fun assertionsSupportVariables() {
+        val f = httpFile("# @assert body.\$.token == {{token}}\nPOST {{base}}/login\n")
+        val r = cli(f, "--env", "dev")
+        assertEquals(1, r.code)
+        assertContains(r.out, "FAIL body.\$.token == {{token}} -- expected body.\$.token to equal abc, but was zzz")
+    }
+
+    @Test fun requestSelectionOnlyAssertsTheSelectedRequest() {
+        val f = httpFile(
+            "# @name login\n# @assert status == 500\nPOST {{base}}/login\n\n###\n" +
+                "# @name me\n# @assert status == 201\nGET {{base}}/echo\nX-Token: {{login.response.body.\$.token}}\n",
+        )
+        val r = cli(f, "--env", "dev", "--request", "me")
+        assertEquals(0, r.code, r.err)
+        assertContains(r.out, "### login")
+        assertEquals(false, r.out.contains("status == 500"))
+        assertContains(r.out, "Assertions: 1 passed, 0 failed, 0 not run")
+        assertEquals(1, cli(f, "--env", "dev").code)
+    }
+
+    @Test fun typoInExpressionFailsLoudly() {
+        val f = httpFile("# @assert stauts !exists\n# @assert\nPOST {{base}}/login\n")
+        val r = cli(f, "--env", "dev")
+        assertEquals(1, r.code)
+        assertContains(r.out, "unknown expression 'stauts'")
+        assertContains(r.out, "missing expression")
+        assertContains(r.out, "Assertions: 0 passed, 2 failed, 0 not run")
     }
 
     @Test fun reportsErrorsWithExitCodeOne() {

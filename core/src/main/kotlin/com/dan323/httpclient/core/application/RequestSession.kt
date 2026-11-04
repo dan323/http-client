@@ -25,16 +25,24 @@ class RequestSession(
         return response
     }
 
-    /** Runs [requests] in order, reporting each outcome as it completes; a failure does not stop the rest. */
+    /**
+     * Runs [requests] in order, reporting each outcome as it completes; a failure does not stop the rest.
+     * Assertions are evaluated only for requests where [assertFor] is true (default: all); a request that
+     * fails reports its assertions as not run ([RunOutcome.Failure.assertionsNotRun]).
+     */
     fun runAll(
         requests: List<RequestTemplate>,
         variables: Map<String, String>,
+        assertFor: (RequestTemplate) -> Boolean = { true },
         onOutcome: (RunOutcome) -> Unit = {},
     ): List<RunOutcome> = requests.map { r ->
+        val withAssertions = assertFor(r)
         val outcome = try {
-            run(r, variables).let { RunOutcome.Success(r, it, assertionEvaluator.evaluate(r.assertions, it)) }
+            run(r, variables).let {
+                RunOutcome.Success(r, it, if (withAssertions) evaluateAssertions(r, it, variables) else emptyList())
+            }
         } catch (e: Exception) {
-            RunOutcome.Failure(r, e.message ?: e::class.simpleName ?: "error")
+            RunOutcome.Failure(r, e.message ?: e::class.simpleName ?: "error", if (withAssertions) r.assertions.size else 0)
         }
         onOutcome(outcome)
         outcome
@@ -43,7 +51,8 @@ class RequestSession(
     /**
      * Runs [current] after the named requests it chains on ([withDependencies]). Dependencies that already
      * ran in this session are not sent again: their stored response is reused. [current] is always sent.
-     * [onReused] is told first which requests were skipped.
+     * [onReused] is told first which requests were skipped. Only [current]'s assertions are evaluated;
+     * the prerequisites run for their responses and their assertions do not affect the result.
      */
     fun runChained(
         all: List<RequestTemplate>,
@@ -55,7 +64,19 @@ class RequestSession(
         val chain = withDependencies(all, listOf(current))
         val (reused, toSend) = chain.partition { it !== current && it.name?.let(::hasResponse) == true }
         onReused(reused)
-        return runAll(toSend, variables, onOutcome)
+        return runAll(toSend, variables, assertFor = { it === current }, onOutcome = onOutcome)
+    }
+
+    /** Substitutes `{{variables}}` and `{{name.response...}}` in each assertion, like request text, then evaluates it. */
+    private fun evaluateAssertions(r: RequestTemplate, response: HttpResponse, variables: Map<String, String>): List<AssertionResult> {
+        val vars = VariableResolver.withFileVariables(variables, r.fileVariables)
+        return r.assertions.map { a ->
+            try {
+                assertionEvaluator.evaluate(VariableResolver.resolve(a, vars, ::reference), response).copy(assertion = a)
+            } catch (e: UndefinedVariableException) {
+                AssertionResult(a, false, null, null, "invalid assertion: ${e.message}")
+            }
+        }
     }
 
     /** True once a request with this `@name` has run in this session. */

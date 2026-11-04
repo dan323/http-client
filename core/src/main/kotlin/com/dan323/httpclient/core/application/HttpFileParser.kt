@@ -41,7 +41,7 @@ class HttpFileParser : ParseHttpFile {
             if (l.startsWith("#") || l.startsWith("//")) {
                 nameTag.find(l)?.let { name = it.groupValues[1] }
                 settingTag.matchEntire(l)?.let { m ->
-                    if (m.groupValues[1] == "assert") m.groupValues[2].trim().takeIf { it.isNotEmpty() }?.let { assertions += it }
+                    if (m.groupValues[1] == "assert") assertions += stripTrailingComment(m.groupValues[2])
                     else if (m.groupValues[1] != "name") settings[m.groupValues[1]] = m.groupValues[2].trim()
                 }
                 i++; continue
@@ -78,5 +78,21 @@ class HttpFileParser : ParseHttpFile {
             else -> Body.Text(bodyLines.joinToString("\n"))
         }
         return RequestTemplate(name, method, url, headers, body, startLine, settings, fileVariables.toMap(), assertions)
+    }
+
+    /**
+     * Drops a trailing ` # comment` from an assertion (a `#` preceded by whitespace and outside quotes).
+     * A bare `# @assert` yields an empty string, which the evaluator reports as "missing expression".
+     */
+    private fun stripTrailingComment(text: String): String {
+        var quote: Char? = null
+        for ((i, c) in text.withIndex()) {
+            when {
+                quote != null -> if (c == quote) quote = null
+                (c == '"' || c == '\'') && (i == 0 || text[i - 1].isWhitespace()) -> quote = c
+                c == '#' && (i == 0 || text[i - 1].isWhitespace()) -> return text.substring(0, i).trim()
+            }
+        }
+        return text.trim()
     }
 }
