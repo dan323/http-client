@@ -26,6 +26,7 @@ Documentation: [features](docs/features.md) · [plan](docs/PLAN.md) · [changelo
 - `--env NAME` — use variables from `NAME` in `http-client.env.json` (next to the file).
 - `--request X` — run only the request with `# @name X`, or the Nth request (1-based), plus any requests it chains on.
 - `--list` — list the requests in the file and exit.
+- `--report-json FILE` / `--report-junit FILE` — also write a run report (per-request status, timings, assertion results, totals) as JSON or JUnit XML; console output and exit codes are unchanged (see [features](docs/features.md#run-reports)).
 
 `# @assert status == 200` lines are checked after each response; the CLI prints PASS/FAIL and exits 1 on any failure (see [features](docs/features.md#assertions)).
 

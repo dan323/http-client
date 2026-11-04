@@ -1,0 +1,33 @@
+package com.dan323.httpclient.adapters
+
+import com.dan323.httpclient.core.application.AssertionResult
+import com.dan323.httpclient.core.application.ReportEntry
+import com.dan323.httpclient.core.application.RunReport
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlin.test.Test
+import kotlin.test.assertEquals
+
+class JsonRunReportTest {
+    private val report = RunReport(listOf(
+        ReportEntry("a \"q\" é", "GET", "http://x/a?b=1&c=<2>", 200, 12,
+            listOf(AssertionResult("status == 200", true, "200", "200", "ok"), AssertionResult("body.\$.x exists", false, null, null, "missing")), 0, null),
+        ReportEntry("b", "POST", "http://x/b", null, null, emptyList(), 1, "boom\nline2"),
+    ))
+
+    @Test fun roundTrips() {
+        assertEquals(report, JsonRunReport.parse(JsonRunReport.render(report)))
+    }
+
+    @Test fun includesTotals() {
+        val root = Json.parseToJsonElement(JsonRunReport.render(report)).jsonObject
+        assertEquals(false, root["passed"]!!.jsonPrimitive.boolean)
+        val totals = root["totals"]!!.jsonObject
+        assertEquals(2, totals["requests"]!!.jsonPrimitive.int)
+        assertEquals(1, totals["assertionsFailed"]!!.jsonPrimitive.int)
+        assertEquals(1, totals["assertionsNotRun"]!!.jsonPrimitive.int)
+    }
+}
