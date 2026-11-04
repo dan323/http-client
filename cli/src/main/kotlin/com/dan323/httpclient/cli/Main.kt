@@ -1,6 +1,9 @@
 package com.dan323.httpclient.cli
 
 import com.dan323.httpclient.adapters.JdkHttpExecutor
+import com.dan323.httpclient.adapters.JsonRunReport
+import com.dan323.httpclient.core.application.JUnitXmlReport
+import com.dan323.httpclient.core.application.RunReport
 import com.dan323.httpclient.adapters.JsonEnvironmentRepository
 import com.dan323.httpclient.adapters.KotlinxJsonExtractor
 import com.dan323.httpclient.adapters.LocalFileReader
@@ -16,16 +19,21 @@ import java.nio.file.Path
 import kotlin.system.exitProcess
 
 private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NAME|INDEX] [--list]
+                  [--report-json FILE] [--report-junit FILE]
 
   --env NAME       use variables from NAME in http-client.env.json (next to the file)
   --request X      run only the request with @name X, or the Nth request (1-based)
-  --list           list the requests in the file and exit"""
+  --list           list the requests in the file and exit
+  --report-json F  write a JSON run report (results, assertions, timings, totals) to F
+  --report-junit F write a JUnit XML run report to F"""
 
 data class Options(
     val file: Path,
     val env: String? = null,
     val request: String? = null,
     val list: Boolean = false,
+    val reportJson: Path? = null,
+    val reportJunit: Path? = null,
 )
 
 /** Returns null (after the caller prints usage) when the arguments are invalid. */
@@ -34,17 +42,21 @@ fun parseArgs(args: List<String>): Options? {
     var env: String? = null
     var request: String? = null
     var list = false
+    var reportJson: Path? = null
+    var reportJunit: Path? = null
     var i = 0
     while (i < args.size) {
         when (val a = args[i]) {
             "--env" -> env = args.getOrNull(++i) ?: return null
             "--request" -> request = args.getOrNull(++i) ?: return null
             "--list" -> list = true
+            "--report-json" -> reportJson = Path.of(args.getOrNull(++i) ?: return null)
+            "--report-junit" -> reportJunit = Path.of(args.getOrNull(++i) ?: return null)
             else -> if (a.startsWith("--") || file != null) return null else file = Path.of(a)
         }
         i++
     }
-    return Options(file ?: return null, env, request, list)
+    return Options(file ?: return null, env, request, list, reportJson, reportJunit)
 }
 
 /** Picks the request selected by name or 1-based index; all requests when no selector is given. */
@@ -108,8 +120,20 @@ fun run(args: List<String>, out: PrintStream, err: PrintStream): Int {
     if (results.isNotEmpty() || notRun > 0) {
         out.println("Assertions: ${results.count { it.passed }} passed, ${results.count { !it.passed }} failed, $notRun not run")
     }
+    val report = RunReport.from(outcomes)
+    try {
+        opts.reportJson?.let { writeReport(it, JsonRunReport.render(report)) }
+        opts.reportJunit?.let { writeReport(it, JUnitXmlReport.render(report)) }
+    } catch (e: java.io.IOException) {
+        return fail(err, "Cannot write report: ${e.message}")
+    }
     val failed = outcomes.any { it is RunOutcome.Failure || (it is RunOutcome.Success && !it.assertionsPassed) }
     return if (failed) 1 else 0
+}
+
+private fun writeReport(path: Path, content: String) {
+    path.toAbsolutePath().parent?.let { Files.createDirectories(it) }
+    Files.writeString(path, content)
 }
 
 private fun fail(err: PrintStream, message: String): Int {

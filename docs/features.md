@@ -111,6 +111,19 @@ GET {{base}}/items/1
   `runChained` (single-request runs) evaluates only the requested request; its prerequisites run for their responses
   and their assertions are neither evaluated nor reported. Reused dependencies are not re-asserted.
 
+### Run reports
+
+`RunReport.from(outcomes)` (in `core`) builds a pure summary of a run: one entry per request (name, method, URL as
+written in the file, status, duration, assertion results, assertions not run, error) plus totals and an overall
+pass/fail. A request passes when it completed and all its assertions passed. Exporters: `JUnitXmlReport` (`core`,
+plain string building with XML escaping; illegal XML characters are dropped) and `JsonRunReport` (`adapters`,
+kotlinx-serialization, also parses a report back).
+
+The CLI writes them with `--report-json FILE` and `--report-junit FILE` (parent directories are created; an
+unwritable path exits 1). Console output and exit codes are unchanged. In JUnit XML each request is a `testcase`;
+a failed assertion is a `failure` and a request that could not complete is an `error`. Prerequisite requests that
+ran for chaining appear as entries too.
+
 ### Dynamic variables
 
 Each occurrence is evaluated separately. A variable you define with the same name wins.
