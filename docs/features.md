@@ -60,9 +60,11 @@ GET {{host}}/users/{{user}}
 `# @timeout 5`, `# @no-redirect`, `# @no-cookie-jar`. The parser records them on the request
 (`RequestTemplate.settings`); the following are honoured per request by the executor (carried as `HttpRequest.options`):
 
-- `# @timeout 5`: overall request timeout; plain numbers are seconds, or add `ms`, `s` or `m` (`@timeout 500ms`). Values may use `{{vars}}`.
-- `# @no-redirect`: do not follow HTTP redirects (the 3xx response is returned).
-- `# @proxy host:port`: send the request through that HTTP proxy.
+- `# @timeout 5`: maximum time to wait for the response (the JDK `HttpRequest.timeout`: it bounds waiting for the response headers; it is not an overall deadline and does not cap time spent streaming the body). A whole, positive number: plain numbers are seconds, or add `ms`, `s` or `m` (any case, `@timeout 500ms`). Decimals (`1.5s`), `0`, negatives and values that overflow are rejected. May use `{{vars}}`.
+- `# @no-redirect`: do not follow HTTP redirects (the 3xx response is returned). An optional value `true` (default) or `false` (`# @no-redirect false` keeps redirects); it may use `{{vars}}`; any other value is an error.
+- `# @proxy host:port`: send the request through that HTTP proxy. Forms: `host`, `host:port`, `http://host:port`, IPv6 as `[::1]:8080`; the port defaults to 80. Only plain HTTP proxies are supported: other schemes (`https://`, `socks://`) and credentials (`user:pass@host`) are rejected. May use `{{vars}}`.
+
+Setting names are case-insensitive and unknown ones are ignored. Invalid values (including a blank `@proxy`) fail when the request is resolved with an `Invalid @timeout` / `@proxy` / `@no-redirect` error, before anything is sent. `JdkHttpExecutor` reuses one derived client per (redirect policy, proxy) and copies the injected client's connect timeout, SSL, authenticator, cookie handler, executor and HTTP version; request priority cannot be copied.
 
 `@no-cookie-jar` is recorded but acted on by later work (cookie jar).
 
