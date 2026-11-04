@@ -1,3 +1,3 @@
 rootProject.name = "http-client"
 
-include(":core", ":adapters", ":cli", ":intellij-plugin", ":desktop", ":mock-server")
+include(":core", ":adapters", ":view-model", ":cli", ":intellij-plugin", ":desktop", ":mock-server")

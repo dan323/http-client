@@ -1,9 +1,9 @@
-package com.dan323.httpclient.intellij
+package com.dan323.httpclient.viewmodel
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-class JsonColorsTest {
+class JsonSpansTest {
     @Test
     fun `colours keys strings numbers and keywords`() {
         val text = "{\n  \"a\": \"x\",\n  \"n\": -1.5e3,\n  \"t\": true,\n  \"z\": null\n}"

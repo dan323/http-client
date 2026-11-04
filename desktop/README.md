@@ -2,7 +2,7 @@
 
 Standalone desktop front end for the HTTP client, built with
 [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/) for Desktop.
-It runs on Windows, macOS and Linux and reuses `core` and `adapters` unchanged.
+It runs on Windows, macOS and Linux and reuses `core` and `adapters` unchanged; JSON tree flattening and status/size formatting come from the shared `view-model` module.
 
 ## What it does
 

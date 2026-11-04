@@ -14,6 +14,7 @@ repositories {
 
 dependencies {
     implementation(project(":adapters"))
+    implementation(project(":view-model"))
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)

@@ -11,6 +11,7 @@ repositories {
 
 dependencies {
     implementation(project(":adapters"))
+    implementation(project(":view-model"))
     testImplementation(kotlin("test"))
     intellijPlatform {
         local(providers.gradleProperty("ideaPath"))
