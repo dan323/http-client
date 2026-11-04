@@ -4,6 +4,7 @@ import com.dan323.httpclient.core.domain.Body
 import com.dan323.httpclient.core.domain.Header
 import com.dan323.httpclient.core.domain.HttpRequest
 import com.dan323.httpclient.core.domain.HttpResponse
+import com.dan323.httpclient.core.domain.RequestOptions
 import com.dan323.httpclient.core.domain.RequestTemplate
 import com.dan323.httpclient.core.port.`in`.RunRequest
 import com.dan323.httpclient.core.port.out.FileReader
@@ -30,5 +31,30 @@ class RequestRunner(
             is Body.Text -> VariableResolver.resolve(b.content, vars, extra).toByteArray()
             is Body.FromFile -> files.read(VariableResolver.resolve(b.path, vars, extra))
         },
+        options = options(t, vars, extra),
     )
+
+    /**
+     * Settings: `timeout` (number with optional `ms`/`s`/`m` suffix, default seconds), `no-redirect`,
+     * `proxy` (`host:port`). Unknown settings are ignored.
+     */
+    private fun options(t: RequestTemplate, vars: Map<String, String>, extra: (String) -> String?): RequestOptions {
+        val s = t.settings
+        return RequestOptions(
+            timeoutMillis = s["timeout"]?.let { parseTimeout(VariableResolver.resolve(it, vars, extra)) },
+            followRedirects = "no-redirect" !in s,
+            proxy = s["proxy"]?.let { VariableResolver.resolve(it, vars, extra).trim() }?.takeIf { it.isNotEmpty() },
+        )
+    }
+
+    private fun parseTimeout(raw: String): Long {
+        val m = Regex("""(\d+)\s*(ms|s|m)?""").matchEntire(raw.trim())
+            ?: throw IllegalArgumentException("Invalid @timeout value: '$raw'")
+        val n = m.groupValues[1].toLong()
+        return when (m.groupValues[2]) {
+            "ms" -> n
+            "m" -> n * 60_000
+            else -> n * 1000
+        }
+    }
 }
