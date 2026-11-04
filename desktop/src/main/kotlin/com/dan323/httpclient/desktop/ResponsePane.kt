@@ -37,6 +37,15 @@ import androidx.compose.ui.unit.dp
 import com.dan323.httpclient.adapters.prettyJson
 import com.dan323.httpclient.core.application.RunOutcome
 import com.dan323.httpclient.core.domain.HttpResponse
+import com.dan323.httpclient.viewmodel.JsonKind
+import com.dan323.httpclient.viewmodel.JsonRow
+import com.dan323.httpclient.viewmodel.StatusClass
+import com.dan323.httpclient.viewmodel.durationLabel
+import com.dan323.httpclient.viewmodel.flattenJson
+import com.dan323.httpclient.viewmodel.parseJsonContainer
+import com.dan323.httpclient.viewmodel.sizeLabel
+import com.dan323.httpclient.viewmodel.statusClass
+import com.dan323.httpclient.viewmodel.statusText
 import kotlinx.serialization.json.JsonElement
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
@@ -114,7 +123,7 @@ private fun OutcomeHeader(outcome: RunOutcome, ui: OutcomeUi?) {
                 val resp = outcome.response
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     StatusBadge(resp.statusCode)
-                    Text("${resp.durationMillis} ms", style = MaterialTheme.typography.bodySmall)
+                    Text(durationLabel(resp.durationMillis), style = MaterialTheme.typography.bodySmall)
                     Text(sizeLabel(resp.body.size), style = MaterialTheme.typography.bodySmall)
                     resp.header("content-type")?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline) }
                 }
@@ -137,10 +146,10 @@ private fun OutcomeHeader(outcome: RunOutcome, ui: OutcomeUi?) {
 
 @Composable
 private fun StatusBadge(status: Int) {
-    val color = when (status) {
-        in 200..299 -> Color(0xFF2E7D32)
-        in 300..399 -> Color(0xFFEF6C00)
-        in 400..499 -> Color(0xFFC62828)
+    val color = when (statusClass(status)) {
+        StatusClass.SUCCESS -> Color(0xFF2E7D32)
+        StatusClass.REDIRECT -> Color(0xFFEF6C00)
+        StatusClass.CLIENT_ERROR -> Color(0xFFC62828)
         else -> Color(0xFF6A1B9A)
     }
     Surface(color = color, shape = RoundedCornerShape(4.dp)) {
@@ -193,18 +202,3 @@ private fun copyText(resp: HttpResponse, ui: OutcomeUi): String {
 
 private fun copy(text: String) =
     runCatching { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null) }
-
-internal fun sizeLabel(bytes: Int) = when {
-    bytes < 1024 -> "$bytes B"
-    bytes < 1024 * 1024 -> "%.1f KB".format(bytes / 1024.0)
-    else -> "%.1f MB".format(bytes / 1024.0 / 1024.0)
-}
-
-internal fun statusText(code: Int) = when (code) {
-    200 -> "OK"; 201 -> "Created"; 202 -> "Accepted"; 204 -> "No Content"
-    301 -> "Moved Permanently"; 302 -> "Found"; 304 -> "Not Modified"
-    400 -> "Bad Request"; 401 -> "Unauthorized"; 403 -> "Forbidden"; 404 -> "Not Found"; 405 -> "Method Not Allowed"
-    409 -> "Conflict"; 422 -> "Unprocessable Entity"; 429 -> "Too Many Requests"
-    500 -> "Internal Server Error"; 502 -> "Bad Gateway"; 503 -> "Service Unavailable"; 504 -> "Gateway Timeout"
-    else -> ""
-}

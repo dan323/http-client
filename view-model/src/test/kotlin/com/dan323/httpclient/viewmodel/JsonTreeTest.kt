@@ -1,4 +1,4 @@
-package com.dan323.httpclient.desktop
+package com.dan323.httpclient.viewmodel
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
