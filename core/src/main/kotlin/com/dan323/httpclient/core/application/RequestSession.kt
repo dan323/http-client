@@ -16,6 +16,7 @@ class RequestSession(
     json: JsonExtractor,
 ) {
     private val extractor = ResponseExtractor(json)
+    private val assertionEvaluator = AssertionEvaluator(extractor)
     private val responses = mutableMapOf<String, HttpResponse>()
 
     fun run(template: RequestTemplate, variables: Map<String, String>): HttpResponse {
@@ -31,7 +32,7 @@ class RequestSession(
         onOutcome: (RunOutcome) -> Unit = {},
     ): List<RunOutcome> = requests.map { r ->
         val outcome = try {
-            RunOutcome.Success(r, run(r, variables))
+            run(r, variables).let { RunOutcome.Success(r, it, assertionEvaluator.evaluate(r.assertions, it)) }
         } catch (e: Exception) {
             RunOutcome.Failure(r, e.message ?: e::class.simpleName ?: "error")
         }
