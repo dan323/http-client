@@ -13,7 +13,7 @@ All notable changes to this project are documented here. The format follows
 - IntelliJ plugin: stop bundling kotlinx-serialization in the plugin zip (the IDE provides it), avoiding a class conflict.
 
 ### Changed
-- New `view-model` module (T12): UI-toolkit-free JSON tree flattening (`flattenJson`), JSON colour spans (`jsonSpans`), status class/text and size/duration labels, moved out of `desktop` and `intellij-plugin` and shared by both. The plugin now shows the status reason phrase and `1.5 s`-style durations. The plugin zip still excludes kotlinx-serialization.
+- New `view-model` module (T12): UI-toolkit-free JSON tree flattening (`flattenJson`), JSON colour spans (`jsonSpans`), status class/text and size/duration labels, moved out of `desktop` and `intellij-plugin` and shared by both. The plugin now shows the status reason phrase and `1.5 s`-style durations. Desktop behaviour change: durations were always `N ms` (e.g. `1500 ms`) and are now `1.5 s` from 1 s up (`2m 5s` from 1 min), and size/duration numbers are formatted with `Locale.ROOT` (always `.` decimal separator) instead of the system locale; sizes gain a GB tier and negative sizes/durations show as 0. The plugin zip still excludes kotlinx-serialization, now enforced by the `verifyNoBundledSerialization` Gradle task (runs with `check` and after `buildPlugin`).
 - IntelliJ plugin sandbox verified to load without errors in IDEA 2026.1.5 (T21); GUI behavior still unverified, see `intellij-plugin/README.md`.
 
 ## [0.2.0] - 2026-11-03
