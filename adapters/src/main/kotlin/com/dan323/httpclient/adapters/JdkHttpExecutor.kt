@@ -3,27 +3,70 @@ package com.dan323.httpclient.adapters
 import com.dan323.httpclient.core.domain.Header
 import com.dan323.httpclient.core.domain.HttpRequest
 import com.dan323.httpclient.core.domain.HttpResponse
+import com.dan323.httpclient.core.domain.ProxyAddress
+import com.dan323.httpclient.core.domain.RequestOptions
 import com.dan323.httpclient.core.port.out.HttpExecutor
+import java.net.InetSocketAddress
+import java.net.ProxySelector
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest.BodyPublishers
 import java.net.http.HttpResponse.BodyHandlers
+import java.time.Duration
+import java.util.concurrent.ConcurrentHashMap
 
+/**
+ * Executes requests with the JDK client. Redirect policy and proxy are client-level in the JDK, so requests
+ * that need `@no-redirect` or `@proxy` use a derived client, built once per (redirect policy, proxy) and reused.
+ * A derived client copies the injected client's connect timeout, SSL context/parameters, authenticator,
+ * cookie handler, executor and HTTP version; only the request priority cannot be read back and is not copied.
+ * Call [close] to release derived clients (the injected client is left to its owner).
+ */
 class JdkHttpExecutor(
     private val client: HttpClient = HttpClient.newBuilder()
         .followRedirects(HttpClient.Redirect.NORMAL)
         .build(),
-) : HttpExecutor {
+) : HttpExecutor, AutoCloseable {
+    private val derived = ConcurrentHashMap<Pair<HttpClient.Redirect, ProxyAddress?>, HttpClient>()
+
+    private fun clientFor(o: RequestOptions): HttpClient {
+        val redirect = if (o.followRedirects) client.followRedirects() else HttpClient.Redirect.NEVER
+        if (redirect == client.followRedirects() && o.proxy == null) return client
+        return derived.computeIfAbsent(redirect to o.proxy) { (r, p) ->
+            val b = HttpClient.newBuilder().followRedirects(r).version(client.version())
+            client.connectTimeout().ifPresent(b::connectTimeout)
+            client.cookieHandler().ifPresent(b::cookieHandler)
+            client.authenticator().ifPresent(b::authenticator)
+            client.executor().ifPresent(b::executor)
+            b.sslContext(client.sslContext()).sslParameters(client.sslParameters())
+            // Keep the injected client's own proxy selector unless the request names a proxy.
+            if (p != null) b.proxy(ProxySelector.of(resolve(p))) else client.proxy().ifPresent(b::proxy)
+            b.build()
+        }
+    }
+
+    private fun resolve(p: ProxyAddress): InetSocketAddress {
+        val a = InetSocketAddress(p.host, p.port)
+        require(!a.isUnresolved) { "Cannot resolve @proxy host: '${p.host}'" }
+        return a
+    }
+
+    override fun close() {
+        derived.values.forEach { it.close() }
+        derived.clear()
+    }
+
     // Restricted by java.net.http; the JDK sets these itself.
     private val restricted = setOf("host", "content-length", "connection", "expect", "upgrade")
 
     override fun execute(request: HttpRequest): HttpResponse {
         val builder = java.net.http.HttpRequest.newBuilder(URI.create(request.url))
             .method(request.method, request.body?.let(BodyPublishers::ofByteArray) ?: BodyPublishers.noBody())
+        request.options.timeoutMillis?.let { builder.timeout(Duration.ofMillis(it)) }
         request.headers.filter { it.name.lowercase() !in restricted }.forEach { builder.header(it.name, it.value) }
 
         val start = System.nanoTime()
-        val resp = client.send(builder.build(), BodyHandlers.ofByteArray())
+        val resp = clientFor(request.options).send(builder.build(), BodyHandlers.ofByteArray())
         val ms = (System.nanoTime() - start) / 1_000_000
         val headers = resp.headers().map().flatMap { (k, vs) -> vs.map { Header(k, it) } }
         return HttpResponse(resp.statusCode(), headers, resp.body(), ms)
