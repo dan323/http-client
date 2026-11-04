@@ -119,10 +119,27 @@ pass/fail. A request passes when it completed and all its assertions passed. Exp
 plain string building with XML escaping; illegal XML characters are dropped) and `JsonRunReport` (`adapters`,
 kotlinx-serialization, also parses a report back).
 
-The CLI writes them with `--report-json FILE` and `--report-junit FILE` (parent directories are created; an
-unwritable path exits 1). Console output and exit codes are unchanged. In JUnit XML each request is a `testcase`;
-a failed assertion is a `failure` and a request that could not complete is an `error`. Prerequisite requests that
-ran for chaining appear as entries too.
+The CLI writes them with `--report-json FILE` and `--report-junit FILE`. Option values must be non-empty and not
+start with `--`; repeating an option or giving both reports the same path is a usage error (exit 2). Parent
+directories are created and files are written atomically (temp file + move), each report independently. Exit codes:
+0 ok, 1 request/assertion failure, 2 usage, 3 a report could not be written (stderr says whether the run itself
+passed). If the run cannot start (missing file, unknown environment or request, unexpected exception) a report with a
+single failed `httpc` entry is still written so CI finds a file. Console output is unchanged.
+
+JUnit XML: one `testcase` per request, so `tests`/`failures`/`errors` match the elements. All failed assertions of a
+request are merged into one `failure` (one per line); a request that could not complete is an `error` (time 0). The
+testcase `name` is `"<index>. <request name or METHOD url>"` (1-based position in the run) and `classname` is the
+file name, so duplicate or unnamed requests stay distinct and stable. Prerequisites (requests run only to feed
+`{{name.response...}}` chaining) are not asserted: they are omitted when they passed and kept as an `error` when they
+failed; in JSON they are always listed with `"prerequisite": true`. An empty run reports `tests="0"`. Tabs and line
+breaks in attributes are written as character references.
+
+JSON: top-level `version` (currently 1); `JsonRunReport.parse` rejects a newer version. `passed` and `totals` (and each
+entry's `passed`) are derived: written for consumers, ignored and recomputed by `parse`.
+
+Caveats: a prerequisite or an unasserted request answering HTTP 500 still counts as passed (only transport errors and
+failed assertions fail a run), so a green report does not mean "no 5xx". Reports contain URLs as written in the file
+and error messages, which may include secrets (tokens in query strings); treat them as sensitive CI artifacts.
 
 ### Dynamic variables
 

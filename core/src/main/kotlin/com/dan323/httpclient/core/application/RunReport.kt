@@ -12,6 +12,8 @@ data class ReportEntry(
     val assertionsNotRun: Int,
     /** Why the request itself failed (never a failed assertion); null otherwise. */
     val error: String?,
+    /** True for requests that only ran to feed `{{name.response...}}` chaining; their assertions are not evaluated. */
+    val prerequisite: Boolean = false,
 ) {
     val passed: Boolean get() = error == null && assertions.all { it.passed }
 }
@@ -28,18 +30,19 @@ data class RunReport(val entries: List<ReportEntry>) {
     val passed: Boolean get() = entries.all { it.passed }
 
     companion object {
-        fun from(outcomes: List<RunOutcome>): RunReport = RunReport(outcomes.map { entry(it) })
+        fun from(outcomes: List<RunOutcome>, isPrerequisite: (RunOutcome) -> Boolean = { false }): RunReport =
+            RunReport(outcomes.map { entry(it, isPrerequisite(it)) })
 
-        private fun entry(outcome: RunOutcome): ReportEntry {
+        private fun entry(outcome: RunOutcome, prerequisite: Boolean): ReportEntry {
             val r = outcome.request
             val name = r.name ?: "${r.method} ${r.url}"
             return when (outcome) {
                 is RunOutcome.Success -> ReportEntry(
                     name, r.method, r.url, outcome.response.statusCode, outcome.response.durationMillis,
-                    outcome.assertions, 0, null,
+                    outcome.assertions, 0, null, prerequisite,
                 )
                 is RunOutcome.Failure -> ReportEntry(
-                    name, r.method, r.url, null, null, emptyList(), outcome.assertionsNotRun, outcome.message,
+                    name, r.method, r.url, null, null, emptyList(), outcome.assertionsNotRun, outcome.message, prerequisite,
                 )
             }
         }

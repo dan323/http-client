@@ -10,6 +10,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class JsonRunReportTest {
     private val report = RunReport(listOf(
@@ -29,5 +31,24 @@ class JsonRunReportTest {
         assertEquals(2, totals["requests"]!!.jsonPrimitive.int)
         assertEquals(1, totals["assertionsFailed"]!!.jsonPrimitive.int)
         assertEquals(1, totals["assertionsNotRun"]!!.jsonPrimitive.int)
+    }
+
+    @Test fun writesVersionAndRoundTripsEmptyAndPrerequisite() {
+        val root = Json.parseToJsonElement(JsonRunReport.render(report)).jsonObject
+        assertEquals(1, root["version"]!!.jsonPrimitive.int)
+        val empty = RunReport(emptyList())
+        assertEquals(empty, JsonRunReport.parse(JsonRunReport.render(empty)))
+        assertTrue(JsonRunReport.parse(JsonRunReport.render(empty)).passed)
+        val pre = RunReport(listOf(ReportEntry("p", "GET", "http://x", 200, 1, emptyList(), 0, null, prerequisite = true)))
+        assertEquals(pre, JsonRunReport.parse(JsonRunReport.render(pre)))
+    }
+
+    @Test fun parseRejectsNewerVersionAndIgnoresDerivedFields() {
+        val text = JsonRunReport.render(report)
+        assertFailsWith<IllegalArgumentException> { JsonRunReport.parse(text.replace("\"version\": 1", "\"version\": 2")) }
+        // derived fields are recomputed: a hand-edited "passed" does not change the parsed report
+        val edited = text.replaceFirst("\"passed\": false", "\"passed\": true")
+        assertEquals(report, JsonRunReport.parse(edited))
+        assertEquals(false, JsonRunReport.parse(edited).passed)
     }
 }
