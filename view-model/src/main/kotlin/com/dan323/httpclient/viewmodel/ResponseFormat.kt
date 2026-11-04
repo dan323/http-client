@@ -14,16 +14,35 @@ fun statusClass(code: Int): StatusClass = when (code) {
     else -> StatusClass.UNKNOWN
 }
 
-/** Human-readable size: "12 B", "1.5 KB", "2.0 MB". */
-fun sizeLabel(bytes: Int): String = when {
-    bytes < 1024 -> "$bytes B"
-    bytes < 1024 * 1024 -> String.format(Locale.ROOT, "%.1f KB", bytes / 1024.0)
-    else -> String.format(Locale.ROOT, "%.1f MB", bytes / 1024.0 / 1024.0)
+/**
+ * Human-readable size: "12 B", "1.5 KB", "2.0 MB", "2.0 GB". Units are promoted on the rounded value
+ * (so 1048575 is "1.0 MB", never "1024.0 KB"); negative sizes are treated as 0.
+ */
+fun sizeLabel(bytes: Int): String {
+    val b = maxOf(bytes, 0)
+    if (b < 1024) return "$b B"
+    val units = listOf("KB", "MB", "GB")
+    var value = b / 1024.0
+    var unit = 0
+    while (unit < units.lastIndex && Math.round(value * 10) >= 10240) {
+        value /= 1024.0
+        unit++
+    }
+    return String.format(Locale.ROOT, "%.1f %s", value, units[unit])
 }
 
-/** Human-readable duration: "42 ms", "1.5 s". */
-fun durationLabel(millis: Long): String =
-    if (millis < 1000) "$millis ms" else String.format(Locale.ROOT, "%.1f s", millis / 1000.0)
+/**
+ * Human-readable duration: "42 ms", "1.5 s", "2m 5s". Promotes on the rounded value (59999 ms is "1m 0s",
+ * never "60.0 s"); negative durations (clock skew) are treated as 0.
+ */
+fun durationLabel(millis: Long): String {
+    val ms = maxOf(millis, 0L)
+    if (ms < 1000) return "$ms ms"
+    val tenths = (ms + 50) / 100
+    if (tenths < 600) return String.format(Locale.ROOT, "%.1f s", tenths / 10.0)
+    val totalSeconds = (ms + 500) / 1000
+    return "${totalSeconds / 60}m ${totalSeconds % 60}s"
+}
 
 /** Reason phrase for common status codes; empty when unknown. */
 fun statusText(code: Int): String = when (code) {
