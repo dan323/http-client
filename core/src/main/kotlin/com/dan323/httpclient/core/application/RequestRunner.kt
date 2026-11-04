@@ -14,9 +14,13 @@ import com.dan323.httpclient.core.port.out.HttpExecutor
 class RequestRunner(
     private val executor: HttpExecutor,
     private val files: FileReader,
-    val dynamic: DynamicVariables,
+    private val dynamic: DynamicVariables,
 ) : RunRequest {
     constructor(executor: HttpExecutor, files: FileReader) : this(executor, files, DynamicVariables.DEFAULT)
+
+    /** Substitutes variables in free text (e.g. an assertion) exactly as for request text. */
+    fun resolveText(text: String, variables: Map<String, String>, extra: (String) -> String? = { null }): String =
+        VariableResolver.resolve(text, variables, extra, dynamic)
 
     override fun run(template: RequestTemplate, variables: Map<String, String>): HttpResponse =
         executor.execute(resolve(template, variables))

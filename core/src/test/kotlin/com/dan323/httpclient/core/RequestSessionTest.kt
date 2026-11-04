@@ -68,6 +68,24 @@ class RunAllTest {
         assertEquals("Undefined variable: nope", (outcomes[0] as com.dan323.httpclient.core.application.RunOutcome.Failure).message)
         assertEquals(204, (outcomes[1] as com.dan323.httpclient.core.application.RunOutcome.Success).response.statusCode)
     }
+
+    private val ok = HttpExecutor { HttpResponse(204, emptyList(), ByteArray(0), 1) }
+    private val okSession = RequestSession(RequestRunner(ok) { error("no files") }, ok) { _, _ -> null }
+
+    @Test fun malformedDynamicVariableInAssertionOnlyInvalidatesThatAssertion() {
+        val t = RequestTemplate(null, "GET", "http://h", assertions = listOf("status == 204", "status == {{\$random.integer(5, 1)}}", "status == {{\$nope}}", "status != 500"))
+        val outcome = okSession.runAll(listOf(t), emptyMap()).single() as com.dan323.httpclient.core.application.RunOutcome.Success
+        assertEquals(204, outcome.response.statusCode)
+        assertEquals(listOf(true, false, false, true), outcome.assertions.map { it.passed })
+        assertEquals("invalid assertion: Invalid dynamic variable {{\$random.integer(5, 1)}}: from must not exceed to", outcome.assertions[1].message)
+        assertEquals("status == {{\$random.integer(5, 1)}}", outcome.assertions[1].assertion)
+    }
+
+    @Test fun malformedDynamicVariableInFileVariableFailsTheRequestClearly() {
+        val t = RequestTemplate(null, "GET", "http://h/{{v}}", fileVariables = mapOf("v" to "{{\$random.integer(5, 1)}}"))
+        val outcome = okSession.runAll(listOf(t), emptyMap()).single() as com.dan323.httpclient.core.application.RunOutcome.Failure
+        assertEquals("Invalid dynamic variable {{\$random.integer(5, 1)}}: from must not exceed to", outcome.message)
+    }
 }
 
 /** login > req1 > req2: both later requests must use the one login response. */

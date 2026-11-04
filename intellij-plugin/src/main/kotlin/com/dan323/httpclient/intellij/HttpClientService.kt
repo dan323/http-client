@@ -80,7 +80,7 @@ class HttpClientService(private val project: Project) {
 
         val executor = JdkHttpExecutor()
         val session = sessions.getOrPut(file.toAbsolutePath() to env?.name) {
-            RequestSession(RequestRunner(executor, LocalFileReader(dir), DynamicVariables(env = SystemEnvironmentVariables())), executor, KotlinxJsonExtractor())
+            RequestSession(RequestRunner(executor, LocalFileReader(dir), DynamicVariables(env = SystemEnvironmentVariables.fromConfiguration())), executor, KotlinxJsonExtractor())
         }
         val sections = mutableListOf<Section>()
         val report = { Report(environment = env?.name ?: "none", sections = sections.toList()) }

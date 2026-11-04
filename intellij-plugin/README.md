@@ -67,3 +67,5 @@ visible window or interaction):
   (1.9.0) when a request actually runs.
 
 No completion or navigation for `{{variables}}` yet.
+
+`{{$env.NAME}}` reads nothing by default: allow names with `-Dhttpclient.allowEnv=NAME,NAME` (JVM option) or the environment variable `HTTPC_ALLOW_ENV=NAME,NAME`; see [docs/features.md](../docs/features.md).
