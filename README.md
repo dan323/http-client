@@ -27,4 +27,6 @@ Documentation: [features](docs/features.md) · [plan](docs/PLAN.md) · [changelo
 - `--request X` — run only the request with `# @name X`, or the Nth request (1-based), plus any requests it chains on.
 - `--list` — list the requests in the file and exit.
 
+`# @assert status == 200` lines are checked after each response; the CLI prints PASS/FAIL and exits 1 on any failure (see [features](docs/features.md#assertions)).
+
 `./gradlew :cli:installDist` builds a standalone `httpc` launcher in `cli/build/install/httpc/bin`.

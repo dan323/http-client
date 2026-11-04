@@ -8,7 +8,7 @@ import com.dan323.httpclient.core.port.`in`.ParseHttpFile
 
 /**
  * Parser for the JetBrains `.http` format: requests separated by `###`,
- * `# @name x` request names, `@var = value` file variables, `# @setting [value]` directives, `//` and `#` comments, `< path` file bodies.
+ * `# @name x` request names, `@var = value` file variables, `# @setting [value]` and `# @assert expr` directives, `//` and `#` comments, `< path` file bodies.
  */
 class HttpFileParser : ParseHttpFile {
     private val requestLine = Regex("""^([A-Za-z]+)\s+(\S.*?)(?:\s+HTTP/\S+)?$""")
@@ -31,6 +31,7 @@ class HttpFileParser : ParseHttpFile {
     private fun parseBlock(lines: List<String>, startLine: Int, fileVariables: MutableMap<String, String>): RequestTemplate? {
         var name: String? = null
         val settings = linkedMapOf<String, String>()
+        val assertions = mutableListOf<String>()
         var i = 0
         // Leading comments / blanks, picking up @name.
         while (i < lines.size) {
@@ -40,7 +41,8 @@ class HttpFileParser : ParseHttpFile {
             if (l.startsWith("#") || l.startsWith("//")) {
                 nameTag.find(l)?.let { name = it.groupValues[1] }
                 settingTag.matchEntire(l)?.let { m ->
-                    if (m.groupValues[1] != "name") settings[m.groupValues[1]] = m.groupValues[2].trim()
+                    if (m.groupValues[1] == "assert") assertions += stripTrailingComment(m.groupValues[2])
+                    else if (m.groupValues[1] != "name") settings[m.groupValues[1]] = m.groupValues[2].trim()
                 }
                 i++; continue
             }
@@ -75,6 +77,22 @@ class HttpFileParser : ParseHttpFile {
                 Body.FromFile(bodyLines.first().trim().removePrefix("<").trim())
             else -> Body.Text(bodyLines.joinToString("\n"))
         }
-        return RequestTemplate(name, method, url, headers, body, startLine, settings, fileVariables.toMap())
+        return RequestTemplate(name, method, url, headers, body, startLine, settings, fileVariables.toMap(), assertions)
+    }
+
+    /**
+     * Drops a trailing ` # comment` from an assertion (a `#` preceded by whitespace and outside quotes).
+     * A bare `# @assert` yields an empty string, which the evaluator reports as "missing expression".
+     */
+    private fun stripTrailingComment(text: String): String {
+        var quote: Char? = null
+        for ((i, c) in text.withIndex()) {
+            when {
+                quote != null -> if (c == quote) quote = null
+                (c == '"' || c == '\'') && (i == 0 || text[i - 1].isWhitespace()) -> quote = c
+                c == '#' && (i == 0 || text[i - 1].isWhitespace()) -> return text.substring(0, i).trim()
+            }
+        }
+        return text.trim()
     }
 }

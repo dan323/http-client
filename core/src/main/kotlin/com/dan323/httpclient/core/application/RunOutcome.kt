@@ -6,6 +6,15 @@ import com.dan323.httpclient.core.domain.RequestTemplate
 sealed interface RunOutcome {
     val request: RequestTemplate
 
-    data class Success(override val request: RequestTemplate, val response: HttpResponse) : RunOutcome
-    data class Failure(override val request: RequestTemplate, val message: String) : RunOutcome
+    /** [assertions] holds one result per `# @assert` line of the request (empty when it has none). */
+    data class Success(
+        override val request: RequestTemplate,
+        val response: HttpResponse,
+        val assertions: List<AssertionResult> = emptyList(),
+    ) : RunOutcome {
+        val assertionsPassed: Boolean get() = assertions.all { it.passed }
+    }
+
+    /** [assertionsNotRun] counts the request's `# @assert` lines that could not be evaluated because it failed. */
+    data class Failure(override val request: RequestTemplate, val message: String, val assertionsNotRun: Int = 0) : RunOutcome
 }

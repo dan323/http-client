@@ -68,6 +68,49 @@ Setting names are case-insensitive and unknown ones are ignored. Invalid values 
 
 `@no-cookie-jar` is recorded but acted on by later work (cookie jar).
 
+### Assertions
+
+`# @assert <expression> <operator> [expected]` lines before a request line check its response. They may repeat
+and are kept apart from settings (`RequestTemplate.assertions`).
+
+```
+# @assert status == 200
+# @assert headers.content-type contains json
+# @assert body.$.id exists
+# @assert body.$.n > 3
+GET {{base}}/items/1
+```
+
+- `<expression>` is `status`, `headers.Name` or `body.<...>` (`body.*`, `body.$.json.path`, `body./xpath`,
+  `body.regex:...`). Any other prefix (a typo such as `stauts` or `header.X`) is an invalid assertion, not a
+  missing value. The expression ends at the first space; to use one with spaces, quote it:
+  `# @assert "body.$.items[?(@.id == 1)]" exists`.
+- `expected` is the rest of the line, inner spaces kept. In matching single or double quotes it is literal
+  (`== ""` asserts an empty value, `== " a "` keeps the spaces) and `==`/`!=` compare as exact text. An unquoted
+  empty expected value is invalid.
+- Operators: `==`, `!=`, `<`, `<=`, `>`, `>=`, `contains`, `!contains`, `startsWith`, `endsWith`,
+  `matches` (the whole value matches a regex; `.` also matches newlines; a pattern running over 2 seconds is
+  aborted and reported as invalid), `exists`, `!exists`. `exists`/`!exists` take no expected value.
+- Numbers are strict decimals (`-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d{1,4})?`) compared exactly as `BigDecimal`.
+  `==` holds when the texts are identical, or when both sides are numbers with the same value: `5 == 5.0` and
+  `1e3 == 1000` pass, `1.10 == 1.1` passes (quote the expected value, `== "1.1"`, to compare text), while
+  `007 == 7` fails (leading zeros are text), as do `NaN`/`Infinity` (plain text). `<`, `<=`, `>`, `>=` need numbers
+  on both sides.
+- A value that cannot be found (nothing matched) fails every operator except `!exists`, including `!=` and
+  `!contains`. An XPath that evaluates to a string (`xpath:string(//a)`, `count(...)`) gives `""` rather than
+  missing, so `exists` holds for it; use `== ""` to test for emptiness.
+- `{{variables}}` and `{{name.response...}}` references are substituted before evaluating, exactly as in
+  request text (environment, file variables, dynamic variables). An undefined one makes the assertion fail
+  as invalid with "Undefined variable: x".
+- A malformed assertion (including a bare `# @assert`) fails with an "invalid assertion" message. A trailing
+  ` # comment` is stripped (a `#` preceded by whitespace and outside quotes). `# @assert` lines must sit before
+  the request line; in a block that has no request they are discarded. Failure messages show at most 200
+  characters of the actual value.
+- `RequestSession.runAll` evaluates them and attaches one `AssertionResult` (passed, expected, actual, message) each to
+  `RunOutcome.Success.assertions`. A request that throws reports `RunOutcome.Failure.assertionsNotRun`.
+  `runChained` (single-request runs) evaluates only the requested request; its prerequisites run for their responses
+  and their assertions are neither evaluated nor reported. Reused dependencies are not re-asserted.
+
 ### Dynamic variables
 
 Each occurrence is evaluated separately. A variable you define with the same name wins.
@@ -110,7 +153,9 @@ httpc <file.http> [--env NAME] [--request NAME|INDEX] [--list]
 | `--list`      | list requests and exit                               |
 
 For each request the output is the status line with timing, the response headers, then the body.
-Exit codes: `0` success, `1` a request or setup failed, `2` bad arguments.
+After a response, each assertion is printed as `PASS ...` or `FAIL ... -- message`; for a request that failed its assertions are listed as `NOT RUN ...`.
+A total line `Assertions: N passed, M failed, K not run` follows the run. With `--request`, only the selected request's assertions run, not its prerequisites.
+Exit codes: `0` success, `1` a request or setup failed or an assertion failed, `2` bad arguments.
 
 Run with `./gradlew :cli:run --args="requests.http --env dev"`, or build a launcher with
 `./gradlew :cli:installDist` (output in `cli/build/install/httpc/bin`).
@@ -138,4 +183,4 @@ Do not install it next to the bundled HTTP Client plugin of IntelliJ Ultimate, s
 
 ## Not yet implemented
 
-Response handlers and assertions, and authentication helpers.
+Response handlers, assertion display in the desktop app and plugin, and authentication helpers.
