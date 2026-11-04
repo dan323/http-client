@@ -7,6 +7,7 @@ Hexagonal layout:
 - `core/` — domain, application services (`HttpFileParser`, `VariableResolver`, `RequestRunner`) and ports. No third-party dependencies.
 - `adapters/` — driven adapters: `JdkHttpExecutor`, `LocalFileReader`, `JsonEnvironmentRepository` (`http-client.env.json` + `.private.env.json`).
 - `cli/` — command-line front end (`httpc`).
+- `view-model/` — pure view logic (JSON tree/colour spans, status and size formatting) shared by `desktop` and `intellij-plugin`.
 - `desktop/` — standalone Compose Desktop app for Windows, macOS and Linux ([README](desktop/README.md)).
 - `mock-server/` — local httpbin-style server used by `samples/` (`./gradlew :mock-server:run`).
 - `samples/` — `.http` files for manual testing ([README](samples/README.md)).
