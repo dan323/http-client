@@ -41,7 +41,7 @@ class ResponseExtractor(private val json: JsonExtractor) {
     }
 
     fun regex(text: String, pattern: String): String? {
-        val match = runCatching { Regex(pattern).find(text) }.getOrNull() ?: return null
+        val match = runCatching { Regex(pattern).find(RegexGuard(text)) }.getOrNull() ?: return null
         return if (match.groups.size > 1) match.groups[1]?.value else match.value
     }
 

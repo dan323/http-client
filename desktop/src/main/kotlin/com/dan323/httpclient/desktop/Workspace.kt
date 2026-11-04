@@ -39,6 +39,6 @@ object Workspace {
             ?: emptyMap()
         val executor = JdkHttpExecutor()
         val session = RequestSession(RequestRunner(executor, LocalFileReader(dir)), executor, KotlinxJsonExtractor())
-        return session.runAll(selected, variables, onOutcome)
+        return session.runAll(selected, variables, onOutcome = onOutcome)
     }
 }

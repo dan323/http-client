@@ -11,6 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /** Runs the files in /samples against the mock server so they cannot silently rot. */
 class SamplesTest {
@@ -63,6 +64,16 @@ class SamplesTest {
         assertEquals(0, single.code, single.err)
         assertContains(single.out, "### login")
         assertContains(single.out, "\"token\": \"secret-")
+    }
+
+    @Test fun assertions() {
+        val r = sample("assertions.http")
+        assertEquals(1, r.code)
+        assertContains(r.out, "PASS body.\$.json.n > 3")
+        assertContains(r.out, "FAIL body.\$.args.user == nobody")
+        assertContains(r.out, "PASS body.\$.args.user == {{user}}")
+        assertTrue(Regex("""Assertions: \d+ passed, 1 failed""").containsMatchIn(r.out), r.out)
+        assertEquals(0, sample("assertions.http", "--request", "numbers").code)
     }
 
     @Test fun fileBody() {

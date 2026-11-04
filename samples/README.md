@@ -19,6 +19,7 @@ Manual test files for all front ends. They run against the local mock server in 
 | `basic.http` | GET/POST, JSON body, method-less line, headers |
 | `variables.http` | environment and dynamic variables; two requests that are expected to fail |
 | `chaining.http` | `{{name.response...}}` references, prerequisites, a missing-path failure |
+| `assertions.http` | `# @assert` lines; the last request is expected to fail an assertion |
 | `file-body.http` | `< ./payload.json` body |
 | `methods.http` | PUT, PATCH, DELETE, HEAD, OPTIONS, 404, redirects |
 

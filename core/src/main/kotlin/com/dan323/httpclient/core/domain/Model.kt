@@ -21,6 +21,8 @@ data class RequestTemplate(
     val settings: Map<String, String> = emptyMap(),
     /** File variables (`@var = value`) defined at or before this request; they override environment values. */
     val fileVariables: Map<String, String> = emptyMap(),
+    /** `# @assert <expr>` lines, in order, unparsed (see `AssertionEvaluator`). Kept apart from [settings]. */
+    val assertions: List<String> = emptyList(),
 )
 
 /** A request with all variables substituted, ready to send. */
