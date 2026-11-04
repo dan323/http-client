@@ -4,6 +4,8 @@ import com.dan323.httpclient.adapters.JdkHttpExecutor
 import com.dan323.httpclient.adapters.JsonEnvironmentRepository
 import com.dan323.httpclient.adapters.KotlinxJsonExtractor
 import com.dan323.httpclient.adapters.LocalFileReader
+import com.dan323.httpclient.adapters.SystemEnvironmentVariables
+import com.dan323.httpclient.core.application.DynamicVariables
 import com.dan323.httpclient.adapters.prettyJson
 import com.dan323.httpclient.core.application.HttpFileParser
 import com.dan323.httpclient.core.application.RequestRunner
@@ -78,7 +80,7 @@ class HttpClientService(private val project: Project) {
 
         val executor = JdkHttpExecutor()
         val session = sessions.getOrPut(file.toAbsolutePath() to env?.name) {
-            RequestSession(RequestRunner(executor, LocalFileReader(dir)), executor, KotlinxJsonExtractor())
+            RequestSession(RequestRunner(executor, LocalFileReader(dir), DynamicVariables(env = SystemEnvironmentVariables())), executor, KotlinxJsonExtractor())
         }
         val sections = mutableListOf<Section>()
         val report = { Report(environment = env?.name ?: "none", sections = sections.toList()) }

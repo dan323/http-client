@@ -4,6 +4,8 @@ import com.dan323.httpclient.adapters.JdkHttpExecutor
 import com.dan323.httpclient.adapters.JsonEnvironmentRepository
 import com.dan323.httpclient.adapters.KotlinxJsonExtractor
 import com.dan323.httpclient.adapters.LocalFileReader
+import com.dan323.httpclient.adapters.SystemEnvironmentVariables
+import com.dan323.httpclient.core.application.DynamicVariables
 import com.dan323.httpclient.core.application.HttpFileParser
 import com.dan323.httpclient.core.application.RequestRunner
 import com.dan323.httpclient.core.application.RequestSession
@@ -80,7 +82,7 @@ fun run(args: List<String>, out: PrintStream, err: PrintStream): Int {
         ?: return fail(err, "No such request: ${opts.request}")
     val chosen = withDependencies(requests, selected)
     val executor = JdkHttpExecutor()
-    val session = RequestSession(RequestRunner(executor, LocalFileReader(dir)), executor, KotlinxJsonExtractor())
+    val session = RequestSession(RequestRunner(executor, LocalFileReader(dir), DynamicVariables(env = SystemEnvironmentVariables())), executor, KotlinxJsonExtractor())
 
     // Prerequisites run for their responses only: assertions are evaluated for the selected requests.
     val outcomes = session.runAll(chosen, variables, assertFor = { r -> selected.any { it === r } }) { outcome ->

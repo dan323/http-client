@@ -14,7 +14,10 @@ import com.dan323.httpclient.core.port.out.HttpExecutor
 class RequestRunner(
     private val executor: HttpExecutor,
     private val files: FileReader,
+    val dynamic: DynamicVariables,
 ) : RunRequest {
+    constructor(executor: HttpExecutor, files: FileReader) : this(executor, files, DynamicVariables.DEFAULT)
+
     override fun run(template: RequestTemplate, variables: Map<String, String>): HttpResponse =
         executor.execute(resolve(template, variables))
 
@@ -25,12 +28,12 @@ class RequestRunner(
 
     private fun build(t: RequestTemplate, vars: Map<String, String>, extra: (String) -> String?): HttpRequest = HttpRequest(
         method = t.method,
-        url = VariableResolver.resolve(t.url, vars, extra),
-        headers = t.headers.map { Header(it.name, VariableResolver.resolve(it.value, vars, extra)) },
+        url = VariableResolver.resolve(t.url, vars, extra, dynamic),
+        headers = t.headers.map { Header(it.name, VariableResolver.resolve(it.value, vars, extra, dynamic)) },
         body = when (val b = t.body) {
             null -> null
-            is Body.Text -> VariableResolver.resolve(b.content, vars, extra).toByteArray()
-            is Body.FromFile -> files.read(VariableResolver.resolve(b.path, vars, extra))
+            is Body.Text -> VariableResolver.resolve(b.content, vars, extra, dynamic).toByteArray()
+            is Body.FromFile -> files.read(VariableResolver.resolve(b.path, vars, extra, dynamic))
         },
         options = options(t, vars, extra),
     )
@@ -44,7 +47,7 @@ class RequestRunner(
      */
     private fun options(t: RequestTemplate, vars: Map<String, String>, extra: (String) -> String?): RequestOptions {
         val s = t.settings.mapKeys { it.key.lowercase() }
-        fun value(name: String) = s[name]?.let { VariableResolver.resolve(it, vars, extra).trim() }
+        fun value(name: String) = s[name]?.let { VariableResolver.resolve(it, vars, extra, dynamic).trim() }
         return RequestOptions(
             timeoutMillis = value("timeout")?.let(::parseTimeout),
             followRedirects = value("no-redirect")?.let(::parseNoRedirect)?.not() ?: true,
