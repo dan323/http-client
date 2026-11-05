@@ -46,7 +46,14 @@ Put environments next to the `.http` file and pick one with `--env`:
 `@name = value` lines define variables inside the `.http` file. They apply to the requests from that line to the end
 of the file; defining the same name again replaces the value from there on. File variables override environment
 values, and a value may use `{{...}}` (environment variables, earlier file variables, dynamic variables, response
-references).
+references). Only values written in the file are expanded: an environment value (or a response value) that contains
+`{{` is sent as is, so environment values cannot reference other variables (`"api": "{{host}}/v1"` sends the
+text `{{host}}/v1`); compose them with file variables instead. A variable that refers to itself reads the environment's value of that name (`@host = {{host}}/api`), and fails
+with `Undefined variable: host` when there is none; a cycle through others (`@a = {{b}}`, `@b = {{a}}`) fails with
+`Circular variable reference: a -> b -> a`, and a
+value that needs more than 10,000 distinct expansions (or 100 nested levels) fails instead of hanging. Running a single request (`--request`,
+"run this request") also runs the requests it reads responses from, including through file variables, `# @assert`
+expressions and settings, and request names may contain dots (`auth.login`).
 
 ```
 @host = http://localhost:8080

@@ -245,8 +245,8 @@ class DynamicVariablesTest {
     }
 
     @Test fun fileVariableCanHoldDynamicWithArguments() {
-        val vars = VariableResolver.withFileVariables(emptyMap(), mapOf("t" to "{{\$timestamp 1 d}}"))
-        assertEquals("${clock.instant().epochSecond + 86400}", VariableResolver.resolve("{{t}}", vars, dynamic = dyn()))
+        val files = mapOf("t" to "{{\$timestamp 1 d}}")
+        assertEquals("${clock.instant().epochSecond + 86400}", VariableResolver.resolve("{{t}}", emptyMap(), dynamic = dyn(), fileVariables = files))
     }
 
     @Test fun runnerUsesInjectedDynamicVariables() {

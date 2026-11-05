@@ -3,15 +3,38 @@ package com.dan323.httpclient.core.application
 import com.dan323.httpclient.core.domain.Body
 import com.dan323.httpclient.core.domain.RequestTemplate
 
-private val referencePattern = Regex("""\{\{\s*([^{}\s.]+)\.response\.""")
+private val referencePattern = Regex("""\{\{\s*([^{}\s]+)\s*}}""")
+private const val RESPONSE_MARKER = ".response."
 
+/**
+ * Names of the requests whose responses [this] reads: from the URL, header values, body, setting values and
+ * assertions, and from the file variables those use (transitively). A reference `{{a.b.response.x}}` names
+ * the request `a.b` (split on the first `.response.`, like `RequestSession`).
+ */
+// Over-inclusion note: a file variable is followed even where an earlier file variable or the environment shadows it
+// inside another file value; that only adds a harmless extra prerequisite request.
 private fun RequestTemplate.referencedNames(): Set<String> {
-    val texts = listOf(url) + headers.map { it.value } + when (val b = body) {
-        is Body.Text -> listOf(b.content)
-        is Body.FromFile -> listOf(b.path)
-        null -> emptyList()
+    val texts = ArrayDeque<String>()
+    texts += url
+    headers.forEach { texts += it.value }
+    when (val b = body) {
+        is Body.Text -> texts += b.content
+        is Body.FromFile -> texts += b.path
+        null -> {}
     }
-    return texts.flatMap { t -> referencePattern.findAll(t).map { it.groupValues[1] } }.toSet()
+    texts += settings.values
+    texts += assertions
+    val names = mutableSetOf<String>()
+    val visited = mutableSetOf<String>()
+    while (texts.isNotEmpty()) {
+        for (m in referencePattern.findAll(texts.removeFirst())) {
+            val ref = m.groupValues[1]
+            val split = ref.indexOf(RESPONSE_MARKER)
+            if (split > 0) names += ref.substring(0, split)
+            else fileVariables[ref]?.let { if (visited.add(ref)) texts += it }
+        }
+    }
+    return names
 }
 
 /**

@@ -97,6 +97,31 @@ class RunAllTest {
         }
     }
 
+    @Test fun selfReferencingFileVariableFailsTheRequestWithoutSending() {
+        var sends = 0
+        val counting = HttpExecutor { sends++; HttpResponse(204, emptyList(), ByteArray(0), 1) }
+        val session = RequestSession(RequestRunner(counting) { error("no files") }, counting) { _, _ -> null }
+        val t = RequestTemplate(null, "GET", "http://h/{{a}}", fileVariables = mapOf("a" to "{{a}}"))
+        val outcome = session.runAll(listOf(t), emptyMap()).single() as com.dan323.httpclient.core.application.RunOutcome.Failure
+        assertEquals("Undefined variable: a", outcome.message)
+        assertEquals(0, sends)
+    }
+
+    @Test fun cyclicFileVariableInAssertionInvalidatesOnlyThatAssertion() {
+        val t = RequestTemplate(null, "GET", "http://h", assertions = listOf("status == {{a}}", "status == 204"), fileVariables = mapOf("a" to "{{a}}"))
+        val outcome = okSession.runAll(listOf(t), emptyMap()).single() as com.dan323.httpclient.core.application.RunOutcome.Success
+        assertEquals(listOf(false, true), outcome.assertions.map { it.passed })
+    }
+
+    @Test fun environmentSecretWithBracesIsSentLiterally() {
+        val sent = mutableListOf<com.dan323.httpclient.core.domain.HttpRequest>()
+        val ex = HttpExecutor { sent += it; HttpResponse(204, emptyList(), ByteArray(0), 1) }
+        val session = RequestSession(RequestRunner(ex) { error("no files") }, ex) { _, _ -> null }
+        val t = RequestTemplate(null, "GET", "http://h", listOf(Header("A", "{{auth}}")), fileVariables = mapOf("auth" to "Bearer {{secret}}"))
+        session.run(t, mapOf("secret" to "p{{w"))
+        assertEquals("Bearer p{{w", sent.single().headers.single().value)
+    }
+
     @Test fun malformedDynamicVariableInFileVariableFailsTheRequestClearly() {
         val t = RequestTemplate(null, "GET", "http://h/{{v}}", fileVariables = mapOf("v" to "{{\$random.integer(5, 1)}}"))
         val outcome = okSession.runAll(listOf(t), emptyMap()).single() as com.dan323.httpclient.core.application.RunOutcome.Failure
