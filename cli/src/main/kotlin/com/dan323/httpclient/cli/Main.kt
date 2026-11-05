@@ -4,6 +4,7 @@ import com.dan323.httpclient.adapters.JdkHttpExecutor
 import com.dan323.httpclient.adapters.JsonRunReport
 import com.dan323.httpclient.core.application.JUnitXmlReport
 import com.dan323.httpclient.core.application.RunReport
+import com.dan323.httpclient.adapters.FileAccessConfigException
 import com.dan323.httpclient.adapters.FileAccessPolicy
 import com.dan323.httpclient.adapters.JsonEnvironmentRepository
 import com.dan323.httpclient.adapters.KotlinxJsonExtractor
@@ -74,7 +75,11 @@ private fun parseArgsUnchecked(args: List<String>): Options? {
             "--env" -> { if (env != null) return null; env = value() ?: return null }
             "--request" -> { if (request != null) return null; request = value() ?: return null }
             "--allow-env" -> allowEnv += SystemEnvironmentVariables.parseNames(value() ?: return null)
-            "--allow-file-root" -> allowFileRoots.add(Path.of(value() ?: return null))
+            "--allow-file-root" -> allowFileRoots.add(
+                try { FileAccessPolicy.validateRoot(value() ?: return null, requireAbsolute = false) } catch (e: FileAccessConfigException) {
+                    System.err.println("httpc: --allow-file-root: ${e.message}"); return null
+                },
+            )
             "--list" -> list = true
             "--report-json" -> { if (reportJson != null) return null; reportJson = Path.of(value() ?: return null) }
             "--report-junit" -> { if (reportJunit != null) return null; reportJunit = Path.of(value() ?: return null) }

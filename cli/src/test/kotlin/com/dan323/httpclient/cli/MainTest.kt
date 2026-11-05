@@ -26,6 +26,9 @@ class MainTest {
         val o = parseArgs(listOf("f.http", "--allow-file-root", "a", "--allow-file-root", "/b c"))!!
         assertEquals(listOf(Path.of("a"), Path.of("/b c")), o.allowFileRoots)
         assertNull(parseArgs(listOf("f.http", "--allow-file-root")))
+        assertNull(parseArgs(listOf("f.http", "--allow-file-root", "")))
+        assertNull(parseArgs(listOf("f.http", "--allow-file-root", "  ")))
+        assertNull(parseArgs(listOf("f.http", "--allow-file-root", "/")))
     }
 
     @Test fun rejectsBadArgs() {
