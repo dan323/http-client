@@ -34,7 +34,11 @@ An undefined variable is an error, so nothing is sent with a placeholder left in
 
 Put `http-client.env.json` in the `.http` file's folder or any parent folder and pick one with `--env`. All front ends
 (CLI, desktop, IntelliJ plugin) use the same rule: the nearest enclosing folder containing `http-client.env.json`
-wins (searching upward); the `http-client.private.env.json` beside it is merged. The choice is explicit: no
+wins (searching upward); the `http-client.private.env.json` beside it is merged. A folder holding only the private file
+counts. The `.http` file's own folder is always checked; the search then continues through parent folders but stops after
+the first folder containing a `.git` entry, and never enters the user's home directory (or the system temp directory) or
+anything above it, so a stray `~/http-client.env.json` cannot leak into unrelated projects (put the file in the project).
+Env files are only read when an environment is chosen. The choice is explicit: no
 environment (variables from the file only; the CLI default) or a named one. A name that does not exist is an error,
 never another environment. A JSON `null` value is treated as undefined; a malformed env file fails with an error
 naming the file (and the position).
@@ -228,7 +232,7 @@ More (names modelled on the JetBrains HTTP Client and Postman; see the notes bel
   - CLI: `--allow-env NAME[,NAME]` (repeatable), e.g. `httpc api.http --allow-env API_TOKEN,HOME`; the property and variable below are honoured
     too and merged with the flag.
   - Desktop app and IntelliJ plugin (no UI for this yet): the system property `-Dhttpclient.allowEnv=NAME,NAME`
-    (for the IDE add it under Help | Edit Custom VM Options) or, if the property is absent, the environment
+    (for the IDE add it under Help | Edit Custom VM Options) and/or (the two lists are merged) the environment
     variable `HTTPC_ALLOW_ENV=NAME,NAME` of the process that starts the app/IDE. Restart to apply.
   - Library users: `SystemEnvironmentVariables(setOf("NAME"))` from `adapters`; `core` callers that pass nothing
     see no variables (the `EnvironmentVariables` port).

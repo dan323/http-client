@@ -35,7 +35,9 @@ class JsonEnvironmentRepository(private val dir: Path) : EnvironmentRepository {
         } catch (e: EnvironmentFileException) {
             throw e
         } catch (e: SerializationException) {
-            throw EnvironmentFileException(file, e.message ?: "malformed JSON", e)
+            // Never use e.message or pass e as the cause: kotlinx quotes the input ("JSON input: ..."), which
+            // would put secret values in error messages, reports and stack traces. Report the position only.
+            throw EnvironmentFileException(file, malformedDetail(file, e.message))
         } catch (e: IOException) {
             throw EnvironmentFileException(file, e.message ?: "cannot read the file", e)
         }
@@ -46,7 +48,17 @@ class JsonEnvironmentRepository(private val dir: Path) : EnvironmentRepository {
         }
     }
 
+    private fun malformedDetail(file: Path, kotlinxMessage: String?): String {
+        val offset = kotlinxMessage?.lineSequence()?.firstOrNull()?.let { OFFSET.find(it)?.groupValues?.get(1)?.toIntOrNull() }
+            ?: return "malformed JSON"
+        val prefix = try { Files.readString(file).take(offset) } catch (_: IOException) { return "malformed JSON at offset $offset" }
+        val line = prefix.count { it == '\n' } + 1
+        val column = offset - (prefix.lastIndexOf('\n') + 1) + 1
+        return "malformed JSON at line $line, column $column (offset $offset)"
+    }
+
     companion object {
+        private val OFFSET = Regex("""offset (\d+)""")
         const val SHARED_FILE = "http-client.env.json"
         const val PRIVATE_FILE = "http-client.private.env.json"
     }

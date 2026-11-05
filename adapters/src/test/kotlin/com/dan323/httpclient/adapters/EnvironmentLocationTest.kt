@@ -47,6 +47,45 @@ class EnvironmentLocationTest {
         assertTrue(e.message!!.contains("offset") || e.message!!.contains("position") || e.message!!.contains("JSON"), e.message)
     }
 
+    @Test fun malformedJsonNeverLeaksSecretValues() {
+        write("http-client.env.json", """{"prod":{"token":"SuperSecret123" "x":"y"}}""")
+        val e = assertFailsWith<EnvironmentFileException> { JsonEnvironmentRepository(root).load() }
+        assertTrue(!e.message!!.contains("SuperSecret123"), e.message)
+        assertTrue(e.message!!.contains("line 1, column"), e.message)
+        assertEquals(null, e.cause)
+    }
+
+    @Test fun folderWithOnlyThePrivateFileIsRecognised() {
+        write("http-client.private.env.json", """{"dev":{"s":"1"}}""")
+        val file = write("x.http", "GET http://x")
+        assertEquals(listOf("dev"), UpwardEnvironmentLocator().environments(file).map { it.name })
+    }
+
+    @Test fun strayEnvFileInHomeOrAboveIsIgnored() {
+        val home = root.resolve("home")
+        write("http-client.env.json", """{"above":{}}""")
+        write("home/http-client.env.json", """{"stray":{}}""")
+        val file = write("home/proj/sub/x.http", "GET http://x")
+        assertTrue(UpwardEnvironmentLocator(setOf(home)).environments(file).isEmpty())
+    }
+
+    @Test fun envFileInTheHttpFilesOwnFolderIsFoundEvenInHome() {
+        val home = root.resolve("home")
+        write("home/http-client.env.json", """{"own":{}}""")
+        val file = write("home/x.http", "GET http://x")
+        assertEquals(listOf("own"), UpwardEnvironmentLocator(setOf(home)).environments(file).map { it.name })
+    }
+
+    @Test fun searchStopsAtTheGitRootInclusive() {
+        write("http-client.env.json", """{"outside":{}}""")
+        write("repo/.git/HEAD", "ref")
+        write("repo/http-client.env.json", """{"root":{}}""")
+        val nested = write("repo/a/b/x.http", "GET http://x")
+        assertEquals(listOf("root"), UpwardEnvironmentLocator(emptySet()).environments(nested).map { it.name })
+        Files.delete(root.resolve("repo/http-client.env.json"))
+        assertTrue(UpwardEnvironmentLocator(emptySet()).environments(nested).isEmpty())   // does not go past .git
+    }
+
     @Test fun malformedPrivateFileAndNonObjectRootNameTheFile() {
         write("http-client.env.json", """{"dev":{}}""")
         val p = write("http-client.private.env.json", "[1]")
@@ -62,6 +101,11 @@ class EnvironmentLocationTest {
         val e = assertFailsWith<UnknownEnvironmentException> { EnvironmentChoice.Named("gone").select(envs) }
         assertTrue(e.message!!.contains("gone") && e.message!!.contains("dev"))
         assertFailsWith<UnknownEnvironmentException> { EnvironmentChoice.Named("x").select(emptyList()) }
+    }
+
+    @Test fun allowlistIsTheUnionOfPropertyAndVariable() {
+        val v = SystemEnvironmentVariables.fromConfiguration(property = { "A" }, env = { "B" })
+        assertTrue(v.isAllowed("A") && v.isAllowed("B"))
     }
 
     @Test fun allowlistMergesExtraWithPropertyAndVariable() {

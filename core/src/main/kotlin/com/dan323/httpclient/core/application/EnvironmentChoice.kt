@@ -33,5 +33,14 @@ fun EnvironmentChoice.select(available: List<Environment>): Environment? = when 
         )
 }
 
+/**
+ * The environment this choice selects for [httpFile]. [EnvironmentChoice.None] never touches the locator, so a
+ * missing or malformed env file cannot affect a run that uses no environment.
+ */
+fun EnvironmentChoice.resolve(locator: EnvironmentLocator, httpFile: Path): Environment? = when (this) {
+    EnvironmentChoice.None -> null
+    is EnvironmentChoice.Named -> select(locator.environments(httpFile))
+}
+
 /** Environments for [httpFile] according to the locator's rule; empty when there is no env file. */
 fun EnvironmentLocator.environments(httpFile: Path): List<Environment> = find(httpFile)?.load().orEmpty()

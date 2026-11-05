@@ -10,7 +10,7 @@ import com.dan323.httpclient.adapters.UpwardEnvironmentLocator
 import com.dan323.httpclient.core.application.EnvironmentChoice
 import com.dan323.httpclient.core.application.UnknownEnvironmentException
 import com.dan323.httpclient.core.application.environments
-import com.dan323.httpclient.core.application.select
+import com.dan323.httpclient.core.application.resolve
 import com.dan323.httpclient.core.port.out.EnvironmentFileException
 import com.dan323.httpclient.core.application.HttpFileParser
 import com.dan323.httpclient.core.application.HttpParseException
@@ -21,9 +21,10 @@ import com.dan323.httpclient.core.domain.Environment
 import com.dan323.httpclient.core.domain.RequestTemplate
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
-import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
+
+private data class SessionKey(val file: Path, val environment: String?, val variablesHash: Int)
 
 /** One request's result as shown in the response window. [reused] means it was not re-sent. */
 data class Section(
@@ -43,12 +44,21 @@ data class Report(val message: String? = null, val environment: String? = null, 
 class HttpClientService(private val project: Project) {
     /** The user's explicit choice: [EnvironmentChoice.None] by default, never silently replaced by another environment. */
     @Volatile var environmentChoice: EnvironmentChoice = EnvironmentChoice.None
+        set(value) {
+            field = value
+            synchronized(choiceListeners) { choiceListeners.toList() }.forEach { it() }
+        }
     @Volatile var lastReport: Report = Report(message = "Run a request with Ctrl+Alt+Enter.")
         private set
     private val locator = UpwardEnvironmentLocator()
-    private val listeners =mutableListOf<(Report) -> Unit>()
+    private val choiceListeners = mutableListOf<() -> Unit>()
+    private val listeners = mutableListOf<(Report) -> Unit>()
     // One session per (file, environment): named responses survive between runs, so a login runs once.
-    private val sessions = ConcurrentHashMap<Pair<Path, String?>, RequestSession>()
+    // The key includes a hash of the loaded variables, so editing the env file starts a fresh session.
+    private val sessions = ConcurrentHashMap<SessionKey, RequestSession>()
+
+    /** Called whenever the environment choice is set, from any thread. */
+    fun onEnvironmentChoice(listener: () -> Unit) { synchronized(choiceListeners) { choiceListeners += listener } }
 
     fun onReport(listener: (Report) -> Unit) { synchronized(listeners) { listeners += listener } }
 
@@ -79,7 +89,8 @@ class HttpClientService(private val project: Project) {
             ?: return publish(Report(message = "No request found at the caret."))
         val dir = file.toAbsolutePath().parent
         // "(none)" runs without an environment; a name that no longer exists is reported, never replaced by another.
-        val env = try { environmentChoice.select(environments(file)) } catch (e: UnknownEnvironmentException) {
+        // The env file is only read when a named environment is chosen.
+        val env = try { environmentChoice.resolve(locator, file) } catch (e: UnknownEnvironmentException) {
             return publish(Report(message = e.message))
         } catch (e: EnvironmentFileException) {
             return publish(Report(message = e.message))
@@ -87,7 +98,7 @@ class HttpClientService(private val project: Project) {
         val variables = env?.variables ?: emptyMap()
 
         val executor = JdkHttpExecutor()
-        val session = sessions.getOrPut(file.toAbsolutePath() to env?.name) {
+        val session = sessions.getOrPut(SessionKey(file.toAbsolutePath(), env?.name, variables.hashCode())) {
             RequestSession(RequestRunner(executor, LocalFileReader(dir), DynamicVariables(env = SystemEnvironmentVariables.fromConfiguration())), executor, KotlinxJsonExtractor())
         }
         val sections = mutableListOf<Section>()

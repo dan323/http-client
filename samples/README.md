@@ -8,7 +8,8 @@ Manual test files for all front ends. They run against the local mock server in 
    ```
    ./gradlew :mock-server:run
    ```
-2. In another terminal, or from the desktop app / IntelliJ plugin, run a sample with the `dev` environment:
+2. In another terminal, or from the desktop app / IntelliJ plugin, run a sample with the `dev` environment (in the IntelliJ plugin and desktop app pick `dev` in the environment picker; the plugin
+starts with "(none)", so samples that use `{{base}}` fail with an undefined variable until you do):
    ```
    ./gradlew :cli:run --args="samples/basic.http --env dev"
    ./gradlew :cli:run --args="samples/chaining.http --env dev --request use-token"
