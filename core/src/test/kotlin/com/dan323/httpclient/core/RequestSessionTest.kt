@@ -103,7 +103,7 @@ class RunAllTest {
         val session = RequestSession(RequestRunner(counting) { error("no files") }, counting) { _, _ -> null }
         val t = RequestTemplate(null, "GET", "http://h/{{a}}", fileVariables = mapOf("a" to "{{a}}"))
         val outcome = session.runAll(listOf(t), emptyMap()).single() as com.dan323.httpclient.core.application.RunOutcome.Failure
-        assertEquals("Circular variable reference: a -> a", outcome.message)
+        assertEquals("Undefined variable: a", outcome.message)
         assertEquals(0, sends)
     }
 

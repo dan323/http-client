@@ -58,9 +58,8 @@ class VariableResolverTest {
         assertEquals("later!", VariableResolver.resolve("{{a}}", emptyMap(), fileVariables = files))
     }
 
-    @Test fun selfReferencingFileVariableFailsClearly() {
-        val e = assertFailsWith<VariableExpansionException> { VariableResolver.resolve("{{a}}", emptyMap(), fileVariables = mapOf("a" to "{{a}}")) }
-        assertTrue("Circular variable reference: a -> a" in e.message!!, e.message)
+    @Test fun selfReferencingFileVariableWithoutEnvironmentValueIsUndefined() {
+        assertFailsWith<UndefinedVariableException> { VariableResolver.resolve("{{a}}", emptyMap(), fileVariables = mapOf("a" to "{{a}}")) }
     }
 
     @Test fun mutuallyReferencingFileVariablesFailWithTheChain() {
@@ -71,7 +70,7 @@ class VariableResolverTest {
 
     @Test fun cycleThroughATextWithOtherReferencesStillFails() {
         assertFailsWith<VariableExpansionException> {
-            VariableResolver.resolve("{{a}}", mapOf("b" to "1"), fileVariables = mapOf("a" to "{{a}}{{b}}"))
+            VariableResolver.resolve("{{a}}", mapOf("b" to "1"), fileVariables = linkedMapOf("a" to "{{c}}{{b}}", "c" to "{{a}}"))
         }
     }
 
@@ -81,6 +80,65 @@ class VariableResolverTest {
         files["v40"] = "x"
         val e = assertFailsWith<VariableExpansionException> { VariableResolver.resolve("{{v0}}", emptyMap(), fileVariables = files) }
         assertTrue("too large" in e.message!!, e.message)
+    }
+
+    @Test fun manyUsesOfOneFileVariableDoNotExhaustTheBudget() {
+        val out = VariableResolver.resolve("{{x}}".repeat(10_001), emptyMap(), fileVariables = mapOf("x" to "a"))
+        assertEquals("a".repeat(10_001), out)
+        val viaEnv = VariableResolver.resolve("{{x}}".repeat(10_001), mapOf("h" to "b"), fileVariables = mapOf("x" to "{{h}}"))
+        assertEquals("b".repeat(10_001), viaEnv)
+    }
+
+    @Test fun dynamicValuesInFileVariablesAreStillFreshPerUse() {
+        val out = VariableResolver.resolve("{{u}} {{u}}", emptyMap(), fileVariables = mapOf("u" to "{{\$uuid}}"))
+        val (a, b) = out.split(" ")
+        assertNotEquals(a, b)
+    }
+
+    @Test fun expansionBudgetBoundaryIsExactly10000() {
+        fun chain(n: Int): LinkedHashMap<String, String> {
+            val files = linkedMapOf<String, String>()
+            for (i in 0 until n) files["v$i"] = "{{v${i + 1}}}"
+            files["v$n"] = "{{h}}"
+            return files
+        }
+        // 10,000 distinct expansions are allowed (depth is limited separately, so use wide files).
+        val wide = linkedMapOf<String, String>()
+        for (i in 0 until 10_000) wide["w$i"] = "{{h}}"
+        val ok = VariableResolver.resolve((0 until 10_000).joinToString("") { "{{w$it}}" }, mapOf("h" to "z"), fileVariables = wide)
+        assertEquals("z".repeat(10_000), ok)
+        wide["w10000"] = "{{h}}"
+        val e = assertFailsWith<VariableExpansionException> {
+            VariableResolver.resolve((0..10_000).joinToString("") { "{{w$it}}" }, mapOf("h" to "z"), fileVariables = wide)
+        }
+        assertTrue("too large" in e.message!!, e.message)
+        assertEquals("z", VariableResolver.resolve("{{v0}}", mapOf("h" to "z"), fileVariables = chain(50)))
+    }
+
+    @Test fun nestingBeyond100LevelsFails() {
+        val files = linkedMapOf<String, String>()
+        for (i in 0 until 101) files["v$i"] = "{{v${i + 1}}}"
+        files["v101"] = "end"
+        val e = assertFailsWith<VariableExpansionException> { VariableResolver.resolve("{{v0}}", emptyMap(), fileVariables = files) }
+        assertTrue("100 levels" in e.message!!, e.message)
+    }
+
+    @Test fun selfReferenceWithoutEnvironmentValueIsUndefinedNotCircular() {
+        val e = assertFailsWith<UndefinedVariableException> {
+            VariableResolver.resolve("{{host}}", emptyMap(), fileVariables = mapOf("host" to "{{host}}/api"))
+        }
+        assertEquals("host", e.variable)
+    }
+
+    @Test fun cycleChainContainsOnlyTheCycle() {
+        val e = assertFailsWith<VariableExpansionException> {
+            VariableResolver.resolve("{{x}}", emptyMap(), fileVariables = linkedMapOf("x" to "{{a}}", "a" to "{{b}}", "b" to "{{a}}"))
+        }
+        assertTrue("a -> b -> a" in e.message!! && "x" !in e.message!!, e.message)
+    }
+
+    @Test fun environmentValuesDoNotReferenceOtherVariables() {
+        assertEquals("{{host}}/v1", VariableResolver.resolve("{{api}}", mapOf("api" to "{{host}}/v1", "host" to "h")))
     }
 
     @Test fun deepButLegitimateChainsStillResolve() {
