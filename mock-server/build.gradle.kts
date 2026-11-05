@@ -16,4 +16,4 @@ application {
 }
 
 // Test/sample fixture only: run it with `:mock-server:run`, but never package or release it.
-tasks.matching { it.name in setOf("distZip", "distTar", "installDist", "startScripts") }.con    figureEach { enabled = false }
+tasks.matching { it.name in setOf("distZip", "distTar", "installDist", "startScripts") }.configureEach { enabled = false }
