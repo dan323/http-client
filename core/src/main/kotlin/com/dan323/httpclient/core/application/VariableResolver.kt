@@ -18,6 +18,7 @@ object VariableResolver {
 
     private const val MAX_EXPANSIONS = 10_000
     private const val MAX_DEPTH = 100
+    private const val MAX_LENGTH = 16 * 1024 * 1024
 
     /**
      * Replaces `{{name}}` from [fileVariables], then [variables], then [extra], then the dynamic variables;
@@ -29,7 +30,7 @@ object VariableResolver {
      * environment value of that name (`@host = {{host}}/api`); a reference to an earlier file variable, an
      * environment variable or a later file variable is looked up in that order. A cycle fails with
      * [VariableExpansionException]; one resolve call expands at most [MAX_EXPANSIONS] file variable values
-     * (exponential fan-out) and [MAX_DEPTH] levels, otherwise it fails the same way.
+     * (a value without dynamic parts is expanded once per call and reused; the limit stops exponential fan-out) and [MAX_DEPTH] levels, otherwise it fails the same way.
      */
     fun resolve(
         text: String,
@@ -48,6 +49,10 @@ object VariableResolver {
         private val position = fileVariables.keys.withIndex().associate { it.value to it.index }
         private val stack = ArrayList<String>()
         private var budget = MAX_EXPANSIONS
+        // Expansion of a file variable depends only on its name, so it is cached unless it used extra/dynamic
+        // values, which are re-evaluated on every use ($uuid, $timestamp, response references).
+        private val cache = HashMap<String, String>()
+        private var impure = 0
 
         fun expand(text: String, owner: String?): String = pattern.replace(text) { m -> lookup(nameOf(m), owner) }
 
@@ -58,21 +63,27 @@ object VariableResolver {
             }
             variables[name]?.let { return it }
             if (file != null && name != owner) return expandFile(name, file)
-            extra(name)?.let { return it }
-            dynamic.evaluate(name)?.let { return it }
-            if (file != null) throw VariableExpansionException("Circular variable reference: ${(stack + name).joinToString(" -> ")}")
+            extra(name)?.let { impure++; return it }
+            dynamic.evaluate(name)?.let { impure++; return it }
+            // Only a file variable referring to its own name gets here: it means the environment's value, which is missing.
+            // (Real cycles are reported by expandFile.)
             throw UndefinedVariableException(name)
         }
 
         private fun expandFile(name: String, value: String): String {
+            cache[name]?.let { return it }
             if (name in stack) {
                 throw VariableExpansionException("Circular variable reference: ${(stack.subList(stack.indexOf(name), stack.size) + name).joinToString(" -> ")}")
             }
             if (stack.size >= MAX_DEPTH) throw VariableExpansionException("Variables are nested more than $MAX_DEPTH levels deep (at '$name')")
             if (--budget < 0) throw VariableExpansionException("Variable expansion too large (more than $MAX_EXPANSIONS expansions, at '$name')")
             stack.add(name)
+            val before = impure
             try {
-                return expand(value, name)
+                val result = expand(value, name)
+                if (result.length > MAX_LENGTH) throw VariableExpansionException("Variable expansion too large (more than $MAX_LENGTH characters, at '$name')")
+                if (impure == before) cache[name] = result
+                return result
             } finally {
                 stack.removeAt(stack.size - 1)
             }

@@ -11,6 +11,8 @@ private const val RESPONSE_MARKER = ".response."
  * assertions, and from the file variables those use (transitively). A reference `{{a.b.response.x}}` names
  * the request `a.b` (split on the first `.response.`, like `RequestSession`).
  */
+// Over-inclusion note: a file variable is followed even where an earlier file variable or the environment shadows it
+// inside another file value; that only adds a harmless extra prerequisite request.
 private fun RequestTemplate.referencedNames(): Set<String> {
     val texts = ArrayDeque<String>()
     texts += url
