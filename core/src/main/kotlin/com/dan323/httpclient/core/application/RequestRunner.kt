@@ -39,6 +39,7 @@ class RequestRunner(
      * Settings (names are case-insensitive, unknown ones are ignored):
      * - `timeout`: whole number with optional `ms`/`s`/`m` suffix (any case), default seconds, must be positive.
      * - `no-redirect`: presence disables redirects; an optional value `true`/`false` (may use `{{vars}}`).
+     * - `no-cookie-jar`: like `no-redirect`; the session's cookie jar neither sends nor stores cookies. It cannot disable a `CookieHandler` configured on an injected `HttpClient`.
      * - `proxy`: `[http://]host[:port]` (port defaults to 80; IPv6 as `[::1]:8080`); no credentials, http only.
      * Invalid values fail here, at resolve time, with an `Invalid @setting` message.
      */
@@ -47,15 +48,16 @@ class RequestRunner(
         fun value(name: String) = s[name]?.let { VariableResolver.resolve(it, vars, extra).trim() }
         return RequestOptions(
             timeoutMillis = value("timeout")?.let(::parseTimeout),
-            followRedirects = value("no-redirect")?.let(::parseNoRedirect)?.not() ?: true,
+            followRedirects = value("no-redirect")?.let { parseFlag("no-redirect", it) }?.not() ?: true,
             proxy = value("proxy")?.let(::parseProxy),
+            useCookieJar = value("no-cookie-jar")?.let { parseFlag("no-cookie-jar", it) }?.not() ?: true,
         )
     }
 
-    private fun parseNoRedirect(raw: String): Boolean = when (raw.lowercase()) {
+    private fun parseFlag(name: String, raw: String): Boolean = when (raw.lowercase()) {
         "", "true" -> true
         "false" -> false
-        else -> throw IllegalArgumentException("Invalid @no-redirect value: '$raw' (expected true or false)")
+        else -> throw IllegalArgumentException("Invalid @$name value: '$raw' (expected true or false)")
     }
 
     private val timeoutPattern = Regex("""(\d+)\s*(ms|s|m)?""", RegexOption.IGNORE_CASE)
