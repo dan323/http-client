@@ -76,7 +76,7 @@ class AssertionEvaluator(private val extractor: ResponseExtractor) {
             "!exists" -> return result(actual == null, null)
         }
         if (expected == null || (expected.isEmpty() && !quoted)) {
-            return invalid(assertion, "operator '$op' needs an expected value (use \"\" for an empty string)")
+            return invalid(assertion, "operator${if (showValues) " '$op'" else ""} needs an expected value (use \"\" for an empty string)")
         }
         if (actual == null) return result(false, expected)
 
@@ -102,9 +102,10 @@ class AssertionEvaluator(private val extractor: ResponseExtractor) {
             } catch (ex: RegexTimeoutException) {
                 return invalid(assertion, ex.message ?: "regex timeout", actual)
             } catch (ex: Exception) {
-                val reason = ex.message?.lineSequence()?.firstOrNull()
-                    ?.let { if (showValues) it else it.replace(Regex("\\{[^}]*}"), "{...}") }
-                return invalid(assertion, "bad regex: $reason", actual)
+                // The JDK echoes pieces of the pattern (\N{x}, \k<x>, duplicate (?<x>)) in its messages, so when the
+                // pattern may hold substituted secrets no detail is given at all.
+                val reason = if (showValues) ex.message?.lineSequence()?.firstOrNull() else null
+                return invalid(assertion, if (reason != null) "bad regex: $reason" else "bad regex", actual)
             }
         }
         return result(passed, expected)

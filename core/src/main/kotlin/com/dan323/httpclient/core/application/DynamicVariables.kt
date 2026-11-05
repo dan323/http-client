@@ -168,6 +168,8 @@ class DynamicVariables(
     private fun invalid(name: String, why: String): Nothing = throw InvalidDynamicVariableException(name, why)
 
     companion object {
+        /** Shared default (secure random, system clock, no OS environment); stateless and thread-safe. */
+        val DEFAULT: DynamicVariables by lazy { DynamicVariables() }
         private const val ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
         private const val DIGITS = "0123456789"
         private const val MAX_LENGTH = 10_000

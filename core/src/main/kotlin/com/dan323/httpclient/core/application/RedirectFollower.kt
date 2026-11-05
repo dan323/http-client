@@ -26,6 +26,7 @@ import java.net.URI
 internal class RedirectFollower(
     private val executor: HttpExecutor,
     private val cookies: CookieJar,
+    private val nanoTime: () -> Long = System::nanoTime,
 ) {
     /** Adds the jar's `Cookie` header unless the request sets its own `Cookie` header. */
     private fun withCookies(r: HttpRequest): HttpRequest {
@@ -41,10 +42,10 @@ internal class RedirectFollower(
         var total = 0L
         var hops = 0
         val timeout = request.options.timeoutMillis
-        val deadline = timeout?.let { System.nanoTime() + it * 1_000_000 }
+        val deadline = timeout?.let { nanoTime() + it * 1_000_000 }
         while (true) {
             if (deadline != null) {
-                val left = (deadline - System.nanoTime()) / 1_000_000
+                val left = (deadline - nanoTime()) / 1_000_000
                 if (left <= 0) throw java.net.http.HttpTimeoutException("request timed out after $timeout ms")
                 current = current.copy(options = current.options.copy(timeoutMillis = left))
             }

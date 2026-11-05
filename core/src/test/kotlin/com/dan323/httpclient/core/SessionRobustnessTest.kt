@@ -34,6 +34,38 @@ class SessionRobustnessTest {
         }
     }
 
+    @Test fun cancellationWithInterruptCauseRestoresTheFlagEvenIfTheExecutorDidNot() {
+        var sends = 0
+        val ex = HttpExecutor { sends++; throw java.util.concurrent.CancellationException("cancelled").also { it.initCause(InterruptedException()) } }
+        try {
+            assertFailsWith<java.util.concurrent.CancellationException> { session(ex).runAll(listOf(get("a"), get("b")), emptyMap()) }
+            assertTrue(Thread.currentThread().isInterrupted, "interrupt flag must be restored")
+            assertEquals(1, sends)
+        } finally {
+            Thread.interrupted()
+        }
+    }
+
+    @Test fun aCallerQueuedBehindARunningRequestCanBeCancelled() {
+        val inFlight = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val ex = HttpExecutor { inFlight.countDown(); release.await(10, TimeUnit.SECONDS); HttpResponse(200, emptyList(), ByteArray(0), 1) }
+        val s = session(ex)
+        val first = Thread { s.run(get("a"), emptyMap()) }.also { it.start() }
+        assertTrue(inFlight.await(5, TimeUnit.SECONDS))
+        var failure: Throwable? = null
+        val second = Thread { try { s.run(get("b"), emptyMap()) } catch (e: Throwable) { failure = e } }
+        second.start()
+        Thread.sleep(100)
+        second.interrupt()
+        second.join(5_000)
+        assertFalse(second.isAlive, "queued caller must stop waiting when interrupted")
+        assertTrue(failure is InterruptedException, "$failure")
+        release.countDown()
+        first.join(5_000)
+        assertFalse(s.hasResponse("b"))
+    }
+
     @Test fun otherExceptionsStillBecomeFailures() {
         val ex = HttpExecutor { error("boom") }
         val outcomes = session(ex).runAll(listOf(get("a"), get("b")), emptyMap())
@@ -96,6 +128,18 @@ class SessionRobustnessTest {
         assertTrue(r[0].message.startsWith("invalid assertion:"), r[0].message)
         assertTrue("needs numbers" in r[1].message, r[1].message)
         assertTrue(r[2].passed)
+    }
+
+    @Test fun badRegexDetailIsNotEchoedWhenValuesAreHidden() {
+        val secret = "hunter2"
+        val r = assertResults(
+            "status matches \\N{{{s}}}", "status matches \\k<{{s}}>", "status matches (?<{{s}}>a)(?<{{s}}>b)",
+            "status {{op}}",
+            vars = mapOf("s" to secret, "op" to "!contains"),
+        )
+        r.forEach { assertFalse(secret in it.message, it.message); assertFalse("index" in it.message, it.message) }
+        r.take(3).forEach { assertEquals("invalid assertion: bad regex", it.message) }
+        assertFalse("contains" in r[3].message, r[3].message)
     }
 
     @Test fun invalidReasonNeverEchoesResolvedValues() {

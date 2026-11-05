@@ -134,11 +134,13 @@ class RedirectFollowerTest {
     }
 
     @Test fun timeoutIsOneDeadlineForTheChain() {
+        var now = 0L
+        val slow = HttpExecutor { sent += it; now += 5_000_000_000L; script.removeFirst() } // each hop takes 5 s
+        val f = RedirectFollower(slow, jar) { now }
         script += redirect(302, "/n"); script += ok()
-        follower.send(req(options = RequestOptions(timeoutMillis = 60_000)))
-        val first = sent[0].options.timeoutMillis!!
-        val second = sent[1].options.timeoutMillis!!
-        assertEquals(true, second <= first && first <= 60_000, "remaining time shrinks: $first then $second")
+        f.send(req(options = RequestOptions(timeoutMillis = 60_000)))
+        assertEquals(60_000L, sent[0].options.timeoutMillis)
+        assertEquals(55_000L, sent[1].options.timeoutMillis, "hop 2 gets only the time that remains")
     }
 
     @Test fun exhaustedDeadlineThrowsBeforeSending() {

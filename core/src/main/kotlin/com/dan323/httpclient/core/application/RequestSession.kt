@@ -7,7 +7,6 @@ import com.dan323.httpclient.core.port.out.HttpExecutor
 import com.dan323.httpclient.core.port.out.JsonExtractor
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.withLock
 
 /**
  * Runs requests in order and remembers the responses of named ones, so later requests can use
@@ -17,7 +16,10 @@ import kotlin.concurrent.withLock
  * Thread safety: safe for concurrent use. [run], [runAll] and [runChained] are serialised by a lock (one
  * request at a time, a whole `runAll` is atomic with respect to other runs), so chained requests never see a
  * half-updated session; [hasResponse] never blocks. `onOutcome`/`onReused` callbacks run while the lock is
- * held: they must not wait for another thread that uses this session.
+ * held: they must not wait for another thread that uses this session (they are not moved out of the lock
+ * because `runAll` reports each outcome as it completes, and later requests must not start before the
+ * callback returned). A caller queued on the lock waits interruptibly: interrupting it abandons the wait with
+ * [InterruptedException] (flag kept set) without running anything.
  */
 class RequestSession(
     private val runner: RequestRunner,
@@ -37,7 +39,17 @@ class RequestSession(
 
     private fun send(request: HttpRequest): HttpResponse = redirects.send(request)
 
-    fun run(template: RequestTemplate, variables: Map<String, String>): HttpResponse = lock.withLock {
+    private inline fun <T> locked(block: () -> T): T {
+        try {
+            lock.lockInterruptibly()
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw e
+        }
+        try { return block() } finally { lock.unlock() }
+    }
+
+    fun run(template: RequestTemplate, variables: Map<String, String>): HttpResponse = locked {
         val request = runner.resolve(template, variables, ::reference)
         val response = send(request)
         template.name?.let { responses[it] = response }
@@ -54,14 +66,16 @@ class RequestSession(
         variables: Map<String, String>,
         assertFor: (RequestTemplate) -> Boolean = { true },
         onOutcome: (RunOutcome) -> Unit = {},
-    ): List<RunOutcome> = lock.withLock { requests.map { r ->
+    ): List<RunOutcome> = locked { requests.map { r ->
         val withAssertions = assertFor(r)
         val outcome = try {
             run(r, variables).let {
                 RunOutcome.Success(r, it, if (withAssertions) evaluateAssertions(r, it, variables) else emptyList())
             }
         } catch (e: java.util.concurrent.CancellationException) {
-            throw e // cancelled (interrupted): stop the session, do not send the queued requests
+            // cancelled (interrupted): stop the session, do not send the queued requests
+            if (e.cause is InterruptedException) Thread.currentThread().interrupt()
+            throw e
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt() // keep the flag for the caller and do not send the queued requests
             throw e
@@ -84,7 +98,7 @@ class RequestSession(
         variables: Map<String, String>,
         onReused: (List<RequestTemplate>) -> Unit = {},
         onOutcome: (RunOutcome) -> Unit = {},
-    ): List<RunOutcome> = lock.withLock {
+    ): List<RunOutcome> = locked {
         val chain = withDependencies(all, listOf(current))
         val (reused, toSend) = chain.partition { it !== current && it.name?.let(::hasResponse) == true }
         onReused(reused)
