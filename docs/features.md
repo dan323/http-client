@@ -66,7 +66,32 @@ GET {{host}}/users/{{user}}
 
 Setting names are case-insensitive and unknown ones are ignored. Invalid values (including a blank `@proxy`) fail when the request is resolved with an `Invalid @timeout` / `@proxy` / `@no-redirect` error, before anything is sent. `JdkHttpExecutor` reuses one derived client per (redirect policy, proxy) and copies the injected client's connect timeout, SSL, authenticator, cookie handler, executor and HTTP version; request priority cannot be copied.
 
-`@no-cookie-jar` is recorded but acted on by later work (cookie jar).
+- `# @no-cookie-jar`: do not use the cookie jar for this request (see below). Same optional `true`/`false` value as `@no-redirect`.
+
+### Cookie jar
+
+Each `RequestSession` (one CLI run, one desktop/plugin session) owns an in-memory `CookieJar` in `core`. `Set-Cookie` headers
+of a response are stored, and later requests in the same session to a matching host and path get a `Cookie` header, so a login
+request followed by an authenticated one just works. Sessions never share cookies and nothing is persisted to disk.
+Supported: `Domain` (host-only when absent; a host cannot set cookies for an unrelated domain), `Path` (matched on the raw,
+undecoded path), `Max-Age` (digits with optional `-`; `+5` or text is ignored; extreme values saturate), `Expires` (lenient RFC 6265
+date parsing: `21 Oct 2015`, `21-Oct-2015`, 2-digit years, asctime; unparseable is ignored; `Max-Age` wins), `Secure`;
+`Max-Age<=0` or a past `Expires` deletes. `# @no-cookie-jar` makes a request neither send nor store cookies.
+
+Redirects: when the jar is in use, the session follows redirects itself, one hop at a time (the executor is told not to follow
+any), so `Set-Cookie` on a `302` (the `POST /login` -> `302` flow) is stored and the `Cookie` header is recomputed for every hop's
+URL. Up to 10 hops, then an error. `# @no-redirect` returns the first response (its cookies are still stored). 301/302 on `POST`
+and 303 switch to `GET` without body; 307/308 keep method and body. An explicit `Cookie`, `Authorization` or
+`Proxy-Authorization` request header is dropped when a redirect leaves the origin (scheme, host, port). Measured: the JDK
+client itself does not forward manually set headers on redirects, so hop-by-hop handling is also what makes same-site hops
+carry the cookie. The reported duration is the sum of all hops. With `@no-cookie-jar` the executor's own redirect handling applies.
+
+Limitations: a `Cookie` header written in the request is sent as is (the jar adds nothing); there is no public-suffix list, only
+single-label `Domain` values and a short built-in list of common two-label suffixes (`co.uk`, `com.au`, ...) are rejected,
+and an IP host only matches exactly; `Secure` cookies are neither accepted from nor sent over plain http (no localhost exception),
+and a plain-http response cannot overwrite a `Secure` cookie; a cookie over 4096 bytes is ignored, at most 50 per domain and
+3000 in total (oldest first evicted); no SameSite handling. `@no-cookie-jar` cannot disable a `CookieHandler` configured
+on an `HttpClient` injected into `JdkHttpExecutor` (that handler still sends and stores on its own).
 
 ### Assertions
 
@@ -110,6 +135,36 @@ GET {{base}}/items/1
   `RunOutcome.Success.assertions`. A request that throws reports `RunOutcome.Failure.assertionsNotRun`.
   `runChained` (single-request runs) evaluates only the requested request; its prerequisites run for their responses
   and their assertions are neither evaluated nor reported. Reused dependencies are not re-asserted.
+
+### Run reports
+
+`RunReport.from(outcomes)` (in `core`) builds a pure summary of a run: one entry per request (name, method, URL as
+written in the file, status, duration, assertion results, assertions not run, error) plus totals and an overall
+pass/fail. A request passes when it completed and all its assertions passed. Exporters: `JUnitXmlReport` (`core`,
+plain string building with XML escaping; illegal XML characters are dropped) and `JsonRunReport` (`adapters`,
+kotlinx-serialization, also parses a report back).
+
+The CLI writes them with `--report-json FILE` and `--report-junit FILE`. Option values must be non-empty and not
+start with `--`; repeating an option or giving both reports the same path is a usage error (exit 2). Parent
+directories are created and files are written atomically (temp file + move), each report independently. Exit codes:
+0 ok, 1 request/assertion failure, 2 usage, 3 a report could not be written (stderr says whether the run itself
+passed). If the run cannot start (missing file, unknown environment or request, unexpected exception) a report with a
+single failed `httpc` entry is still written so CI finds a file. Console output is unchanged.
+
+JUnit XML: one `testcase` per request, so `tests`/`failures`/`errors` match the elements. All failed assertions of a
+request are merged into one `failure` (one per line); a request that could not complete is an `error` (time 0). The
+testcase `name` is `"<index>. <request name or METHOD url>"` (1-based position in the run) and `classname` is the
+file name, so duplicate or unnamed requests stay distinct and stable. Prerequisites (requests run only to feed
+`{{name.response...}}` chaining) are not asserted: they are omitted when they passed and kept as an `error` when they
+failed; in JSON they are always listed with `"prerequisite": true`. An empty run reports `tests="0"`. Tabs and line
+breaks in attributes are written as character references.
+
+JSON: top-level `version` (currently 1); `JsonRunReport.parse` rejects a newer version. `passed` and `totals` (and each
+entry's `passed`) are derived: written for consumers, ignored and recomputed by `parse`.
+
+Caveats: a prerequisite or an unasserted request answering HTTP 500 still counts as passed (only transport errors and
+failed assertions fail a run), so a green report does not mean "no 5xx". Reports contain URLs as written in the file
+and error messages, which may include secrets (tokens in query strings); treat them as sensitive CI artifacts.
 
 ### Dynamic variables
 
