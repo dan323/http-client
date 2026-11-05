@@ -64,6 +64,7 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
         Text(state.file?.fileName?.toString()?.plus(if (state.dirty) " •" else "") ?: "No file open", fontWeight = FontWeight.Bold)
         EnvironmentPicker(state)
         HorizontalDivider()
+        Workspace.parseError(state.text)?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         LazyColumn(Modifier.weight(1f)) {
             itemsIndexed(state.requests) { i, r ->
                 Column(
