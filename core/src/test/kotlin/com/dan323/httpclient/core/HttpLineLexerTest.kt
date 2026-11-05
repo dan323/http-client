@@ -52,4 +52,72 @@ class HttpLineLexerTest {
         val text = "# @name a\n{{host}}/get\nAccept: x\n\n{{body}}\n###\nPOST {{host}}/p\n\n{{x}}\n"
         assertEquals(setOf(1, 6), HttpLineLexer.requestLines(text))
     }
+
+    @Test
+    fun `file variables before the request line are not the URL and the GET line is a request`() {
+        val text = "@host = http://h\n@token=abc\nGET {{host}}/x\nA: b\n"
+        assertEquals(setOf(2), HttpLineLexer.requestLines(text))
+        assertEquals(
+            listOf(HEADER_NAME to "@host", COLON to "=", HEADER_VALUE to " http://h",
+                HEADER_NAME to "@token", COLON to "=", HEADER_VALUE to "abc",
+                METHOD to "GET", VARIABLE to "{{host}}", URL to "/x", HEADER_NAME to "A", COLON to ":", HEADER_VALUE to " b"),
+            kinds(text),
+        )
+    }
+
+    @Test
+    fun `file variable between comments and request line`() {
+        assertEquals(setOf(2), HttpLineLexer.requestLines("# @name a\n@x = 1\nhttp://h/z\n"))
+    }
+
+    @Test
+    fun `only a less-than followed by a space is a file reference`() {
+        assertEquals(
+            listOf(METHOD to "POST", URL to "/x", BODY_TEXT to "<html>", BODY_TEXT to "<b>hi</b>"),
+            kinds("POST /x\n\n<html>\n<b>hi</b>"),
+        )
+        assertEquals(listOf(METHOD to "POST", URL to "/x", FILE_REF to "< ./a.json"), kinds("POST /x\n\n< ./a.json"))
+    }
+
+    @Test
+    fun `response handlers are comments, including multi-line scripts`() {
+        val text = "GET /x\n\n> {%\n  client.log(\"hi\");\n%}\n<> out.json\n> handler.js\nbody"
+        assertEquals(
+            listOf(METHOD to "GET", URL to "/x", COMMENT to "> {%", COMMENT to "  client.log(\"hi\");", COMMENT to "%}",
+                COMMENT to "<> out.json", COMMENT to "> handler.js", BODY_TEXT to "body"),
+            kinds(text),
+        )
+        assertEquals(listOf(COMMENT to "> {% single %}", BODY_TEXT to "after"), kinds("GET /x\n\n> {% single %}\nafter").drop(2))
+    }
+
+    @Test
+    fun `lexer modes are an enum and a script line keeps its mode`() {
+        assertEquals(HttpLineLexer.Mode.SCRIPT, HttpLineLexer.lexLine("> {%", HttpLineLexer.Mode.BODY).nextMode)
+        assertEquals(HttpLineLexer.Mode.BODY, HttpLineLexer.lexLine("%}", HttpLineLexer.Mode.SCRIPT).nextMode)
+        assertEquals(HttpLineLexer.Mode.SCRIPT, HttpLineLexer.lexLine("", HttpLineLexer.Mode.SCRIPT).nextMode)
+    }
+
+    @Test
+    fun `lexer and parser agree on request lines`() {
+        val text = "@a = 1\n# @name n\nPOST /p\nX: y\n\n<html>\n###\n@b = 2\nhttp://h/z\n\n###\nGET /last\n"
+        val parsed = com.dan323.httpclient.core.application.HttpFileParser().parse(text).requests
+        assertEquals(parsed.map { it.method }, listOf("POST", "GET", "GET"))
+        assertEquals(setOf(2, 8, 11), HttpLineLexer.requestLines(text))
+    }
+
+    @Test
+    fun `handler right after headers enters script mode`() {
+        val tokens = HttpLineLexer.tokenize("GET http://x\nA: b\n> {%\nx: y\n%}\n")
+        assertEquals(HttpTokenKind.COMMENT, tokens.first { it.start >= 18 }.kind)
+        assertEquals(false, tokens.any { it.start >= 22 && it.kind == HttpTokenKind.HEADER_NAME })
+        assertEquals(HttpLineLexer.Mode.BODY, HttpLineLexer.lexLine("> {% a %}", HttpLineLexer.Mode.HEADERS).nextMode)
+    }
+
+    @Test
+    fun `query continuation is URL and CRLF is excluded from tokens`() {
+        val text = "GET http://x\r\n  ?a=1\r\nA: b\r\n"
+        val t = HttpLineLexer.tokenize(text)
+        assertEquals(true, t.none { text.substring(it.start, it.end).contains('\r') })
+        assertEquals("?a=1", text.substring(t.first { it.kind == HttpTokenKind.URL && it.start > 12 }.start, t.first { it.kind == HttpTokenKind.URL && it.start > 12 }.end))
+    }
 }

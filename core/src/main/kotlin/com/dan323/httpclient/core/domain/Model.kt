@@ -36,7 +36,7 @@ data class HttpRequest(
 
 /** Per-request executor settings, resolved and validated from `# @setting` directives. */
 data class RequestOptions(
-    /** Maximum time to wait for the response (headers); body streaming is not covered. Null means no timeout. */
+    /** Maximum time for the whole exchange (headers and body). Null means no timeout. */
     val timeoutMillis: Long? = null,
     /** False disables following redirects (`@no-redirect`); true leaves the executor's own redirect policy. */
     val followRedirects: Boolean = true,
@@ -66,7 +66,12 @@ data class HttpResponse(
     fun bodyAsString(): String = body.toString(Charsets.UTF_8)
 }
 
-data class HttpFile(val requests: List<RequestTemplate>, val variables: Map<String, String> = emptyMap())
+/** [warnings] are non-fatal parse notes (e.g. ignored response handlers), each prefixed with its 1-based line. */
+data class HttpFile(
+    val requests: List<RequestTemplate>,
+    val variables: Map<String, String> = emptyMap(),
+    val warnings: List<String> = emptyList(),
+)
 
 /** Named variable set, e.g. `dev` from http-client.env.json. */
 data class Environment(val name: String, val variables: Map<String, String>)

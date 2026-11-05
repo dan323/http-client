@@ -111,7 +111,9 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream): Int {
     if (!Files.isRegularFile(opts.file)) return failWithReport(opts, err, "No such file: ${opts.file}")
 
     val dir = opts.file.toAbsolutePath().parent
-    val requests = HttpFileParser().parse(Files.readString(opts.file)).requests
+    val parsed = HttpFileParser().parse(Files.readString(opts.file))
+    parsed.warnings.forEach { err.println("warning: ${opts.file}: $it") }
+    val requests = parsed.requests
 
     if (opts.list) {
         requests.forEachIndexed { i, r -> out.println("${i + 1}. ${r.name ?: "-"}  ${r.method} ${r.url}") }

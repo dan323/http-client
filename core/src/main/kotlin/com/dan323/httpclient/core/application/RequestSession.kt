@@ -50,7 +50,15 @@ class RequestSession(
         var current = request.copy(options = request.options.copy(followRedirects = false))
         var total = 0L
         var hops = 0
+        // @timeout is one deadline for the whole chain: each hop gets only the time that remains.
+        val timeout = request.options.timeoutMillis
+        val deadline = timeout?.let { System.nanoTime() + it * 1_000_000 }
         while (true) {
+            if (deadline != null) {
+                val left = (deadline - System.nanoTime()) / 1_000_000
+                if (left <= 0) throw java.net.http.HttpTimeoutException("request timed out after $timeout ms")
+                current = current.copy(options = current.options.copy(timeoutMillis = left))
+            }
             val sent = withCookies(current)
             val response = executor.execute(sent)
             total += response.durationMillis
@@ -109,6 +117,8 @@ class RequestSession(
             run(r, variables).let {
                 RunOutcome.Success(r, it, if (withAssertions) evaluateAssertions(r, it, variables) else emptyList())
             }
+        } catch (e: java.util.concurrent.CancellationException) {
+            throw e // cancelled (interrupted): stop the session, do not send the queued requests
         } catch (e: Exception) {
             RunOutcome.Failure(r, e.message ?: e::class.simpleName ?: "error", if (withAssertions) r.assertions.size else 0)
         }
