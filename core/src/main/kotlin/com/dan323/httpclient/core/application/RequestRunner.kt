@@ -19,27 +19,29 @@ class RequestRunner(
     constructor(executor: HttpExecutor, files: FileReader) : this(executor, files, DynamicVariables.DEFAULT)
 
     /** Substitutes variables in free text (e.g. an assertion) exactly as for request text. */
-    fun resolveText(text: String, variables: Map<String, String>, extra: (String) -> String? = { null }): String =
-        VariableResolver.resolve(text, variables, extra, dynamic)
+    fun resolveText(
+        text: String,
+        variables: Map<String, String>,
+        extra: (String) -> String? = { null },
+        fileVariables: Map<String, String> = emptyMap(),
+    ): String = VariableResolver.resolve(text, variables, extra, dynamic, fileVariables)
 
     override fun run(template: RequestTemplate, variables: Map<String, String>): HttpResponse =
         executor.execute(resolve(template, variables))
 
-    fun resolve(t: RequestTemplate, env: Map<String, String>, extra: (String) -> String? = { null }): HttpRequest {
-        val vars = VariableResolver.withFileVariables(env, t.fileVariables)
-        return build(t, vars, extra)
-    }
+    fun resolve(t: RequestTemplate, env: Map<String, String>, extra: (String) -> String? = { null }): HttpRequest =
+        build(t) { VariableResolver.resolve(it, env, extra, dynamic, t.fileVariables) }
 
-    private fun build(t: RequestTemplate, vars: Map<String, String>, extra: (String) -> String?): HttpRequest = HttpRequest(
+    private fun build(t: RequestTemplate, text: (String) -> String): HttpRequest = HttpRequest(
         method = t.method,
-        url = VariableResolver.resolve(t.url, vars, extra, dynamic),
-        headers = t.headers.map { Header(it.name, VariableResolver.resolve(it.value, vars, extra, dynamic)) },
+        url = text(t.url),
+        headers = t.headers.map { Header(it.name, text(it.value)) },
         body = when (val b = t.body) {
             null -> null
-            is Body.Text -> VariableResolver.resolve(b.content, vars, extra, dynamic).toByteArray()
-            is Body.FromFile -> files.read(VariableResolver.resolve(b.path, vars, extra, dynamic))
+            is Body.Text -> text(b.content).toByteArray()
+            is Body.FromFile -> files.read(text(b.path))
         },
-        options = options(t, vars, extra),
+        options = options(t, text),
     )
 
     /**
@@ -50,11 +52,11 @@ class RequestRunner(
      * - `proxy`: `[http://]host[:port]` (port defaults to 80; IPv6 as `[::1]:8080`); no credentials, http only.
      * Invalid values fail here, at resolve time, with an `Invalid @setting` message.
      */
-    private fun options(t: RequestTemplate, vars: Map<String, String>, extra: (String) -> String?): RequestOptions {
+    private fun options(t: RequestTemplate, text: (String) -> String): RequestOptions {
         val s = t.settings.mapKeys { it.key.lowercase() }
         // Validation errors quote the setting as written (`{{t}}`), never the resolved value, which may be a secret.
         fun <T> setting(name: String, parse: (resolved: String, written: String) -> T): T? =
-            s[name]?.let { written -> parse(VariableResolver.resolve(written, vars, extra, dynamic).trim(), written.trim()) }
+            s[name]?.let { written -> parse(text(written).trim(), written.trim()) }
         return RequestOptions(
             timeoutMillis = setting("timeout", ::parseTimeout),
             followRedirects = setting("no-redirect") { v, w -> parseFlag("no-redirect", v, w) }?.not() ?: true,
