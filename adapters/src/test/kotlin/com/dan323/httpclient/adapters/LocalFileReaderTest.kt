@@ -32,8 +32,13 @@ class LocalFileReaderTest {
 
     private fun reader(vararg roots: Path) = LocalFileReader(dir, FileAccessPolicy(roots.toList()))
 
-    private fun symlink(link: Path, target: Path): Boolean =
-        try { Files.createSymbolicLink(link, target); true } catch (e: Exception) { false }
+    /** Creates a symlink; on non-Windows failing to do so fails the test, on Windows (needs privilege) it is reported as skipped. */
+    private fun symlink(link: Path, target: Path) {
+        try { Files.createSymbolicLink(link, target) } catch (e: Exception) {
+            org.junit.jupiter.api.Assumptions.assumeFalse(File.separatorChar == '\\', "symlinks unavailable: $e")
+            throw AssertionError("could not create symlink on a platform that must support them", e)
+        }
+    }
 
     @Test fun readsInsideAndNormalisedInside() {
         assertContentEquals("ok".toByteArray(), reader().read("./ok.txt"))
@@ -68,18 +73,18 @@ class LocalFileReaderTest {
     }
 
     @Test fun rejectsFileSymlinkEscape() {
-        if (!symlink(dir.resolve("link.txt"), outside.resolve("secret.txt"))) return
+        symlink(dir.resolve("link.txt"), outside.resolve("secret.txt"))
         assertFailsWith<FileAccessDeniedException> { reader().read("link.txt") }
     }
 
     @Test fun rejectsDirectorySymlinkEscape() {
-        if (!symlink(dir.resolve("linkdir"), outside)) return
+        symlink(dir.resolve("linkdir"), outside)
         assertFailsWith<FileAccessDeniedException> { reader().read("linkdir/secret.txt") }
         assertFailsWith<FileAccessDeniedException> { reader().read("linkdir/new.txt") }
     }
 
     @Test fun symlinkInsideIsFine() {
-        if (!symlink(dir.resolve("alias.txt"), dir.resolve("ok.txt"))) return
+        symlink(dir.resolve("alias.txt"), dir.resolve("ok.txt"))
         assertContentEquals("ok".toByteArray(), reader().read("alias.txt"))
     }
 
@@ -92,7 +97,7 @@ class LocalFileReaderTest {
 
     @Test fun symlinkedAllowedRootStillWorks() {
         val aliasRoot = tmp.resolve("rootlink")
-        if (!symlink(aliasRoot, outside)) return
+        symlink(aliasRoot, outside)
         assertContentEquals("TOPSECRET".toByteArray(), reader(aliasRoot).read("../other/secret.txt"))
     }
 
@@ -104,9 +109,9 @@ class LocalFileReaderTest {
 
     @Test fun parsesRootLists() {
         assertEquals(listOf(Path.of("/a"), Path.of("/b")), FileAccessPolicy.parseRoots(" /a ,, /b", ","))
-        assertEquals(listOf("C:\\a", "D:\\b"), FileAccessPolicy.parseRoots("C:\\a;D:\\b", ";").map { it.toString() }.let {
-            if (File.separatorChar == '\\') it else listOf("C:\\a", "D:\\b")
-        })
+        if (File.separatorChar == '\\') {
+            assertEquals(listOf("C:\\a", "D:\\b"), FileAccessPolicy.parseRoots("C:\\a;D:\\b", ";").map { it.toString() })
+        }
         assertTrue(FileAccessPolicy.parseRoots(null).isEmpty())
         val p = FileAccessPolicy.fromConfiguration({ "/x${File.pathSeparator}/y" }, { null })
         assertEquals(2, p.extraRoots.size)
@@ -124,5 +129,53 @@ class LocalFileReaderTest {
         assertTrue("../other/secret.txt" in failure.message)
         assertFalse("TOPSECRET" in failure.message)
         assertFalse(sent)
+    }
+
+    @Test fun rejectsBlankRelativeAndFilesystemRoots() {
+        assertFailsWith<FileAccessConfigException> { FileAccessPolicy.validateRoot("  ", requireAbsolute = false) }
+        assertFailsWith<FileAccessConfigException> { FileAccessPolicy.parseRoots("relative/dir") }
+        val e = assertFailsWith<FileAccessConfigException> { FileAccessPolicy.parseRoots("/") }
+        assertTrue("'/'" in e.message!!)
+        assertFailsWith<FileAccessConfigException> { FileAccessPolicy.validateRoot("/", requireAbsolute = false) }
+        // relative roots are allowed where the shell's working directory is meaningful (CLI)
+        FileAccessPolicy.validateRoot("rel", requireAbsolute = false)
+    }
+
+    @Test fun expandsTildeToHome() {
+        assertEquals(listOf(Path.of("/home/u/shared")), FileAccessPolicy.parseRoots("~/shared", ":", "/home/u"))
+        assertFailsWith<FileAccessConfigException> { FileAccessPolicy.parseRoots("~user/x", ":", "/home/u") }
+    }
+
+    @Test fun malformedEntryIsAConfigErrorNotAnException() {
+        // NUL is an invalid path character on every platform
+        val e = assertFailsWith<FileAccessConfigException> { FileAccessPolicy.parseRoots("/ok:/bad\u0000x") }
+        assertTrue("/bad" in e.message!!)
+        val r = FileAccessPolicy.load({ "/bad\u0000x" }, { null })
+        assertTrue(r.isFailure)
+        assertTrue(FileAccessPolicy.load({ null }, { null }).isSuccess)
+    }
+
+    @Test fun symlinkedBaseFolderWorks() {
+        val link = tmp.resolve("projlink")
+        symlink(link, dir)
+        val r = LocalFileReader(link)
+        assertContentEquals("ok".toByteArray(), r.read("ok.txt"))
+        assertFailsWith<FileAccessDeniedException> { r.read("../other/secret.txt") }
+    }
+
+    @Test fun emptyAndDotPathsAreNotContentReads() {
+        for (p in listOf("", ".")) {
+            assertFailsWith<java.io.IOException> { reader().read(p) }
+        }
+    }
+
+    @Test fun danglingSymlinkToOutsideIsDenied() {
+        symlink(dir.resolve("dangling"), outside.resolve("not-yet.txt"))
+        assertFailsWith<FileAccessDeniedException> { reader().read("dangling") }
+    }
+
+    @Test fun danglingSymlinkInsideIsNotFound() {
+        symlink(dir.resolve("dangling2"), dir.resolve("later.txt"))
+        assertFailsWith<NoSuchFileException> { reader().read("dangling2") }
     }
 }

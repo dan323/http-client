@@ -75,4 +75,12 @@ class AppStateTest {
         state.run(all = true)
         assertTrue(state.outcomes.single() is RunOutcome.Failure)
     }
+
+    @Test fun badFileAccessConfigurationIsReportedAsFailure() {
+        val file = dir.resolve("a.http")
+        val outcomes = Workspace.execute(file, "GET http://127.0.0.1:${server.address.port}/echo\n", null, null,
+            policy = { com.dan323.httpclient.adapters.FileAccessPolicy.load({ "relative" }, { null }) })
+        val f = outcomes.single() as RunOutcome.Failure
+        assertTrue("relative" in f.message)
+    }
 }
