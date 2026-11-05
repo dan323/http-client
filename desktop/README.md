@@ -60,3 +60,5 @@ because installers require a major version of at least 1.
 
 Request history, saving responses, and persisting the window,
 last file and selected environment between sessions.
+
+`{{$env.NAME}}` reads nothing by default: allow names with `-Dhttpclient.allowEnv=NAME,NAME` (JVM option) or the environment variable `HTTPC_ALLOW_ENV=NAME,NAME`; see [docs/features.md](../docs/features.md).

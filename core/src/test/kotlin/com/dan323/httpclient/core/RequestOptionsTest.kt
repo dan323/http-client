@@ -38,6 +38,16 @@ class RequestOptionsTest {
     }
 
     @Test
+    fun `validation errors show the setting as written, not resolved secrets`() {
+        val vars = mapOf("s" to "hunter2 x")
+        for (name in listOf("timeout", "no-redirect", "proxy", "no-cookie-jar")) {
+            val msg = failure(mapOf(name to "{{s}}"), vars)
+            assertTrue("{{s}}" in msg, msg)
+            assertTrue("hunter2" !in msg, msg)
+        }
+    }
+
+    @Test
     fun `timeout may use a variable`() =
         assertEquals(3000L, options(mapOf("timeout" to "{{t}}s"), mapOf("t" to "3")).timeoutMillis)
 

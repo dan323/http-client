@@ -7,6 +7,8 @@ import com.dan323.httpclient.core.application.RunReport
 import com.dan323.httpclient.adapters.JsonEnvironmentRepository
 import com.dan323.httpclient.adapters.KotlinxJsonExtractor
 import com.dan323.httpclient.adapters.LocalFileReader
+import com.dan323.httpclient.adapters.SystemEnvironmentVariables
+import com.dan323.httpclient.core.application.DynamicVariables
 import com.dan323.httpclient.core.application.HttpFileParser
 import com.dan323.httpclient.core.application.RequestRunner
 import com.dan323.httpclient.core.application.RequestSession
@@ -21,11 +23,13 @@ import java.nio.file.StandardCopyOption
 import com.dan323.httpclient.core.application.ReportEntry
 import kotlin.system.exitProcess
 
-private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NAME|INDEX] [--list]
+private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] [--list]
                   [--report-json FILE] [--report-junit FILE]
 
   --env NAME       use variables from NAME in http-client.env.json (next to the file)
   --request X      run only the request with @name X, or the Nth request (1-based)
+  --allow-env N    let {{${'$'}env.N}} read these OS environment variables (comma separated, repeatable);
+                   none are readable by default
   --list           list the requests in the file and exit
   --report-json F  write a JSON run report (results, assertions, timings, totals) to F
   --report-junit F write a JUnit XML run report to F"""
@@ -35,6 +39,7 @@ data class Options(
     val env: String? = null,
     val request: String? = null,
     val list: Boolean = false,
+    val allowEnv: Set<String> = emptySet(),
     val reportJson: Path? = null,
     val reportJunit: Path? = null,
 )
@@ -54,6 +59,7 @@ private fun parseArgsUnchecked(args: List<String>): Options? {
     var env: String? = null
     var request: String? = null
     var list = false
+    val allowEnv = mutableSetOf<String>()
     var reportJson: Path? = null
     var reportJunit: Path? = null
     var i = 0
@@ -62,6 +68,7 @@ private fun parseArgsUnchecked(args: List<String>): Options? {
         when (val a = args[i]) {
             "--env" -> { if (env != null) return null; env = value() ?: return null }
             "--request" -> { if (request != null) return null; request = value() ?: return null }
+            "--allow-env" -> allowEnv += SystemEnvironmentVariables.parseNames(value() ?: return null)
             "--list" -> list = true
             "--report-json" -> { if (reportJson != null) return null; reportJson = Path.of(value() ?: return null) }
             "--report-junit" -> { if (reportJunit != null) return null; reportJunit = Path.of(value() ?: return null) }
@@ -70,7 +77,7 @@ private fun parseArgsUnchecked(args: List<String>): Options? {
         i++
     }
     if (reportJson != null && reportJunit != null && reportJson.toAbsolutePath().normalize() == reportJunit.toAbsolutePath().normalize()) return null
-    return Options(file ?: return null, env, request, list, reportJson, reportJunit)
+    return Options(file ?: return null, env, request, list, allowEnv, reportJson, reportJunit)
 }
 
 /** Picks the request selected by name or 1-based index; all requests when no selector is given. */
@@ -119,7 +126,7 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream): Int {
         ?: return failWithReport(opts, err, "No such request: ${opts.request}")
     val chosen = withDependencies(requests, selected)
     val executor = JdkHttpExecutor()
-    val session = RequestSession(RequestRunner(executor, LocalFileReader(dir)), executor, KotlinxJsonExtractor())
+    val session = RequestSession(RequestRunner(executor, LocalFileReader(dir), DynamicVariables(env = SystemEnvironmentVariables(opts.allowEnv, "pass --allow-env NAME"))), executor, KotlinxJsonExtractor())
 
     // Prerequisites run for their responses only: assertions are evaluated for the selected requests.
     val outcomes = session.runAll(chosen, variables, assertFor = { r -> selected.any { it === r } }) { outcome ->
