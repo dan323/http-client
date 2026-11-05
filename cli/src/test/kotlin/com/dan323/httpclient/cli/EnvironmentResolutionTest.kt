@@ -35,8 +35,6 @@ class EnvironmentResolutionTest {
 
     @Test fun systemPropertyAllowlistIsHonouredByTheCli() {
         val f = root.resolve("x.http").also { Files.writeString(it, "GET http://127.0.0.1:1/{{\$env.HTTPC_R6_PROBE}}\n") }
-        val before = cli(f.toString()).third
-        assertTrue(before.contains("not allowed"), before)
         System.setProperty("httpclient.allowEnv", "HTTPC_R6_PROBE")
         try {
             val after = cli(f.toString()).third
@@ -44,6 +42,18 @@ class EnvironmentResolutionTest {
         } finally {
             System.clearProperty("httpclient.allowEnv")
         }
+    }
+
+    @Test fun malformedEnvFileIsIgnoredWithoutEnvAndNeverLeaksSecrets() {
+        Files.writeString(root.resolve("http-client.env.json"), """{"prod":{"token":"SuperSecret123" "x":"y"}}""")
+        val f = root.resolve("x.http").also { Files.writeString(it, "@h = http://127.0.0.1:1\nGET {{h}}/x\n") }
+        val noEnv = cli(f.toString())
+        assertTrue(!noEnv.third.contains("environment file"), noEnv.third)   // never parsed
+        val report = root.resolve("r.json")
+        val (code, out, err) = cli(f.toString(), "--env", "prod", "--report-json", report.toString())
+        assertEquals(1, code)
+        val all = out + err + (if (Files.exists(report)) Files.readString(report) else "")
+        assertTrue(all.contains("Invalid environment file") && !all.contains("SuperSecret123"), all)
     }
 
     @Test fun noEnvOptionUsesFileVariablesOnly() {

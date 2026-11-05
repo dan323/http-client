@@ -7,8 +7,7 @@ import com.dan323.httpclient.core.application.RunReport
 import com.dan323.httpclient.adapters.UpwardEnvironmentLocator
 import com.dan323.httpclient.core.application.EnvironmentChoice
 import com.dan323.httpclient.core.application.UnknownEnvironmentException
-import com.dan323.httpclient.core.application.environments
-import com.dan323.httpclient.core.application.select
+import com.dan323.httpclient.core.application.resolve
 import com.dan323.httpclient.core.port.out.EnvironmentFileException
 import com.dan323.httpclient.adapters.KotlinxJsonExtractor
 import com.dan323.httpclient.adapters.LocalFileReader
@@ -127,7 +126,7 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream): Int {
     }
 
     val variables = try {
-        EnvironmentChoice.of(opts.env).select(UpwardEnvironmentLocator().environments(opts.file))?.variables ?: emptyMap()
+        EnvironmentChoice.of(opts.env).resolve(UpwardEnvironmentLocator(), opts.file)?.variables ?: emptyMap()
     } catch (e: UnknownEnvironmentException) {
         return failWithReport(opts, err, e.message ?: "Unknown environment: ${opts.env}")
     } catch (e: EnvironmentFileException) {

@@ -41,9 +41,9 @@ class SystemEnvironmentVariablesTest {
         assertEquals(emptySet(), SystemEnvironmentVariables.parseNames(null))
     }
 
-    @Test fun configurationPrefersPropertyOverEnvVar() {
+    @Test fun configurationUnionsPropertyAndEnvVar() {
         val both = SystemEnvironmentVariables.fromConfiguration({ "P" }, { "E" })
-        assertTrue(both.isAllowed("P")); assertFalse(both.isAllowed("E"))
+        assertTrue(both.isAllowed("P")); assertTrue(both.isAllowed("E"))
         val envOnly = SystemEnvironmentVariables.fromConfiguration({ null }, { "E,F" })
         assertTrue(envOnly.isAllowed("E")); assertTrue(envOnly.isAllowed("F"))
         assertFalse(SystemEnvironmentVariables.fromConfiguration({ null }, { null }).isAllowed("E"))

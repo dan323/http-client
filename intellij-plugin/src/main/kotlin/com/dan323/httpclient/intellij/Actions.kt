@@ -9,7 +9,9 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import com.dan323.httpclient.core.port.out.EnvironmentFileException
 import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.openapi.wm.ToolWindowManager
 import java.nio.file.Path
 
@@ -51,12 +53,14 @@ class SelectEnvironmentAction : AnAction(), DumbAware {
         val vfile = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
         val service = project.getService(HttpClientService::class.java)
         val current = service.environmentChoice
-        val names = try { service.environments(Path.of(vfile.path)).map { it.name } } catch (_: Exception) { emptyList() }
+        // null (not empty) when the env file cannot be read: the current choice is then not reported as missing.
+        val names = try { service.environments(Path.of(vfile.path)).map { it.name } } catch (_: EnvironmentFileException) { null }
         val items = environmentItems(names, current)
         JBPopupFactory.getInstance()
-            .createPopupChooserBuilder(items.map { it.label })
+            .createPopupChooserBuilder(items)
+            .setRenderer(SimpleListCellRenderer.create("") { it.label })
             .setTitle("HTTP Environment (current: ${selectedItem(items, current).label})")
-            .setItemChosenCallback { label -> items.firstOrNull { it.label == label }?.let { service.environmentChoice = it.choice } }
+            .setItemChosenCallback { service.environmentChoice = it.choice }
             .createPopup()
             .showInBestPositionFor(e.dataContext)
     }

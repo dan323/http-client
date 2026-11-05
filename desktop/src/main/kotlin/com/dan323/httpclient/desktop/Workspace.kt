@@ -4,7 +4,7 @@ import com.dan323.httpclient.adapters.JdkHttpExecutor
 import com.dan323.httpclient.adapters.UpwardEnvironmentLocator
 import com.dan323.httpclient.core.application.EnvironmentChoice
 import com.dan323.httpclient.core.application.environments
-import com.dan323.httpclient.core.application.select
+import com.dan323.httpclient.core.application.resolve
 import com.dan323.httpclient.adapters.KotlinxJsonExtractor
 import com.dan323.httpclient.adapters.LocalFileReader
 import com.dan323.httpclient.adapters.SystemEnvironmentVariables
@@ -47,7 +47,7 @@ object Workspace {
         val requests = HttpFileParser().parse(text).requests
         val selected = if (index == null) requests else withDependencies(requests, listOfNotNull(requests.getOrNull(index)))
         // A name that no longer exists throws UnknownEnvironmentException, never runs another environment.
-        val variables = EnvironmentChoice.of(environment).select(UpwardEnvironmentLocator().environments(file))?.variables ?: emptyMap()
+        val variables = EnvironmentChoice.of(environment).resolve(UpwardEnvironmentLocator(), file)?.variables ?: emptyMap()
         val executor = JdkHttpExecutor()
         val session = RequestSession(RequestRunner(executor, LocalFileReader(dir), DynamicVariables(env = SystemEnvironmentVariables.fromConfiguration())), executor, KotlinxJsonExtractor())
         return session.runAll(selected, variables, onOutcome = onOutcome)
