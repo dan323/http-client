@@ -36,7 +36,7 @@ data class HttpRequest(
 
 /** Per-request executor settings, resolved and validated from `# @setting` directives. */
 data class RequestOptions(
-    /** Maximum time to wait for the response (headers); body streaming is not covered. Null means no timeout. */
+    /** Maximum time for the whole exchange (headers and body). Null means no timeout. */
     val timeoutMillis: Long? = null,
     /** False disables following redirects (`@no-redirect`); true leaves the executor's own redirect policy. */
     val followRedirects: Boolean = true,

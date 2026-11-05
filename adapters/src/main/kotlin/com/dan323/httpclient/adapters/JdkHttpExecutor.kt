@@ -13,7 +13,13 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest.BodyPublishers
 import java.net.http.HttpResponse.BodyHandlers
 import java.time.Duration
+import java.util.concurrent.CancellationException
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 /**
  * Executes requests with the JDK client. Redirect policy and proxy are client-level in the JDK, so requests
@@ -25,6 +31,7 @@ import java.util.concurrent.ConcurrentHashMap
 class JdkHttpExecutor(
     private val client: HttpClient = HttpClient.newBuilder()
         .followRedirects(HttpClient.Redirect.NORMAL)
+        .connectTimeout(Duration.ofSeconds(30))
         .build(),
 ) : HttpExecutor, AutoCloseable {
     private val derived = ConcurrentHashMap<Pair<HttpClient.Redirect, ProxyAddress?>, HttpClient>()
@@ -56,7 +63,8 @@ class JdkHttpExecutor(
         derived.clear()
     }
 
-    // Restricted by java.net.http; the JDK sets these itself.
+    // Restricted by java.net.http; the JDK sets these itself. A user-set header with one of these names is
+    // dropped (documented in docs/features.md).
     private val restricted = setOf("host", "content-length", "connection", "expect", "upgrade")
 
     override fun execute(request: HttpRequest): HttpResponse {
@@ -66,7 +74,27 @@ class JdkHttpExecutor(
         request.headers.filter { it.name.lowercase() !in restricted }.forEach { builder.header(it.name, it.value) }
 
         val start = System.nanoTime()
-        val resp = clientFor(request.options).send(builder.build(), BodyHandlers.ofByteArray())
+        // Client set-up (it may resolve a slow @proxy host) runs inside the future too, so the deadline and
+        // interruption cover it.
+        val inner = AtomicReference<CompletableFuture<*>?>()
+        val future = CompletableFuture.supplyAsync { clientFor(request.options) }.thenCompose { c ->
+            c.sendAsync(builder.build(), BodyHandlers.ofByteArray()).also { inner.set(it) }
+        }
+        fun cancelAll() { future.cancel(true); inner.get()?.cancel(true) }
+        val resp = try {
+            // The timeout bounds the whole exchange (headers and body), not just the wait for headers.
+            val t = request.options.timeoutMillis
+            if (t != null) future.get(t, TimeUnit.MILLISECONDS) else future.get()
+        } catch (e: TimeoutException) {
+            cancelAll()
+            throw java.net.http.HttpTimeoutException("request timed out after ${request.options.timeoutMillis} ms")
+        } catch (e: InterruptedException) {
+            cancelAll()
+            Thread.currentThread().interrupt()
+            throw CancellationException("Request cancelled").also { it.initCause(e) }
+        } catch (e: ExecutionException) {
+            throw e.cause ?: e
+        }
         val ms = (System.nanoTime() - start) / 1_000_000
         val headers = resp.headers().map().flatMap { (k, vs) -> vs.map { Header(k, it) } }
         return HttpResponse(resp.statusCode(), headers, resp.body(), ms)
