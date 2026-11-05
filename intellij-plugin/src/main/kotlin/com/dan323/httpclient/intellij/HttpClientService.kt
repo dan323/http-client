@@ -1,12 +1,17 @@
 package com.dan323.httpclient.intellij
 
 import com.dan323.httpclient.adapters.JdkHttpExecutor
-import com.dan323.httpclient.adapters.JsonEnvironmentRepository
 import com.dan323.httpclient.adapters.KotlinxJsonExtractor
 import com.dan323.httpclient.adapters.LocalFileReader
 import com.dan323.httpclient.adapters.SystemEnvironmentVariables
 import com.dan323.httpclient.core.application.DynamicVariables
 import com.dan323.httpclient.adapters.prettyJson
+import com.dan323.httpclient.adapters.UpwardEnvironmentLocator
+import com.dan323.httpclient.core.application.EnvironmentChoice
+import com.dan323.httpclient.core.application.UnknownEnvironmentException
+import com.dan323.httpclient.core.application.environments
+import com.dan323.httpclient.core.application.select
+import com.dan323.httpclient.core.port.out.EnvironmentFileException
 import com.dan323.httpclient.core.application.HttpFileParser
 import com.dan323.httpclient.core.application.HttpParseException
 import com.dan323.httpclient.core.application.RequestRunner
@@ -36,10 +41,12 @@ data class Report(val message: String? = null, val environment: String? = null, 
 /** Per-project state: the selected environment, remembered responses for chaining, and the last report. */
 @Service(Service.Level.PROJECT)
 class HttpClientService(private val project: Project) {
-    @Volatile var environmentName: String? = null
+    /** The user's explicit choice: [EnvironmentChoice.None] by default, never silently replaced by another environment. */
+    @Volatile var environmentChoice: EnvironmentChoice = EnvironmentChoice.None
     @Volatile var lastReport: Report = Report(message = "Run a request with Ctrl+Alt+Enter.")
         private set
-    private val listeners = mutableListOf<(Report) -> Unit>()
+    private val locator = UpwardEnvironmentLocator()
+    private val listeners =mutableListOf<(Report) -> Unit>()
     // One session per (file, environment): named responses survive between runs, so a login runs once.
     private val sessions = ConcurrentHashMap<Pair<Path, String?>, RequestSession>()
 
@@ -56,12 +63,8 @@ class HttpClientService(private val project: Project) {
         publish(lastReport.copy(message = "Chain reset: the next run sends the requests it depends on again."))
     }
 
-    /** Environments from the nearest directory (the file's, then its parents) holding an env file. */
-    fun environments(dir: Path): List<Environment> = envDir(dir)?.let { JsonEnvironmentRepository(it).load() } ?: emptyList()
-
-    private fun envDir(start: Path): Path? = generateSequence(start.toAbsolutePath()) { it.parent }.firstOrNull {
-        Files.exists(it.resolve("http-client.env.json")) || Files.exists(it.resolve("http-client.private.env.json"))
-    }
+    /** Environments for [file]: the nearest enclosing `http-client.env.json` (same rule as the CLI and desktop). */
+    fun environments(file: Path): List<Environment> = locator.environments(file)
 
     /**
      * Runs the request starting at or before [caretLine]. Requests it chains on run first, unless they
@@ -75,10 +78,12 @@ class HttpClientService(private val project: Project) {
         val current = requests.lastOrNull { it.startLine <= caretLine }
             ?: return publish(Report(message = "No request found at the caret."))
         val dir = file.toAbsolutePath().parent
-        val envs = try { environments(dir) } catch (e: Exception) {
-            return publish(Report(message = "Could not read the environment file: ${e.message}"))
+        // "(none)" runs without an environment; a name that no longer exists is reported, never replaced by another.
+        val env = try { environmentChoice.select(environments(file)) } catch (e: UnknownEnvironmentException) {
+            return publish(Report(message = e.message))
+        } catch (e: EnvironmentFileException) {
+            return publish(Report(message = e.message))
         }
-        val env = envs.firstOrNull { it.name == environmentName } ?: envs.firstOrNull()
         val variables = env?.variables ?: emptyMap()
 
         val executor = JdkHttpExecutor()

@@ -31,8 +31,6 @@ import javax.swing.text.SimpleAttributeSet
 import javax.swing.text.StyleConstants
 import javax.swing.text.StyledDocument
 
-private const val NONE = "(none)"
-
 private val ok = JBColor(Color(0x2E7D32), Color(0x6AAB73))
 private val redirect = JBColor(Color(0xB26A00), Color(0xE0A030))
 private val bad = JBColor(Color(0xC62828), Color(0xE06C6C))
@@ -61,13 +59,24 @@ class ResponseToolWindowFactory : ToolWindowFactory, DumbAware {
 
         // Environment picker: always visible, lists the env file next to the open .http file.
         val combo = JComboBox<String>()
+        var items = environmentItems(emptyList(), service.environmentChoice)
+        var reloading = false   // setting the model/selection programmatically fires the listener: ignore it
         fun reload() {
             val file = FileEditorManager.getInstance(project).selectedFiles.firstOrNull { it.extension == "http" }
-            val names = file?.let { runCatching { service.environments(Path.of(it.path).parent).map { e -> e.name } }.getOrNull() }.orEmpty()
-            combo.model = DefaultComboBoxModel((listOf(NONE) + names).toTypedArray())
-            combo.selectedItem = service.environmentName?.takeIf { it in names } ?: names.firstOrNull() ?: NONE
+            val names = file?.let { runCatching { service.environments(Path.of(it.path)).map { e -> e.name } }.getOrNull() }.orEmpty()
+            reloading = true
+            try {
+                items = environmentItems(names, service.environmentChoice)
+                combo.model = DefaultComboBoxModel(items.map { it.label }.toTypedArray())
+                combo.selectedItem = selectedItem(items, service.environmentChoice).label
+            } finally {
+                reloading = false
+            }
         }
-        combo.addActionListener { service.environmentName = (combo.selectedItem as? String)?.takeIf { it != NONE } }
+        combo.addActionListener {
+            if (reloading) return@addActionListener
+            items.firstOrNull { it.label == combo.selectedItem }?.let { service.environmentChoice = it.choice }
+        }
         combo.addMouseListener(object : java.awt.event.MouseAdapter() {
             override fun mousePressed(e: java.awt.event.MouseEvent?) { reload() }
         })
