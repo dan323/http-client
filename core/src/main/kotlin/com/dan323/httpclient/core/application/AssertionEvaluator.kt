@@ -43,7 +43,12 @@ class AssertionEvaluator(private val extractor: ResponseExtractor) {
     fun evaluate(assertions: List<String>, response: HttpResponse): List<AssertionResult> =
         assertions.map { evaluate(it, response) }
 
-    fun evaluate(assertion: String, response: HttpResponse): AssertionResult {
+    /**
+     * [showValues] false is used when the assertion text contains substituted values that may be secrets: the
+     * reason of an invalid assertion then keeps its kind (unknown operator, needs numbers, bad regex) but never
+     * echoes the expression, operator, expected value or regex text.
+     */
+    fun evaluate(assertion: String, response: HttpResponse, showValues: Boolean = true): AssertionResult {
         val parsed = parse(assertion) ?: return invalid(assertion, "missing expression")
         val (expr, rest) = parsed
         if (expr == null) return invalid(assertion, "unterminated quote in expression")
@@ -51,10 +56,10 @@ class AssertionEvaluator(private val extractor: ResponseExtractor) {
         val op = opAndExpected[0].ifEmpty { return invalid(assertion, "missing operator") }
         val rawExpected = opAndExpected.getOrNull(1)?.trim()
         if (!(expr == "status" || expr.startsWith("headers.") || expr.startsWith("body."))) {
-            return invalid(assertion, "unknown expression '$expr' (use status, headers.<Name> or body.<...>; quote expressions that contain spaces)")
+            return invalid(assertion, "unknown expression${if (showValues) " '$expr'" else ""} (use status, headers.<Name> or body.<...>; quote expressions that contain spaces)")
         }
         if (op != "exists" && op != "!exists" && op !in VALUE_OPERATORS) {
-            return invalid(assertion, "unknown operator '$op' (expressions containing spaces must be quoted)")
+            return invalid(assertion, "unknown operator${if (showValues) " '$op'" else ""} (expressions containing spaces must be quoted)")
         }
         val quoted = rawExpected != null && rawExpected.length >= 2 &&
             rawExpected[0] in "\"'" && rawExpected.last() == rawExpected[0]
@@ -82,7 +87,8 @@ class AssertionEvaluator(private val extractor: ResponseExtractor) {
             "!=" -> !equal(actual, expected, quoted, a, e)
             "<", "<=", ">", ">=" -> {
                 if (a == null || e == null) {
-                    return invalid(assertion, "'$op' needs numbers (actual: ${shorten(actual)}, expected: ${shorten(expected)})", actual)
+                    val shown = if (showValues) "actual: ${shorten(actual)}, expected: ${shorten(expected)}" else "actual and expected values not shown"
+                    return invalid(assertion, "${if (showValues) "'$op'" else "comparison"} needs numbers ($shown)", actual)
                 }
                 val c = a.compareTo(e)
                 when (op) { "<" -> c < 0; "<=" -> c <= 0; ">" -> c > 0; else -> c >= 0 }
@@ -96,7 +102,9 @@ class AssertionEvaluator(private val extractor: ResponseExtractor) {
             } catch (ex: RegexTimeoutException) {
                 return invalid(assertion, ex.message ?: "regex timeout", actual)
             } catch (ex: Exception) {
-                return invalid(assertion, "bad regex: ${ex.message?.lineSequence()?.firstOrNull()}", actual)
+                val reason = ex.message?.lineSequence()?.firstOrNull()
+                    ?.let { if (showValues) it else it.replace(Regex("\\{[^}]*}"), "{...}") }
+                return invalid(assertion, "bad regex: $reason", actual)
             }
         }
         return result(passed, expected)
@@ -130,10 +138,14 @@ class AssertionEvaluator(private val extractor: ResponseExtractor) {
     }
 
     private fun invalid(assertion: String, why: String, actual: String? = null) =
-        AssertionResult(assertion, false, null, actual?.let(::shorten), "invalid assertion: $why")
+        AssertionResult(assertion, false, null, actual?.let(::shorten), "$INVALID_PREFIX$why")
 
     companion object {
         const val MAX_SHOWN = 200
+        const val INVALID_PREFIX = "invalid assertion: "
+
+        /** True for a result produced because the assertion itself is malformed (as opposed to a value mismatch). */
+        fun isInvalid(r: AssertionResult) = !r.passed && r.message.startsWith(INVALID_PREFIX)
         private val NUMBER = Regex("-?(0|[1-9]\\d*)(\\.\\d+)?([eE][+-]?\\d{1,4})?")
         private val VALUE_OPERATORS = setOf("==", "!=", "<", "<=", ">", ">=", "contains", "!contains", "startsWith", "endsWith", "matches")
     }

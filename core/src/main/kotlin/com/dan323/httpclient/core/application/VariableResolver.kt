@@ -36,7 +36,7 @@ object VariableResolver {
         text: String,
         variables: Map<String, String>,
         extra: (String) -> String? = { null },
-        dynamic: DynamicVariables = DynamicVariables.DEFAULT,
+        dynamic: DynamicVariables = DynamicVariables(),
         fileVariables: Map<String, String> = emptyMap(),
     ): String = Expansion(variables, fileVariables, extra, dynamic).expand(text, null)
 
