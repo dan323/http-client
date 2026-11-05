@@ -1,6 +1,7 @@
 package com.dan323.httpclient.core
 
 import com.dan323.httpclient.core.application.HttpFileParser
+import com.dan323.httpclient.core.application.HttpParseException
 import com.dan323.httpclient.core.application.RequestRunner
 import com.dan323.httpclient.core.application.UndefinedVariableException
 import com.dan323.httpclient.core.domain.Body
@@ -108,5 +109,72 @@ class HttpFileParserTest {
             object : com.dan323.httpclient.core.port.out.FileReader { override fun read(path: String) = ByteArray(0) },
         )
         assertEquals("http://file/a", runner.resolve(r, mapOf("host" to "http://env")).url)
+    }
+
+    @Test
+    fun `unknown method is a parse error with the line number`() {
+        val e = assertFailsWith<HttpParseException> { parser.parse("GET http://a\n###\n# c\nGTE http://x\n") }
+        assertEquals(4, e.line)
+        assertEquals(true, e.message!!.startsWith("Line 4:") && "GTE" in e.message!!)
+    }
+
+    @Test
+    fun `bare URLs stay GET including with an http version or a variable`() {
+        assertEquals("http://x/a", parser.parse("http://x/a").requests.single().url)
+        assertEquals("GET", parser.parse("{{host}}/a").requests.single().method)
+        val r = parser.parse("localhost:8080/a HTTP/1.1").requests.single()
+        assertEquals("GET" to "localhost:8080/a", r.method to r.url)
+        val lower = parser.parse("post http://x").requests.single()
+        assertEquals("POST", lower.method)
+    }
+
+    @Test
+    fun `header line without a colon is an error with the line number`() {
+        val e = assertFailsWith<HttpParseException> { parser.parse("GET http://x\nAccept: a\nBroken header\n") }
+        assertEquals(3, e.line)
+        assertFailsWith<HttpParseException> { parser.parse("GET http://x\n: novalue\n") }
+    }
+
+    @Test
+    fun `comment lines among headers are fine`() {
+        val r = parser.parse("GET http://x\n# note\nA: b\n// other\n").requests.single()
+        assertEquals(listOf(Header("A", "b")), r.headers)
+    }
+
+    @Test
+    fun `response handlers and redirects are not sent as body and produce warnings`() {
+        val text = "POST http://x\n\n{\"a\":1}\n\n> {%\n  client.global.set(\"t\", 1);\n%}\n<> out.json\n> handler.js\n"
+        val file = parser.parse(text)
+        assertEquals(Body.Text("{\"a\":1}"), file.requests.single().body)
+        assertEquals(3, file.warnings.size)
+        assertEquals(true, file.warnings[0].startsWith("Line 5:"))
+        assertEquals(true, file.warnings[1].startsWith("Line 8:"))
+        assertEquals(true, file.warnings[2].startsWith("Line 9:"))
+    }
+
+    @Test
+    fun `single-line script and handler-only request have no body`() {
+        val file = parser.parse("GET http://x\n\n> {% client.test(\"a\", f); %}\n")
+        assertEquals(null, file.requests.single().body)
+        assertEquals(1, file.warnings.size)
+    }
+
+    @Test
+    fun `handler right after headers without a blank line`() {
+        val file = parser.parse("GET http://x\nA: b\n> {% x %}\n")
+        assertEquals(listOf(Header("A", "b")), file.requests.single().headers)
+        assertEquals(null, file.requests.single().body)
+        assertEquals(1, file.warnings.size)
+    }
+
+    @Test
+    fun `html body is text and a file body needs a space`() {
+        assertEquals(Body.Text("<html>"), parser.parse("POST http://x\n\n<html>").requests.single().body)
+        assertEquals(Body.FromFile("a.json"), parser.parse("POST http://x\n\n< a.json").requests.single().body)
+    }
+
+    @Test
+    fun `clean files have no warnings`() {
+        assertEquals(emptyList(), parser.parse("GET http://x\n").warnings)
     }
 }
