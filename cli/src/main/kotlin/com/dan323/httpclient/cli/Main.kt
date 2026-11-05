@@ -4,6 +4,7 @@ import com.dan323.httpclient.adapters.JdkHttpExecutor
 import com.dan323.httpclient.adapters.JsonRunReport
 import com.dan323.httpclient.core.application.JUnitXmlReport
 import com.dan323.httpclient.core.application.RunReport
+import com.dan323.httpclient.adapters.FileAccessPolicy
 import com.dan323.httpclient.adapters.JsonEnvironmentRepository
 import com.dan323.httpclient.adapters.KotlinxJsonExtractor
 import com.dan323.httpclient.adapters.LocalFileReader
@@ -24,12 +25,14 @@ import com.dan323.httpclient.core.application.ReportEntry
 import kotlin.system.exitProcess
 
 private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] [--list]
-                  [--report-json FILE] [--report-junit FILE]
+                  [--report-json FILE] [--report-junit FILE] [--allow-file-root DIR]
 
   --env NAME       use variables from NAME in http-client.env.json (next to the file)
   --request X      run only the request with @name X, or the Nth request (1-based)
   --allow-env N    let {{${'$'}env.N}} read these OS environment variables (comma separated, repeatable);
                    none are readable by default
+  --allow-file-root DIR  also let `< path` bodies be read from DIR (repeatable); by default only the
+                   .http file's folder is readable (symlinks resolved)
   --list           list the requests in the file and exit
   --report-json F  write a JSON run report (results, assertions, timings, totals) to F
   --report-junit F write a JUnit XML run report to F"""
@@ -42,6 +45,7 @@ data class Options(
     val allowEnv: Set<String> = emptySet(),
     val reportJson: Path? = null,
     val reportJunit: Path? = null,
+    val allowFileRoots: List<Path> = emptyList(),
 )
 
 /**
@@ -62,6 +66,7 @@ private fun parseArgsUnchecked(args: List<String>): Options? {
     val allowEnv = mutableSetOf<String>()
     var reportJson: Path? = null
     var reportJunit: Path? = null
+    val allowFileRoots = mutableListOf<Path>()
     var i = 0
     fun value(): String? = args.getOrNull(++i)?.takeIf { it.isNotEmpty() && !it.startsWith("--") }
     while (i < args.size) {
@@ -69,6 +74,7 @@ private fun parseArgsUnchecked(args: List<String>): Options? {
             "--env" -> { if (env != null) return null; env = value() ?: return null }
             "--request" -> { if (request != null) return null; request = value() ?: return null }
             "--allow-env" -> allowEnv += SystemEnvironmentVariables.parseNames(value() ?: return null)
+            "--allow-file-root" -> allowFileRoots.add(Path.of(value() ?: return null))
             "--list" -> list = true
             "--report-json" -> { if (reportJson != null) return null; reportJson = Path.of(value() ?: return null) }
             "--report-junit" -> { if (reportJunit != null) return null; reportJunit = Path.of(value() ?: return null) }
@@ -77,7 +83,7 @@ private fun parseArgsUnchecked(args: List<String>): Options? {
         i++
     }
     if (reportJson != null && reportJunit != null && reportJson.toAbsolutePath().normalize() == reportJunit.toAbsolutePath().normalize()) return null
-    return Options(file ?: return null, env, request, list, allowEnv, reportJson, reportJunit)
+    return Options(file ?: return null, env, request, list, allowEnv, reportJson, reportJunit, allowFileRoots)
 }
 
 /** Picks the request selected by name or 1-based index; all requests when no selector is given. */
@@ -128,7 +134,7 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream): Int {
         ?: return failWithReport(opts, err, "No such request: ${opts.request}")
     val chosen = withDependencies(requests, selected)
     val executor = JdkHttpExecutor()
-    val session = RequestSession(RequestRunner(executor, LocalFileReader(dir), DynamicVariables(env = SystemEnvironmentVariables(opts.allowEnv, "pass --allow-env NAME"))), executor, KotlinxJsonExtractor())
+    val session = RequestSession(RequestRunner(executor, LocalFileReader(dir, FileAccessPolicy(opts.allowFileRoots, FileAccessPolicy.CLI_HINT)), DynamicVariables(env = SystemEnvironmentVariables(opts.allowEnv, "pass --allow-env NAME"))), executor, KotlinxJsonExtractor())
 
     // Prerequisites run for their responses only: assertions are evaluated for the selected requests.
     val outcomes = session.runAll(chosen, variables, assertFor = { r -> selected.any { it === r } }) { outcome ->

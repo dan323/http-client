@@ -1,6 +1,7 @@
 package com.dan323.httpclient.desktop
 
 import com.dan323.httpclient.adapters.JdkHttpExecutor
+import com.dan323.httpclient.adapters.FileAccessPolicy
 import com.dan323.httpclient.adapters.JsonEnvironmentRepository
 import com.dan323.httpclient.adapters.KotlinxJsonExtractor
 import com.dan323.httpclient.adapters.LocalFileReader
@@ -47,7 +48,7 @@ object Workspace {
             ?.let { name -> JsonEnvironmentRepository(dir).load().firstOrNull { it.name == name }?.variables }
             ?: emptyMap()
         val executor = JdkHttpExecutor()
-        val session = RequestSession(RequestRunner(executor, LocalFileReader(dir), DynamicVariables(env = SystemEnvironmentVariables.fromConfiguration())), executor, KotlinxJsonExtractor())
+        val session = RequestSession(RequestRunner(executor, LocalFileReader(dir, FileAccessPolicy.fromConfiguration()), DynamicVariables(env = SystemEnvironmentVariables.fromConfiguration())), executor, KotlinxJsonExtractor())
         return session.runAll(selected, variables, onOutcome = onOutcome)
     }
 }
