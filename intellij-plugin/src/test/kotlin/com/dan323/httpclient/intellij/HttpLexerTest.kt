@@ -58,4 +58,22 @@ class HttpLexerTest {
         while (tail.tokenType != null) { tailTokens += text.substring(tail.tokenStart, tail.tokenEnd); tail.advance() }
         assertEquals(full.map { it.second }.takeLast(tailTokens.size), tailTokens)
     }
+
+    @Test fun restartingAtAStateZeroLineMatchesAFullLex() {
+        val text = "GET http://a\nA: b\n\nbody\n###\nPOST http://c\nX: y\n"
+        val full = lex(text)
+        val restart = text.indexOf("POST")
+        val lexer = HttpLexer()
+        lexer.start(text, restart, text.length, 0)
+        val tail = mutableListOf<Pair<IElementType, String>>()
+        while (lexer.tokenType != null) { tail += lexer.tokenType!! to text.substring(lexer.tokenStart, lexer.tokenEnd); lexer.advance() }
+        assertEquals(full.takeLast(tail.size), tail)
+    }
+
+    @Test fun crlfTokensCoverTheTextWithoutCarriageReturnsInValues() {
+        val text = "GET http://a\r\nA: b\r\n"
+        val tokens = lex(text)
+        assertEquals(text, tokens.joinToString("") { it.second })
+        assertEquals(true, tokens.none { it.first != TokenType.WHITE_SPACE && it.second.contains('\r') })
+    }
 }

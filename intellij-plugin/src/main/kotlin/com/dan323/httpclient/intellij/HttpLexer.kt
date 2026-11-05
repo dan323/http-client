@@ -16,15 +16,16 @@ class HttpLexer : LexerBase() {
     private var buffer: CharSequence = ""
     private var endOffset = 0
     private var pos = 0
-    private var mode = HttpLineLexer.BEFORE
+    private var mode = HttpLineLexer.Mode.BEFORE
     private val pending = ArrayDeque<Tok>()
     private var current: Tok? = null
+    private val modes = HttpLineLexer.Mode.entries
 
     override fun start(buffer: CharSequence, startOffset: Int, endOffset: Int, initialState: Int) {
         this.buffer = buffer
         this.endOffset = endOffset
         pos = startOffset
-        mode = initialState % 3
+        mode = modes[initialState % modes.size]
         pending.clear()
         advance()
     }
@@ -43,14 +44,16 @@ class HttpLexer : LexerBase() {
 
     private fun lexLine() {
         val lineStart = pos
-        var contentEnd = lineStart
-        while (contentEnd < endOffset && buffer[contentEnd] != '\n') contentEnd++
-        val lineEnd = if (contentEnd < endOffset) contentEnd + 1 else contentEnd
-        val result = HttpLineLexer.lexLine(buffer.subSequence(lineStart, contentEnd).toString(), mode)
+        var rawEnd = lineStart
+        while (rawEnd < endOffset && buffer[rawEnd] != '\n') rawEnd++
+        val lineEnd = if (rawEnd < endOffset) rawEnd + 1 else rawEnd
+        val content = buffer.subSequence(lineStart, rawEnd).toString().removeSuffix("\r")
+        val result = HttpLineLexer.lexLine(content, mode)
+        val contentEnd = lineStart + content.length
         result.tokens.forEachIndexed { i, t ->
-            pending += Tok(elementType(t.kind), lineStart + t.start, lineStart + t.end, if (i == 0) mode else mode + 3)
+            pending += Tok(elementType(t.kind), lineStart + t.start, lineStart + t.end, if (i == 0) mode.ordinal else mode.ordinal + modes.size)
         }
-        if (lineEnd > contentEnd) pending += Tok(TokenType.WHITE_SPACE, contentEnd, lineEnd, mode + 3)
+        if (lineEnd > contentEnd) pending += Tok(TokenType.WHITE_SPACE, contentEnd, lineEnd, mode.ordinal + modes.size)
         mode = result.nextMode
         pos = lineEnd
     }
