@@ -16,6 +16,8 @@ import java.net.URLDecoder
  * A tiny subset of httpbin.org: echo endpoints (`/get`, `/post`, `/put`, `/patch`, `/delete`, `/anything[/...]`),
  * `/headers`, `/status/{code}`, `/redirect/{n}` and `/bearer`. Pass port 0 to pick a free port.
  */
+private val PRETTY_JSON = Json { prettyPrint = true }
+
 class MockServer(port: Int = 8080) {
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", port), 0)
     val port get() = server.address.port
@@ -92,7 +94,7 @@ class MockServer(port: Int = 8080) {
 
     private fun reply(ex: HttpExchange, status: Int, body: JsonElement?, headers: Map<String, String> = emptyMap()) {
         headers.forEach { (k, v) -> ex.responseHeaders.add(k, v) }
-        val bytes = body?.let { Json { prettyPrint = true }.encodeToString(JsonElement.serializer(), it).toByteArray() }
+        val bytes = body?.let { PRETTY_JSON.encodeToString(JsonElement.serializer(), it).toByteArray() }
         if (bytes != null) ex.responseHeaders.add("Content-Type", "application/json")
         val noBody = bytes == null || ex.requestMethod == "HEAD" || status == 204
         ex.sendResponseHeaders(status, if (noBody) -1 else bytes!!.size.toLong())
