@@ -50,8 +50,8 @@ class DynamicVariables(
                 val (a, b) = args(name, rest, 2)
                 val from = double(name, a)
                 val to = double(name, b)
-                if (from > to) invalid(name, "from must not exceed to")
-                plain(if (from == to) from else random.nextDouble(from, to))
+                if (from >= to) invalid(name, "from must be less than to (to is exclusive)")
+                plain(random.nextDouble(from, to))
             }
             "\$random.alphabetic" -> chars(name, rest, ALPHA)
             "\$random.alphanumeric" -> chars(name, rest, ALPHA + DIGITS)

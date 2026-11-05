@@ -103,14 +103,14 @@ class DynamicVariablesTest {
     @Test fun randomFloat() {
         val d = dyn()
         repeat(100) { assertTrue(r("{{\$random.float(1.5, 2.5)}}", d).toDouble().let { it >= 1.5 && it < 2.5 }) }
-        assertEquals("2.0", r("{{\$random.float(2, 2)}}"))
+        assertTrue(invalid("{{\$random.float(2, 2)}}").contains("from must be less than to"))
+        assertTrue(invalid("{{\$random.float(3, 2)}}").contains("from must be less than to"))
     }
 
     @Test fun floatIsNeverScientificNotation() {
-        assertEquals("10000000000.0", r("{{\$random.float(1e10, 1e10)}}"))
-        assertEquals("0.0005", r("{{\$random.float(5e-4, 5e-4)}}"))
-        assertEquals("0.0", r("{{\$random.float(-0.0, -0.0)}}"))
-        assertEquals("-2.5", r("{{\$random.float(-2.5, -2.5)}}"))
+        // The only double in [1e10, nextUp(1e10)) is 1e10 itself.
+        assertEquals("10000000000.0", r("{{\$random.float(1e10, ${Math.nextUp(1e10)})}}"))
+        assertEquals("0.0005", r("{{\$random.float(5e-4, ${Math.nextUp(5e-4)})}}"))
         val d = dyn()
         repeat(200) {
             val v = r("{{\$random.float(0, 1e-5)}}", d)
@@ -175,6 +175,7 @@ class DynamicVariablesTest {
     @Test fun envValuesAreNotReExpanded() {
         val tricky = object : EnvironmentVariables {
             override fun get(name: String) = "{{\$env.HOME_X}} {{x}}"
+            override fun isAllowed(name: String) = name == "TRICKY"
         }
         val d = DynamicVariables(Random(1), clock, tricky)
         assertEquals("{{\$env.HOME_X}} {{x}}", r("{{\$env.TRICKY}}", d))

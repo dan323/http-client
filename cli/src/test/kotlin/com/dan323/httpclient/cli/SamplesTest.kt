@@ -85,13 +85,16 @@ class SamplesTest {
             r.err.trim(),
         )
         assertEquals(2, Regex("""(?m)^HTTP 200 """).findAll(r.out).count(), r.out)
-        assertContains(r.out, "### random\nHTTP 200")
-        assertContains(r.out, "### offsets\nHTTP 200")
-        assertContains(r.out, "### unset-env\n")
-        assertFalse(r.out.contains("### unset-env\nHTTP"), r.out)
+        val nl = System.lineSeparator()
+        assertContains(r.out, "### random${nl}HTTP 200")
+        assertContains(r.out, "### offsets${nl}HTTP 200")
+        assertContains(r.out, "### unset-env$nl")
+        assertFalse(r.out.contains("### unset-env${nl}HTTP"), r.out)
     }
 
     @Test fun allowedButUnsetEnvIsUndefined() {
+        // The scenario needs the variable to be unset in the inherited process environment.
+        if (System.getenv("HTTPC_SURELY_UNSET") != null) return
         val r = sample("dynamic.http", "--allow-env", "HTTPC_SURELY_UNSET")
         assertEquals(1, r.code)
         assertEquals("Error: Undefined variable: \$env.HTTPC_SURELY_UNSET", r.err.trim())

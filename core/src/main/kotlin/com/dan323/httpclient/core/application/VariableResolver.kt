@@ -4,12 +4,17 @@ object VariableResolver {
     // Names have no spaces, except dynamic variables: `$` + a letter, then `(args...)`, or for the built-in
     // ones with arguments a space and the rest (`$timestamp 1 d`, `$randomInt 1 6`), or `$processEnv NAME`.
     // Anything else (`{{$ x}}`, `{{$x := 1}}`, multi-line text) is left as written, as before.
+    // Possessive quantifiers keep matching linear (no catastrophic backtracking on an unclosed `{{$uuid` followed
+    // by a long run of whitespace). The captured name may therefore end in spaces/tabs; [nameOf] trims it.
+    // Whitespace before `(` is horizontal only, so a reference never spans lines.
     private val pattern = Regex(
-        """\{\{\s*(\${'$'}processEnv[ \t]+[^{}\s]+""" +
-            """|\${'$'}(?:(?:timestamp|isoTimestamp|randomInt|uuid|random\.\w+)(?:\s*\([^{}\r\n]*?|[ \t]+[^{}\r\n]*?)?""" +
-            """|[A-Za-z][\w.]*(?:\s*\([^{}\r\n]*?)?)""" +
-            """|[^{}\s]+)\s*}}""",
+        """\{\{\s*+(\${'$'}processEnv[ \t]++[^{}\s]++""" +
+            """|\${'$'}(?:(?:timestamp|isoTimestamp|randomInt|uuid|random\.\w++)(?:[ \t]*+\([^{}\r\n]*+|[ \t]++[^{}\r\n]*+)?""" +
+            """|[A-Za-z][\w.]*+(?:[ \t]*+\([^{}\r\n]*+)?)""" +
+            """|[^{}\s]++)\s*+}}""",
     )
+
+    private fun nameOf(m: MatchResult): String = m.groupValues[1].trimEnd()
 
     /**
      * Replaces `{{name}}` from [variables], or `{{$uuid}}`-style dynamic variables;
@@ -21,7 +26,7 @@ object VariableResolver {
 
     private fun resolve(text: String, variables: Map<String, String>, extra: (String) -> String?, dynamic: DynamicVariables, depth: Int): String =
         pattern.replace(text) { m ->
-            val name = m.groupValues[1]
+            val name = nameOf(m)
             val value = variables[name]
             when {
                 // Variable values (file variables) may themselves hold references; the depth limit stops cycles.
@@ -40,7 +45,7 @@ object VariableResolver {
         val result = base.toMutableMap()
         for ((name, value) in fileVariables) {
             result[name] = pattern.replace(value) { m ->
-                val ref = m.groupValues[1]
+                val ref = nameOf(m)
                 result[ref] ?: m.value
             }
         }
