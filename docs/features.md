@@ -20,9 +20,10 @@ GET {{base}}/me
 
 - `# @name x` or `// @name x` names a request (needed for chaining and `--request`).
 - Lines starting with `#` or `//` are comments.
-- A bare URL (no method) means `GET`. A trailing `HTTP/1.1` is ignored.
-- Headers follow the request line; a blank line starts the body.
-- A body consisting only of `< ./path` is read from that file, relative to the `.http` file.
+- A bare URL (no method) means `GET`. A trailing `HTTP/1.1` is ignored. An unknown method (`GTE http://x`) is a parse error naming the line, with a "did you mean" hint for a one-letter typo; a method with no URL is also an error. `GRAPHQL`, `WEBSOCKET` and `GRPC` are accepted as method words but sent as plain HTTP requests. Indented `?a=1` / `&b=2` lines after the request line extend the URL, and an indented header line without `:` continues the previous header value. `> handler` / `<> file` lines are ignored with a warning only when they come after the body; earlier ones are body text. `<@ path` reads the file but does not substitute variables inside it (warning).
+- Headers follow the request line; a header line without `:` is a parse error naming the line. A blank line starts the body.
+- A body consisting only of `< ./path` (note the space; `<html>` is plain text) is read from that file, relative to the `.http` file.
+- Response handlers (`> {% ... %}`, `> file`) and `<> file` redirects are not supported: they are not sent as body, and the parser reports a warning per ignored line (`HttpFile.warnings`; the CLI prints them on stderr).
 
 ## Variables
 
@@ -67,9 +68,11 @@ GET {{host}}/users/{{user}}
 `# @timeout 5`, `# @no-redirect`, `# @no-cookie-jar`. The parser records them on the request
 (`RequestTemplate.settings`); the following are honoured per request by the executor (carried as `HttpRequest.options`):
 
-- `# @timeout 5`: maximum time to wait for the response (the JDK `HttpRequest.timeout`: it bounds waiting for the response headers; it is not an overall deadline and does not cap time spent streaming the body). A whole, positive number: plain numbers are seconds, or add `ms`, `s` or `m` (any case, `@timeout 500ms`). Decimals (`1.5s`), `0`, negatives and values that overflow are rejected. May use `{{vars}}`.
+- `# @timeout 5`: maximum time for the whole exchange, response headers and body; on expiry the request is cancelled and fails with a timeout. Without `@timeout` there is no total limit (the default client only has a 30 s connect timeout). Interrupting the calling thread cancels the in-flight request and fails with a `CancellationException` (the interrupt flag is kept). A whole, positive number: plain numbers are seconds, or add `ms`, `s` or `m` (any case, `@timeout 500ms`). Decimals (`1.5s`), `0`, negatives and values that overflow are rejected. May use `{{vars}}`.
 - `# @no-redirect`: do not follow HTTP redirects (the 3xx response is returned). An optional value `true` (default) or `false` (`# @no-redirect false` keeps redirects); it may use `{{vars}}`; any other value is an error.
 - `# @proxy host:port`: send the request through that HTTP proxy. Forms: `host`, `host:port`, `http://host:port`, IPv6 as `[::1]:8080`; the port defaults to 80. Only plain HTTP proxies are supported: other schemes (`https://`, `socks://`) and credentials (`user:pass@host`) are rejected. May use `{{vars}}`.
+
+The JDK client controls `Host`, `Content-Length`, `Connection`, `Expect` and `Upgrade` itself, so user-set headers with these names are dropped silently. With the session cookie jar on (the default), redirects are followed by the session: an explicit `Cookie`, `Authorization` or `Proxy-Authorization` header is dropped when a redirect leaves the origin (scheme, host, port) but kept on same-origin hops, where the jar also adds its matching cookies, and `@timeout` is one deadline across all hops. With `@no-cookie-jar` the JDK client follows redirects itself and its handling of explicit credential headers is JDK-version dependent (not guaranteed here).
 
 Setting names are case-insensitive and unknown ones are ignored. Invalid values (including a blank `@proxy`) fail when the request is resolved with an `Invalid @timeout` / `@proxy` / `@no-redirect` error, before anything is sent. `JdkHttpExecutor` reuses one derived client per (redirect policy, proxy) and copies the injected client's connect timeout, SSL, authenticator, cookie handler, executor and HTTP version; request priority cannot be copied.
 

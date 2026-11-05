@@ -7,19 +7,17 @@ data class HttpToken(val kind: HttpTokenKind, val start: Int, val end: Int)
 
 /**
  * Line-based lexer for `.http` text, shared by the editor front ends. Where a line sits in a request is
- * the [mode]: [BEFORE] a request line, in the [HEADERS], or in the [BODY]. `###` resets to [BEFORE].
+ * the [Mode]: [Mode.BEFORE] a request line, in the [Mode.HEADERS], or in the [Mode.BODY]. `###` resets to [Mode.BEFORE].
  */
 object HttpLineLexer {
-    const val BEFORE = 0
-    const val HEADERS = 1
-    const val BODY = 2
+    /** Where a line sits in a request; [SCRIPT] is inside a multi-line `> {% ... %}` response handler. */
+    enum class Mode { BEFORE, HEADERS, BODY, SCRIPT }
 
-    private val methods = setOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "CONNECT")
-
-    class LineResult(val tokens: List<HttpToken>, val nextMode: Int)
+    class LineResult(val tokens: List<HttpToken>, val nextMode: Mode)
 
     /** Lexes one line (without its line break); token offsets are relative to the line start. */
-    fun lexLine(line: String, mode: Int): LineResult {
+    fun lexLine(rawLine: String, mode: Mode): LineResult {
+        val line = rawLine.removeSuffix("\r")
         val out = mutableListOf<HttpToken>()
         fun add(kind: HttpTokenKind, from: Int, to: Int) { if (from < to) out += HttpToken(kind, from, to) }
         // Splits {{variables}} out of a text segment.
@@ -38,25 +36,49 @@ object HttpLineLexer {
         val trimmed = line.trim()
         var next = mode
         when {
-            line.startsWith("###") -> { add(HttpTokenKind.SEPARATOR, 0, line.length); next = BEFORE }
-            trimmed.isEmpty() -> { add(HttpTokenKind.WHITESPACE, 0, line.length); if (mode == HEADERS) next = BODY }
-            mode == BODY ->
-                if (trimmed.startsWith("<")) add(HttpTokenKind.FILE_REF, 0, line.length)
-                else addText(HttpTokenKind.BODY_TEXT, 0, line.length)
+            line.startsWith("###") -> { add(HttpTokenKind.SEPARATOR, 0, line.length); next = Mode.BEFORE }
+            trimmed.isEmpty() -> { add(HttpTokenKind.WHITESPACE, 0, line.length); if (mode == Mode.HEADERS) next = Mode.BODY }
+            mode == Mode.SCRIPT -> { add(HttpTokenKind.COMMENT, 0, line.length); if (HttpLineSyntax.endsScript(line)) next = Mode.BODY }
+            mode == Mode.BODY && HttpLineSyntax.isFileReference(trimmed) -> add(HttpTokenKind.FILE_REF, 0, line.length)
+            // Handlers are recognised in HEADERS too (no blank line before them), as the parser does.
+            (mode == Mode.BODY || mode == Mode.HEADERS) && HttpLineSyntax.startsScript(trimmed) -> {
+                add(HttpTokenKind.COMMENT, 0, line.length)
+                next = if (HttpLineSyntax.endsScript(trimmed.substring(trimmed.indexOf("{%") + 2))) Mode.BODY else Mode.SCRIPT
+            }
+            (mode == Mode.BODY || mode == Mode.HEADERS) && (HttpLineSyntax.isResponseHandler(trimmed) || HttpLineSyntax.isResponseRedirect(trimmed)) -> {
+                add(HttpTokenKind.COMMENT, 0, line.length)
+                next = Mode.BODY
+            }
+            mode == Mode.BODY -> addText(HttpTokenKind.BODY_TEXT, 0, line.length)
             trimmed.startsWith("#") || trimmed.startsWith("//") -> add(HttpTokenKind.COMMENT, 0, line.length)
-            mode == BEFORE -> {
+            mode == Mode.BEFORE && HttpLineSyntax.fileVariable(trimmed) != null -> {
+                // `@name = value` is a file variable, not the request line; the mode stays BEFORE.
+                val indent = line.length - line.trimStart().length
+                val eq = line.indexOf('=', indent)
+                add(HttpTokenKind.WHITESPACE, 0, indent)
+                add(HttpTokenKind.HEADER_NAME, indent, line.substring(indent, eq).trimEnd().length + indent)
+                add(HttpTokenKind.COLON, eq, eq + 1)
+                addText(HttpTokenKind.HEADER_VALUE, eq + 1, line.length)
+            }
+            mode == Mode.BEFORE -> {
                 val indent = line.length - line.trimStart().length
                 add(HttpTokenKind.WHITESPACE, 0, indent)
-                val wordEnd = line.indexOf(' ', indent).let { if (it < 0) line.length else it }
                 var urlStart = indent
-                if (line.substring(indent, wordEnd).uppercase() in methods && wordEnd < line.length) {
+                val kind = HttpLineSyntax.classifyRequestLine(line)
+                if (kind is RequestLineKind.Method) {
+                    val wordEnd = indent + kind.word.length
                     add(HttpTokenKind.METHOD, indent, wordEnd)
                     val gap = line.length - line.substring(wordEnd).trimStart().length
                     add(HttpTokenKind.WHITESPACE, wordEnd, gap)
                     urlStart = gap
                 }
                 addText(HttpTokenKind.URL, urlStart, line.length)
-                next = HEADERS
+                next = Mode.HEADERS
+            }
+            HttpLineSyntax.isQueryContinuation(trimmed) -> {
+                val indent = line.length - line.trimStart().length
+                add(HttpTokenKind.WHITESPACE, 0, indent)
+                addText(HttpTokenKind.URL, indent, line.length)
             }
             else -> { // HEADERS
                 val colon = line.indexOf(':')
@@ -73,7 +95,7 @@ object HttpLineLexer {
     /** Lexes a whole document. Line breaks are not covered by any token. */
     fun tokenize(text: String): List<HttpToken> {
         val out = mutableListOf<HttpToken>()
-        var mode = BEFORE
+        var mode = Mode.BEFORE
         var offset = 0
         for (line in text.split('\n')) {
             val r = lexLine(line, mode)
@@ -87,10 +109,10 @@ object HttpLineLexer {
     /** Zero-based line numbers of the request lines (method + URL, or a bare URL meaning GET). */
     fun requestLines(text: String): Set<Int> {
         val out = mutableSetOf<Int>()
-        var mode = BEFORE
+        var mode = Mode.BEFORE
         text.split('\n').forEachIndexed { index, line ->
             val r = lexLine(line, mode)
-            if (mode == BEFORE && r.nextMode == HEADERS) out += index
+            if (mode == Mode.BEFORE && r.nextMode == Mode.HEADERS) out += index
             mode = r.nextMode
         }
         return out

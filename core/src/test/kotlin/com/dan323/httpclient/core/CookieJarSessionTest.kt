@@ -157,4 +157,31 @@ class CookieJarSessionTest {
         s.run(get("http://h/x", "no-cookie-jar" to ""), emptyMap())
         assertEquals(true, sent.single().options.followRedirects) // the executor keeps handling redirects itself
     }
+
+    @Test fun cancellationStopsRunAllInsteadOfContinuing() {
+        val calls = mutableListOf<String>()
+        val ex = HttpExecutor { req ->
+            calls += req.url
+            throw java.util.concurrent.CancellationException("cancelled")
+        }
+        val s = RequestSession(RequestRunner(ex) { error("no files") }, ex) { _, _ -> null }
+        assertFailsWith<java.util.concurrent.CancellationException> {
+            s.runAll(listOf(get("http://h/a"), get("http://h/b")), emptyMap())
+        }
+        assertEquals(listOf("http://h/a"), calls)
+    }
+
+    @Test fun timeoutIsOneDeadlineAcrossRedirectHops() {
+        val timeouts = mutableListOf<Long?>()
+        val ex = HttpExecutor { req ->
+            timeouts += req.options.timeoutMillis
+            Thread.sleep(150)
+            if (req.url.endsWith("/a")) HttpResponse(302, listOf(Header("Location", "/b")), ByteArray(0), 150)
+            else HttpResponse(200, emptyList(), ByteArray(0), 150)
+        }
+        val s = RequestSession(RequestRunner(ex) { error("no files") }, ex) { _, _ -> null }
+        s.run(get("http://h/a", "timeout" to "10"), emptyMap())
+        assertEquals(2, timeouts.size)
+        assertEquals(true, timeouts[1]!! < timeouts[0]!! - 100, "second hop gets the remaining time: $timeouts")
+    }
 }
