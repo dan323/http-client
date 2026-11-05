@@ -1,6 +1,7 @@
 package com.dan323.httpclient.core
 
 import com.dan323.httpclient.core.application.UndefinedVariableException
+import com.dan323.httpclient.core.application.VariableExpansionException
 import com.dan323.httpclient.core.application.VariableResolver
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -38,21 +39,71 @@ class VariableResolverTest {
     }
 
     @Test fun fileVariablesOverrideEnvironmentAndSeeEarlierOnes() {
-        val layered = VariableResolver.withFileVariables(
-            mapOf("host" to "env", "user" to "bob"),
-            linkedMapOf("host" to "http://{{user}}", "url" to "{{host}}/x"),
-        )
-        assertEquals("http://bob", layered["host"])
-        assertEquals("http://bob/x", layered["url"])
+        val env = mapOf("host" to "env", "user" to "bob")
+        val files = linkedMapOf("host" to "http://{{user}}", "url" to "{{host}}/x")
+        assertEquals("http://bob", VariableResolver.resolve("{{host}}", env, fileVariables = files))
+        assertEquals("http://bob/x", VariableResolver.resolve("{{url}}", env, fileVariables = files))
     }
 
     @Test fun fileVariableMayReferenceDynamicVariable() {
-        val vars = VariableResolver.withFileVariables(emptyMap(), mapOf("id" to "{{\$uuid}}"))
-        assertEquals(36, VariableResolver.resolve("{{id}}", vars).length)
+        assertEquals(36, VariableResolver.resolve("{{id}}", emptyMap(), fileVariables = mapOf("id" to "{{\$uuid}}")).length)
     }
 
-    @Test fun cyclicVariablesTerminate() {
-        assertFailsWith<UndefinedVariableException> { VariableResolver.resolve("{{a}}", mapOf("a" to "{{a}}{{b}}")) }
+    @Test fun fileVariableSelfReferenceMeansEnvironmentValue() {
+        assertEquals("http://env/api", VariableResolver.resolve("{{host}}", mapOf("host" to "env"), fileVariables = mapOf("host" to "http://{{host}}/api")))
+    }
+
+    @Test fun fileVariablesMayUseLaterOnes() {
+        val files = linkedMapOf("a" to "{{b}}!", "b" to "later")
+        assertEquals("later!", VariableResolver.resolve("{{a}}", emptyMap(), fileVariables = files))
+    }
+
+    @Test fun selfReferencingFileVariableFailsClearly() {
+        val e = assertFailsWith<VariableExpansionException> { VariableResolver.resolve("{{a}}", emptyMap(), fileVariables = mapOf("a" to "{{a}}")) }
+        assertTrue("Circular variable reference: a -> a" in e.message!!, e.message)
+    }
+
+    @Test fun mutuallyReferencingFileVariablesFailWithTheChain() {
+        val files = linkedMapOf("a" to "x{{b}}", "b" to "{{c}}", "c" to "{{a}}")
+        val e = assertFailsWith<VariableExpansionException> { VariableResolver.resolve("{{a}}", emptyMap(), fileVariables = files) }
+        assertTrue("a -> b -> c -> a" in e.message!!, e.message)
+    }
+
+    @Test fun cycleThroughATextWithOtherReferencesStillFails() {
+        assertFailsWith<VariableExpansionException> {
+            VariableResolver.resolve("{{a}}", mapOf("b" to "1"), fileVariables = mapOf("a" to "{{a}}{{b}}"))
+        }
+    }
+
+    @Test fun exponentialFanOutIsBoundedInsteadOfHanging() {
+        val files = linkedMapOf<String, String>()
+        for (i in 0 until 40) files["v$i"] = "{{v${i + 1}}}{{v${i + 1}}}"
+        files["v40"] = "x"
+        val e = assertFailsWith<VariableExpansionException> { VariableResolver.resolve("{{v0}}", emptyMap(), fileVariables = files) }
+        assertTrue("too large" in e.message!!, e.message)
+    }
+
+    @Test fun deepButLegitimateChainsStillResolve() {
+        val files = linkedMapOf<String, String>()
+        for (i in 0 until 50) files["v$i"] = "{{v${i + 1}}}"
+        files["v50"] = "end"
+        assertEquals("end", VariableResolver.resolve("{{v0}}", emptyMap(), fileVariables = files))
+    }
+
+    @Test fun environmentValuesWithBracesAreNotReinterpreted() {
+        assertEquals("pa{{ss", VariableResolver.resolve("{{secret}}", mapOf("secret" to "pa{{ss")))
+        assertEquals("a{{x}}b", VariableResolver.resolve("{{secret}}", mapOf("secret" to "a{{x}}b")))
+    }
+
+    @Test fun environmentValuesBroughtInThroughFileVariablesAreNotReinterpreted() {
+        val files = mapOf("auth" to "Bearer {{secret}}")
+        assertEquals("Bearer pa{{ss", VariableResolver.resolve("{{auth}}", mapOf("secret" to "pa{{ss"), fileVariables = files))
+        assertEquals("Bearer {{x}}", VariableResolver.resolve("{{auth}}", mapOf("secret" to "{{x}}"), fileVariables = files))
+    }
+
+    @Test fun extraAndDynamicResultsAreNotReinterpreted() {
+        assertEquals("{{x}}", VariableResolver.resolve("{{r.response.body}}", emptyMap(), extra = { "{{x}}" }))
+        assertEquals("{{x}}", VariableResolver.resolve("{{v}}", emptyMap(), extra = { "{{x}}" }, fileVariables = mapOf("v" to "{{r.response.body}}")))
     }
 
     @Test fun spacedBuiltInNamesMatchOverrides() {
