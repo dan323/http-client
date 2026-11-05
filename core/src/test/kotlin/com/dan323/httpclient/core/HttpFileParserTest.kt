@@ -177,4 +177,67 @@ class HttpFileParserTest {
     fun `clean files have no warnings`() {
         assertEquals(emptyList(), parser.parse("GET http://x\n").warnings)
     }
+
+    @Test
+    fun `query continuation lines extend the URL`() {
+        val r = parser.parse("GET http://x/a\n    ?a=1\n    &b=2\nAccept: */*\n").requests.single()
+        assertEquals("http://x/a?a=1&b=2", r.url)
+        assertEquals(1, r.headers.size)
+    }
+
+    @Test
+    fun `folded header values are joined`() {
+        val r = parser.parse("GET http://x\nX: a,\n   b\n").requests.single()
+        assertEquals("a, b", r.headers.single().value)
+    }
+
+    @Test
+    fun `GRAPHQL and WEBSOCKET are accepted methods`() {
+        assertEquals("GRAPHQL", parser.parse("GRAPHQL http://x/g\n").requests.single().method)
+        assertEquals("WEBSOCKET", parser.parse("WEBSOCKET ws://x/g\n").requests.single().method)
+    }
+
+    @Test
+    fun `a near-miss method suggests the real one`() {
+        val e = assertFailsWith<HttpParseException> { parser.parse("GTE http://x\n") }
+        assertEquals(true, "did you mean 'GET'" in e.message!!)
+    }
+
+    @Test
+    fun `a bare method without URL is a parse error`() {
+        val e = assertFailsWith<HttpParseException> { parser.parse("GET\n") }
+        assertEquals(1, e.line)
+    }
+
+    @Test
+    fun `quoted lines in the body are kept but trailing handlers are not`() {
+        val r = parser.parse("POST http://x\n\n> quoted\nreal\n\n> ./h.js\n").requests.single()
+        assertEquals("> quoted\nreal", (r.body as com.dan323.httpclient.core.domain.Body.Text).content)
+    }
+
+    @Test
+    fun `a handler directly after headers is not a header`() {
+        val f = parser.parse("GET http://x\nA: b\n> {% x:y %}\n")
+        assertEquals(1, f.requests.single().headers.size)
+        assertEquals(1, f.warnings.size)
+    }
+
+    @Test
+    fun `percent brace inside a script string does not end the script`() {
+        val f = parser.parse("POST http://x\n\nbody\n> {%\nvar s = '%}';\n%}\n")
+        assertEquals("body", (f.requests.single().body as com.dan323.httpclient.core.domain.Body.Text).content)
+    }
+
+    @Test
+    fun `an unterminated script warns`() {
+        val f = parser.parse("GET http://x\n\n> {%\nfoo\n")
+        assertEquals(true, f.warnings.any { "unterminated" in it })
+    }
+
+    @Test
+    fun `substituting file reference is a file body with a warning`() {
+        val f = parser.parse("POST http://x\n\n<@ ./f.json\n")
+        assertEquals(com.dan323.httpclient.core.domain.Body.FromFile("./f.json"), f.requests.single().body)
+        assertEquals(true, f.warnings.any { "<@" in it })
+    }
 }

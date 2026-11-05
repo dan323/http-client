@@ -104,4 +104,20 @@ class HttpLineLexerTest {
         assertEquals(parsed.map { it.method }, listOf("POST", "GET", "GET"))
         assertEquals(setOf(2, 8, 11), HttpLineLexer.requestLines(text))
     }
+
+    @Test
+    fun `handler right after headers enters script mode`() {
+        val tokens = HttpLineLexer.tokenize("GET http://x\nA: b\n> {%\nx: y\n%}\n")
+        assertEquals(HttpTokenKind.COMMENT, tokens.first { it.start >= 18 }.kind)
+        assertEquals(false, tokens.any { it.start >= 22 && it.kind == HttpTokenKind.HEADER_NAME })
+        assertEquals(HttpLineLexer.Mode.BODY, HttpLineLexer.lexLine("> {% a %}", HttpLineLexer.Mode.HEADERS).nextMode)
+    }
+
+    @Test
+    fun `query continuation is URL and CRLF is excluded from tokens`() {
+        val text = "GET http://x\r\n  ?a=1\r\nA: b\r\n"
+        val t = HttpLineLexer.tokenize(text)
+        assertEquals(true, t.none { text.substring(it.start, it.end).contains('\r') })
+        assertEquals("?a=1", text.substring(t.first { it.kind == HttpTokenKind.URL && it.start > 12 }.start, t.first { it.kind == HttpTokenKind.URL && it.start > 12 }.end))
+    }
 }

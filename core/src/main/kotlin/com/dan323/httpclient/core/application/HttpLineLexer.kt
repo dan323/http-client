@@ -16,7 +16,8 @@ object HttpLineLexer {
     class LineResult(val tokens: List<HttpToken>, val nextMode: Mode)
 
     /** Lexes one line (without its line break); token offsets are relative to the line start. */
-    fun lexLine(line: String, mode: Mode): LineResult {
+    fun lexLine(rawLine: String, mode: Mode): LineResult {
+        val line = rawLine.removeSuffix("\r")
         val out = mutableListOf<HttpToken>()
         fun add(kind: HttpTokenKind, from: Int, to: Int) { if (from < to) out += HttpToken(kind, from, to) }
         // Splits {{variables}} out of a text segment.
@@ -38,17 +39,17 @@ object HttpLineLexer {
             line.startsWith("###") -> { add(HttpTokenKind.SEPARATOR, 0, line.length); next = Mode.BEFORE }
             trimmed.isEmpty() -> { add(HttpTokenKind.WHITESPACE, 0, line.length); if (mode == Mode.HEADERS) next = Mode.BODY }
             mode == Mode.SCRIPT -> { add(HttpTokenKind.COMMENT, 0, line.length); if (HttpLineSyntax.endsScript(line)) next = Mode.BODY }
-            mode == Mode.BODY ->
-                when {
-                    HttpLineSyntax.isFileReference(trimmed) -> add(HttpTokenKind.FILE_REF, 0, line.length)
-                    HttpLineSyntax.startsScript(trimmed) -> {
-                        add(HttpTokenKind.COMMENT, 0, line.length)
-                        if (!HttpLineSyntax.endsScript(trimmed.substring(trimmed.indexOf("{%") + 2))) next = Mode.SCRIPT
-                    }
-                    HttpLineSyntax.isResponseHandler(trimmed) || HttpLineSyntax.isResponseRedirect(trimmed) ->
-                        add(HttpTokenKind.COMMENT, 0, line.length)
-                    else -> addText(HttpTokenKind.BODY_TEXT, 0, line.length)
-                }
+            mode == Mode.BODY && HttpLineSyntax.isFileReference(trimmed) -> add(HttpTokenKind.FILE_REF, 0, line.length)
+            // Handlers are recognised in HEADERS too (no blank line before them), as the parser does.
+            (mode == Mode.BODY || mode == Mode.HEADERS) && HttpLineSyntax.startsScript(trimmed) -> {
+                add(HttpTokenKind.COMMENT, 0, line.length)
+                next = if (HttpLineSyntax.endsScript(trimmed.substring(trimmed.indexOf("{%") + 2))) Mode.BODY else Mode.SCRIPT
+            }
+            (mode == Mode.BODY || mode == Mode.HEADERS) && (HttpLineSyntax.isResponseHandler(trimmed) || HttpLineSyntax.isResponseRedirect(trimmed)) -> {
+                add(HttpTokenKind.COMMENT, 0, line.length)
+                next = Mode.BODY
+            }
+            mode == Mode.BODY -> addText(HttpTokenKind.BODY_TEXT, 0, line.length)
             trimmed.startsWith("#") || trimmed.startsWith("//") -> add(HttpTokenKind.COMMENT, 0, line.length)
             mode == Mode.BEFORE && HttpLineSyntax.fileVariable(trimmed) != null -> {
                 // `@name = value` is a file variable, not the request line; the mode stays BEFORE.
@@ -73,6 +74,11 @@ object HttpLineLexer {
                 }
                 addText(HttpTokenKind.URL, urlStart, line.length)
                 next = Mode.HEADERS
+            }
+            HttpLineSyntax.isQueryContinuation(trimmed) -> {
+                val indent = line.length - line.trimStart().length
+                add(HttpTokenKind.WHITESPACE, 0, indent)
+                addText(HttpTokenKind.URL, indent, line.length)
             }
             else -> { // HEADERS
                 val colon = line.indexOf(':')

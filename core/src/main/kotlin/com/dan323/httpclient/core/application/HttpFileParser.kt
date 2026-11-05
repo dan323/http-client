@@ -57,10 +57,16 @@ class HttpFileParser : ParseHttpFile {
             is RequestLineKind.Method -> kind.word.uppercase() to HttpLineSyntax.stripHttpVersion(kind.rest)
             // A bare URL means GET, as in IntelliJ.
             RequestLineKind.BareUrl -> "GET" to first.substringBefore(" HTTP/")
-            is RequestLineKind.UnknownMethod ->
-                throw HttpParseException(lineNo(i), "unknown HTTP method '${kind.word}'")
-        }
+            is RequestLineKind.UnknownMethod -> throw HttpParseException(
+                lineNo(i),
+                "unknown HTTP method '${kind.word}'" + (HttpLineSyntax.suggestMethod(kind.word)?.let { " (did you mean '$it'?)" } ?: ""),
+            )
+            is RequestLineKind.MissingUrl -> throw HttpParseException(lineNo(i), "request line '${kind.word}' has no URL")
+        }.let { it.first to it.second.trim() }
         i++
+        // Indented `?a=1` / `&b=2` lines continue the URL.
+        var fullUrl = url
+        while (i < lines.size && HttpLineSyntax.isQueryContinuation(lines[i].trim())) { fullUrl += lines[i].trim(); i++ }
 
         val headers = mutableListOf<Header>()
         while (i < lines.size && lines[i].isNotBlank()) {
@@ -68,37 +74,56 @@ class HttpFileParser : ParseHttpFile {
             if (HttpLineSyntax.isResponseHandler(l) || HttpLineSyntax.isResponseRedirect(l)) break // handler without a blank line
             if (!HttpLineSyntax.isComment(l)) {
                 val idx = l.indexOf(':')
+                if (idx < 0 && lines[i].first().isWhitespace() && headers.isNotEmpty()) {
+                    // Folded header value continues the previous header.
+                    val last = headers.removeLast()
+                    headers += Header(last.name, last.value + " " + l)
+                    i++; continue
+                }
                 if (idx <= 0) throw HttpParseException(lineNo(i), "header line without ':' (expected 'Name: value'): $l")
                 headers += Header(l.substring(0, idx).trim(), l.substring(idx + 1).trim())
             }
             i++
         }
 
-        // Response handlers (`> {% ... %}`, `> file`) and `<> file` redirects are not supported: warn and keep them out of the body.
-        val bodyLines = mutableListOf<String>()
-        var inScript = false
-        for (j in (if (i < lines.size && lines[i].isNotBlank()) i else i + 1) until lines.size) {
+        // Response handlers (`> {% ... %}`, `> file`) and `<> file` redirects are not supported. They only count at the
+        // end of the block; earlier `> ` / `<> ` lines are body text. Warn about the ones that are ignored.
+        val from = if (i < lines.size && lines[i].isNotBlank()) i else i + 1
+        class Handler(val first: Int, var last: Int, val message: String)
+        val handlers = mutableListOf<Handler>()
+        var script: Handler? = null
+        for (j in from until lines.size) {
             val line = lines[j]
             val t = line.trim()
+            val open = script
             when {
-                inScript -> if (HttpLineSyntax.endsScript(line)) inScript = false
+                open != null -> { open.last = j; if (HttpLineSyntax.endsScript(line)) script = null }
                 HttpLineSyntax.startsScript(t) -> {
-                    warnings += "Line ${lineNo(j)}: response handler script ignored (not supported)"
-                    inScript = !HttpLineSyntax.endsScript(t.substring(t.indexOf("{%") + 2))
+                    val h = Handler(j, j, "Line ${lineNo(j)}: response handler script ignored (not supported)")
+                    handlers += h
+                    if (!HttpLineSyntax.endsScript(t.substring(t.indexOf("{%") + 2))) script = h
                 }
-                HttpLineSyntax.isResponseHandler(t) -> warnings += "Line ${lineNo(j)}: response handler '$t' ignored (not supported)"
-                HttpLineSyntax.isResponseRedirect(t) -> warnings += "Line ${lineNo(j)}: response redirect '$t' ignored (not supported)"
-                else -> bodyLines += line
+                HttpLineSyntax.isResponseHandler(t) -> handlers += Handler(j, j, "Line ${lineNo(j)}: response handler '$t' ignored (not supported)")
+                HttpLineSyntax.isResponseRedirect(t) -> handlers += Handler(j, j, "Line ${lineNo(j)}: response redirect '$t' ignored (not supported)")
             }
         }
+        script?.let { warnings += "Line ${lineNo(it.first)}: unterminated response handler script (missing '%}')" }
+        val handlerLines = handlers.flatMap { it.first..it.last }.toSet()
+        val lastBody = (from until lines.size).lastOrNull { it !in handlerLines && lines[it].isNotBlank() } ?: -1
+        val bodyLines = mutableListOf<String>()
+        for (j in from until lines.size) if (j !in handlerLines || j < lastBody) bodyLines += lines[j]
+        handlers.filter { it.first > lastBody }.forEach { warnings += it.message }
         while (bodyLines.isNotEmpty() && bodyLines.last().isBlank()) bodyLines.removeLast()
         val body = when {
             bodyLines.isEmpty() -> null
             bodyLines.size == 1 && HttpLineSyntax.isFileReference(bodyLines.first().trim()) ->
-                Body.FromFile(bodyLines.first().trim().removePrefix("<").trim())
+                bodyLines.first().trim().let { t ->
+                    if (t.startsWith("<@")) warnings += "Line ${lineNo(from)}: '<@' file is sent as-is; variables inside it are not substituted"
+                    Body.FromFile(t.removePrefix("<").removePrefix("@").trim())
+                }
             else -> Body.Text(bodyLines.joinToString("\n"))
         }
-        return RequestTemplate(name, method, url, headers, body, startLine, settings, fileVariables.toMap(), assertions)
+        return RequestTemplate(name, method, fullUrl, headers, body, startLine, settings, fileVariables.toMap(), assertions)
     }
 
     /**
