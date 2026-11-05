@@ -20,7 +20,7 @@ GET {{base}}/me
 
 - `# @name x` or `// @name x` names a request (needed for chaining and `--request`).
 - Lines starting with `#` or `//` are comments.
-- A bare URL (no method) means `GET`. A trailing `HTTP/1.1` is ignored. An unknown method (`GTE http://x`) is a parse error naming the line.
+- A bare URL (no method) means `GET`. A trailing `HTTP/1.1` is ignored. An unknown method (`GTE http://x`) is a parse error naming the line, with a "did you mean" hint for a one-letter typo; a method with no URL is also an error. `GRAPHQL`, `WEBSOCKET` and `GRPC` are accepted as method words but sent as plain HTTP requests. Indented `?a=1` / `&b=2` lines after the request line extend the URL, and an indented header line without `:` continues the previous header value. `> handler` / `<> file` lines are ignored with a warning only when they come after the body; earlier ones are body text. `<@ path` reads the file but does not substitute variables inside it (warning).
 - Headers follow the request line; a header line without `:` is a parse error naming the line. A blank line starts the body.
 - A body consisting only of `< ./path` (note the space; `<html>` is plain text) is read from that file, relative to the `.http` file.
 - Response handlers (`> {% ... %}`, `> file`) and `<> file` redirects are not supported: they are not sent as body, and the parser reports a warning per ignored line (`HttpFile.warnings`; the CLI prints them on stderr).

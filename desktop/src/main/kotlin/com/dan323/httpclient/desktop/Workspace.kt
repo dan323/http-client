@@ -21,6 +21,10 @@ object Workspace {
     fun parse(text: String): List<RequestTemplate> =
         try { HttpFileParser().parse(text).requests } catch (e: HttpParseException) { emptyList() }
 
+    /** The parse error for [text] (with its line number), or null when it parses; shown instead of a silently empty list. */
+    fun parseError(text: String): String? =
+        try { HttpFileParser().parse(text); null } catch (e: HttpParseException) { e.message }
+
     /** Environment names from `http-client.env.json` next to [file]. */
     fun environmentNames(file: Path): List<String> =
         JsonEnvironmentRepository(file.toAbsolutePath().parent).load().map { it.name }

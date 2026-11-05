@@ -44,10 +44,12 @@ class HttpLexer : LexerBase() {
 
     private fun lexLine() {
         val lineStart = pos
-        var contentEnd = lineStart
-        while (contentEnd < endOffset && buffer[contentEnd] != '\n') contentEnd++
-        val lineEnd = if (contentEnd < endOffset) contentEnd + 1 else contentEnd
-        val result = HttpLineLexer.lexLine(buffer.subSequence(lineStart, contentEnd).toString(), mode)
+        var rawEnd = lineStart
+        while (rawEnd < endOffset && buffer[rawEnd] != '\n') rawEnd++
+        val lineEnd = if (rawEnd < endOffset) rawEnd + 1 else rawEnd
+        val content = buffer.subSequence(lineStart, rawEnd).toString().removeSuffix("\r")
+        val result = HttpLineLexer.lexLine(content, mode)
+        val contentEnd = lineStart + content.length
         result.tokens.forEachIndexed { i, t ->
             pending += Tok(elementType(t.kind), lineStart + t.start, lineStart + t.end, if (i == 0) mode.ordinal else mode.ordinal + modes.size)
         }
