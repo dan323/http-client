@@ -140,7 +140,14 @@ class RequestSession(
         val vars = VariableResolver.withFileVariables(variables, r.fileVariables)
         return r.assertions.map { a ->
             try {
-                assertionEvaluator.evaluate(runner.resolveText(a, vars, ::reference), response).copy(assertion = a)
+                val resolved = runner.resolveText(a, vars, ::reference)
+                val result = assertionEvaluator.evaluate(resolved, response).copy(assertion = a)
+                // Substituted values (env, variables, chained responses) may be secrets: keep them out of the result.
+                if (resolved == a) result
+                else result.copy(
+                    expected = null,
+                    message = if (result.passed) result.message else "failed (expected value contains substitutions, not shown)",
+                )
             } catch (e: UndefinedVariableException) {
                 AssertionResult(a, false, null, null, "invalid assertion: ${e.message}")
             } catch (e: InvalidDynamicVariableException) {

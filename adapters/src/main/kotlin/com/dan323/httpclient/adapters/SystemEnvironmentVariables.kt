@@ -4,16 +4,22 @@ import com.dan323.httpclient.core.port.out.EnvironmentVariables
 
 /**
  * Reads the OS process environment for `{{$env.NAME}}`, but only the names in [allowed]: an untrusted
- * `.http` file must not be able to send `AWS_SECRET_ACCESS_KEY` somewhere. Names are matched exactly.
+ * `.http` file must not be able to send `AWS_SECRET_ACCESS_KEY` somewhere. Allowlist names are matched exactly; on Windows the lookup of an allowed name ignores case.
  */
 class SystemEnvironmentVariables(
     private val allowed: Set<String> = emptySet(),
     override val allowHint: String = DEFAULT_HINT,
     private val source: () -> Map<String, String> = System::getenv,
+    private val windows: Boolean = System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true),
 ) : EnvironmentVariables {
     override fun isAllowed(name: String): Boolean = name in allowed
 
-    override fun get(name: String): String? = if (isAllowed(name)) source()[name] else null
+    override fun get(name: String): String? {
+        if (!isAllowed(name)) return null
+        val env = source()
+        // Windows environment names are case-insensitive (`Path` vs `PATH`); the allowlist itself stays exact.
+        return env[name] ?: if (windows) env.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value else null
+    }
 
     companion object {
         /** System property listing the allowed names (comma separated); used by the desktop app and the IDE plugin. */

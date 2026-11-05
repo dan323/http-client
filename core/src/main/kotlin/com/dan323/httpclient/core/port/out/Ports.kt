@@ -32,8 +32,8 @@ fun interface EnvironmentVariables {
     /** Value of [name], or null if it is not set. Only called when [isAllowed] is true. */
     fun get(name: String): String?
 
-    /** Whether `.http` files may read [name]. */
-    fun isAllowed(name: String): Boolean = true
+    /** Whether `.http` files may read [name]. Denies by default: implementations must opt names in. */
+    fun isAllowed(name: String): Boolean = false
 
     /** Tells the user how to allow a variable; shown in the error for a name that is not allowed. */
     val allowHint: String get() = "allow it in the front end's environment-variable allowlist"

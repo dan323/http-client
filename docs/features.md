@@ -198,9 +198,9 @@ More (names modelled on the JetBrains HTTP Client and Postman; see the notes bel
   (`1`, `-2`, `+5`) and one of `ms`, `s`, `m` (minutes), `h`, `d`, `w`, `M` (calendar months), `y` (calendar years);
   the space between them is optional (`90s`). Units are case-sensitive (`m` minutes vs `M` months). Month and year
   offsets are calendar arithmetic in UTC and clamp to the end of a shorter month (31 Jan + 1 M = 29 Feb 2024).
-  This mirrors the JetBrains syntax; JetBrains' `$datetime` / `$localDatetime` are not supported.
+  The syntax is loosely based on JetBrains' offsets and may not match it exactly; JetBrains' `$datetime` / `$localDatetime` are not supported.
 - Arguments in `$random.*(...)` are comma separated; spaces are allowed. Wrong argument counts, non-numbers,
-  `from` greater than `to`, an unknown offset unit or a length outside 0..10000 fail (in an `# @assert` line that
+  `from` greater than `to` (and, for `$random.float`, equal to it), an unknown offset unit or a length outside 0..10000 fail (in an `# @assert` line that
   makes only that assertion invalid) with
   `Invalid dynamic variable {{...}}: <reason>`.
 - An unknown `$name` or an unset `$env.NAME` fails as `Undefined variable: <name>`.

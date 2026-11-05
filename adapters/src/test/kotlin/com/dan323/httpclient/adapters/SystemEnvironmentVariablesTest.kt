@@ -21,6 +21,15 @@ class SystemEnvironmentVariablesTest {
         assertNull(SystemEnvironmentVariables(setOf("B"), source = source).get("B"))
     }
 
+    @Test fun windowsLookupIgnoresCaseButAllowlistIsExact() {
+        val src = { mapOf("Path" to "p") }
+        val win = SystemEnvironmentVariables(setOf("PATH"), source = src, windows = true)
+        assertEquals("p", win.get("PATH"))
+        assertFalse(win.isAllowed("path"))
+        assertNull(win.get("path"))
+        assertNull(SystemEnvironmentVariables(setOf("PATH"), source = src, windows = false).get("PATH"))
+    }
+
     @Test fun allowsNothingByDefault() {
         val env = SystemEnvironmentVariables(source = source)
         assertFalse(env.isAllowed("A"))
@@ -45,6 +54,9 @@ class SystemEnvironmentVariablesTest {
         val name = listOf("PATH", "Path").firstOrNull { System.getenv(it) != null } ?: return
         assertEquals(System.getenv(name), SystemEnvironmentVariables(setOf(name)).get(name))
         assertNull(SystemEnvironmentVariables().get(name))
-        assertNull(SystemEnvironmentVariables(setOf("HTTPC_SURELY_UNSET_X")).get("HTTPC_SURELY_UNSET_X"))
+        // Only meaningful when the variable really is unset in this process.
+        if (System.getenv("HTTPC_SURELY_UNSET_X") == null) {
+            assertNull(SystemEnvironmentVariables(setOf("HTTPC_SURELY_UNSET_X")).get("HTTPC_SURELY_UNSET_X"))
+        }
     }
 }

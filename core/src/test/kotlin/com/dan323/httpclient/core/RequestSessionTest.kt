@@ -81,6 +81,22 @@ class RunAllTest {
         assertEquals("status == {{\$random.integer(5, 1)}}", outcome.assertions[1].assertion)
     }
 
+    @Test fun assertionUsesInjectedAllowedEnvAndHidesResolvedValue() {
+        val env = object : com.dan323.httpclient.core.port.out.EnvironmentVariables {
+            override fun get(name: String) = mapOf("CODE" to "204", "SECRET" to "hunter2")[name]
+            override fun isAllowed(name: String) = name == "CODE" || name == "SECRET"
+        }
+        val dyn = com.dan323.httpclient.core.application.DynamicVariables(env = env)
+        val session = RequestSession(RequestRunner(ok, { error("no files") }, dyn), ok) { _, _ -> null }
+        val t = RequestTemplate(null, "GET", "http://h", assertions = listOf("status == {{\$env.CODE}}", "status == {{\$env.SECRET}}"))
+        val outcome = session.runAll(listOf(t), emptyMap()).single() as com.dan323.httpclient.core.application.RunOutcome.Success
+        assertEquals(listOf(true, false), outcome.assertions.map { it.passed })
+        outcome.assertions.forEach { r ->
+            assertEquals(null, r.expected)
+            assertEquals(false, "hunter2" in r.message)
+        }
+    }
+
     @Test fun malformedDynamicVariableInFileVariableFailsTheRequestClearly() {
         val t = RequestTemplate(null, "GET", "http://h/{{v}}", fileVariables = mapOf("v" to "{{\$random.integer(5, 1)}}"))
         val outcome = okSession.runAll(listOf(t), emptyMap()).single() as com.dan323.httpclient.core.application.RunOutcome.Failure

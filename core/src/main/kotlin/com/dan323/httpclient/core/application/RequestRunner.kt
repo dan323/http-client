@@ -52,26 +52,28 @@ class RequestRunner(
      */
     private fun options(t: RequestTemplate, vars: Map<String, String>, extra: (String) -> String?): RequestOptions {
         val s = t.settings.mapKeys { it.key.lowercase() }
-        fun value(name: String) = s[name]?.let { VariableResolver.resolve(it, vars, extra, dynamic).trim() }
+        // Validation errors quote the setting as written (`{{t}}`), never the resolved value, which may be a secret.
+        fun <T> setting(name: String, parse: (resolved: String, written: String) -> T): T? =
+            s[name]?.let { written -> parse(VariableResolver.resolve(written, vars, extra, dynamic).trim(), written.trim()) }
         return RequestOptions(
-            timeoutMillis = value("timeout")?.let(::parseTimeout),
-            followRedirects = value("no-redirect")?.let { parseFlag("no-redirect", it) }?.not() ?: true,
-            proxy = value("proxy")?.let(::parseProxy),
-            useCookieJar = value("no-cookie-jar")?.let { parseFlag("no-cookie-jar", it) }?.not() ?: true,
+            timeoutMillis = setting("timeout", ::parseTimeout),
+            followRedirects = setting("no-redirect") { v, w -> parseFlag("no-redirect", v, w) }?.not() ?: true,
+            proxy = setting("proxy", ::parseProxy),
+            useCookieJar = setting("no-cookie-jar") { v, w -> parseFlag("no-cookie-jar", v, w) }?.not() ?: true,
         )
     }
 
-    private fun parseFlag(name: String, raw: String): Boolean = when (raw.lowercase()) {
+    private fun parseFlag(name: String, raw: String, written: String): Boolean = when (raw.lowercase()) {
         "", "true" -> true
         "false" -> false
-        else -> throw IllegalArgumentException("Invalid @$name value: '$raw' (expected true or false)")
+        else -> throw IllegalArgumentException("Invalid @$name value: '$written' (expected true or false)")
     }
 
     private val timeoutPattern = Regex("""(\d+)\s*(ms|s|m)?""", RegexOption.IGNORE_CASE)
 
-    private fun parseTimeout(raw: String): Long {
-        val m = timeoutPattern.matchEntire(raw) ?: throw IllegalArgumentException("Invalid @timeout value: '$raw'")
-        val n = m.groupValues[1].toLongOrNull() ?: throw IllegalArgumentException("Invalid @timeout value: '$raw' (too large)")
+    private fun parseTimeout(raw: String, written: String): Long {
+        val m = timeoutPattern.matchEntire(raw) ?: throw IllegalArgumentException("Invalid @timeout value: '$written'")
+        val n = m.groupValues[1].toLongOrNull() ?: throw IllegalArgumentException("Invalid @timeout value: '$written' (too large)")
         val factor = when (m.groupValues[2].lowercase()) {
             "ms" -> 1L
             "m" -> 60_000L
@@ -80,14 +82,14 @@ class RequestRunner(
         val millis = try {
             Math.multiplyExact(n, factor)
         } catch (e: ArithmeticException) {
-            throw IllegalArgumentException("Invalid @timeout value: '$raw' (too large)")
+            throw IllegalArgumentException("Invalid @timeout value: '$written' (too large)")
         }
-        require(millis > 0) { "Invalid @timeout value: '$raw' (must be greater than zero)" }
+        require(millis > 0) { "Invalid @timeout value: '$written' (must be greater than zero)" }
         return millis
     }
 
-    private fun parseProxy(raw: String): ProxyAddress {
-        fun bad(why: String): Nothing = throw IllegalArgumentException("Invalid @proxy value: '$raw' ($why)")
+    private fun parseProxy(raw: String, written: String): ProxyAddress {
+        fun bad(why: String): Nothing = throw IllegalArgumentException("Invalid @proxy value: '$written' ($why)")
         if (raw.isEmpty()) bad("empty")
         val scheme = raw.substringBefore("://", "").lowercase()
         if (scheme.isNotEmpty() && scheme != "http") bad("only http proxies are supported")

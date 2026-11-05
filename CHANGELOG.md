@@ -15,6 +15,7 @@ All notable changes to this project are documented here. The format follows
 - Parser: `@var = value` file variables (override environment values, may reference other variables) and `# @setting [value]` directives, exposed as `RequestTemplate.fileVariables` / `settings` and `HttpFile.variables` (T1).
 
 ### Fixed
+- T6 review fixes: `$random.float` rejects equal endpoints (range is from-inclusive, to-exclusive); `EnvironmentVariables.isAllowed` denies by default; `$env` lookup is case-insensitive on Windows (allowlist stays exact); setting validation errors and assertion results no longer echo resolved `{{variables}}` (a failing assertion with substitutions reports `failed (expected value contains substitutions, not shown)`); the variable regex is linear on unclosed `{{$...` followed by long whitespace, never spans lines before `(`, and `{{$uuid }}` matches a `$uuid` override.
 - IntelliJ plugin: stop bundling kotlinx-serialization in the plugin zip (the IDE provides it), avoiding a class conflict.
 
 ### Changed
