@@ -20,9 +20,10 @@ GET {{base}}/me
 
 - `# @name x` or `// @name x` names a request (needed for chaining and `--request`).
 - Lines starting with `#` or `//` are comments.
-- A bare URL (no method) means `GET`. A trailing `HTTP/1.1` is ignored.
-- Headers follow the request line; a blank line starts the body.
-- A body consisting only of `< ./path` is read from that file, relative to the `.http` file.
+- A bare URL (no method) means `GET`. A trailing `HTTP/1.1` is ignored. An unknown method (`GTE http://x`) is a parse error naming the line.
+- Headers follow the request line; a header line without `:` is a parse error naming the line. A blank line starts the body.
+- A body consisting only of `< ./path` (note the space; `<html>` is plain text) is read from that file, relative to the `.http` file.
+- Response handlers (`> {% ... %}`, `> file`) and `<> file` redirects are not supported: they are not sent as body, and the parser reports a warning per ignored line (`HttpFile.warnings`; the CLI prints them on stderr).
 
 ## Variables
 

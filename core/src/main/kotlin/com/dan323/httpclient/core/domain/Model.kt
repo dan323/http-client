@@ -66,7 +66,12 @@ data class HttpResponse(
     fun bodyAsString(): String = body.toString(Charsets.UTF_8)
 }
 
-data class HttpFile(val requests: List<RequestTemplate>, val variables: Map<String, String> = emptyMap())
+/** [warnings] are non-fatal parse notes (e.g. ignored response handlers), each prefixed with its 1-based line. */
+data class HttpFile(
+    val requests: List<RequestTemplate>,
+    val variables: Map<String, String> = emptyMap(),
+    val warnings: List<String> = emptyList(),
+)
 
 /** Named variable set, e.g. `dev` from http-client.env.json. */
 data class Environment(val name: String, val variables: Map<String, String>)

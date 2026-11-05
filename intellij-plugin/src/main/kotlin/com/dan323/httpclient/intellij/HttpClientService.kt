@@ -8,6 +8,7 @@ import com.dan323.httpclient.adapters.SystemEnvironmentVariables
 import com.dan323.httpclient.core.application.DynamicVariables
 import com.dan323.httpclient.adapters.prettyJson
 import com.dan323.httpclient.core.application.HttpFileParser
+import com.dan323.httpclient.core.application.HttpParseException
 import com.dan323.httpclient.core.application.RequestRunner
 import com.dan323.httpclient.core.application.RequestSession
 import com.dan323.httpclient.core.application.RunOutcome
@@ -68,7 +69,9 @@ class HttpClientService(private val project: Project) {
      * The request at the caret is always sent. Blocking.
      */
     fun run(file: Path, text: String, caretLine: Int) {
-        val requests = HttpFileParser().parse(text).requests
+        val requests = try { HttpFileParser().parse(text).requests } catch (e: HttpParseException) {
+            return publish(Report(message = e.message ?: "Could not parse the file."))
+        }
         val current = requests.lastOrNull { it.startLine <= caretLine }
             ?: return publish(Report(message = "No request found at the caret."))
         val dir = file.toAbsolutePath().parent

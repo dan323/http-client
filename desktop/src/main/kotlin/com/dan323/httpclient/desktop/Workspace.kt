@@ -7,6 +7,7 @@ import com.dan323.httpclient.adapters.LocalFileReader
 import com.dan323.httpclient.adapters.SystemEnvironmentVariables
 import com.dan323.httpclient.core.application.DynamicVariables
 import com.dan323.httpclient.core.application.HttpFileParser
+import com.dan323.httpclient.core.application.HttpParseException
 import com.dan323.httpclient.core.application.RequestRunner
 import com.dan323.httpclient.core.application.RequestSession
 import com.dan323.httpclient.core.application.RunOutcome
@@ -16,7 +17,9 @@ import java.nio.file.Path
 
 /** UI-independent operations of the desktop app. */
 object Workspace {
-    fun parse(text: String): List<RequestTemplate> = HttpFileParser().parse(text).requests
+    /** Lenient view for the editor's request list: a file that does not parse (e.g. mid-typing) lists nothing. */
+    fun parse(text: String): List<RequestTemplate> =
+        try { HttpFileParser().parse(text).requests } catch (e: HttpParseException) { emptyList() }
 
     /** Environment names from `http-client.env.json` next to [file]. */
     fun environmentNames(file: Path): List<String> =
@@ -34,7 +37,7 @@ object Workspace {
         onOutcome: (RunOutcome) -> Unit = {},
     ): List<RunOutcome> {
         val dir = file.toAbsolutePath().parent
-        val requests = parse(text)
+        val requests = HttpFileParser().parse(text).requests
         val selected = if (index == null) requests else withDependencies(requests, listOfNotNull(requests.getOrNull(index)))
         val variables = environment
             ?.let { name -> JsonEnvironmentRepository(dir).load().firstOrNull { it.name == name }?.variables }
