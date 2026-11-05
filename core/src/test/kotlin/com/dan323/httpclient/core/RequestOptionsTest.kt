@@ -77,8 +77,9 @@ class RequestOptionsTest {
 
     @Test
     fun `setting names are case-insensitive and unknown settings are ignored`() {
-        val o = options(mapOf("TimeOut" to "1", "no-cookie-jar" to "", "whatever" to "x"))
-        assertEquals(RequestOptions(timeoutMillis = 1000), o)
+        val o = options(mapOf("TimeOut" to "1", "NO-Cookie-Jar" to "", "whatever" to "x"))
+        assertEquals(RequestOptions(timeoutMillis = 1000, useCookieJar = false), o)
+        assertEquals(RequestOptions(), options(mapOf("whatever" to "x", "no-cookie-jar" to "false")))
     }
 
     @Test
