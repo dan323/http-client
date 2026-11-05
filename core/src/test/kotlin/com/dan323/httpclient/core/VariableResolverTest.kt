@@ -54,4 +54,27 @@ class VariableResolverTest {
     @Test fun cyclicVariablesTerminate() {
         assertFailsWith<UndefinedVariableException> { VariableResolver.resolve("{{a}}", mapOf("a" to "{{a}}{{b}}")) }
     }
+
+    @Test fun spacedBuiltInNamesMatchOverrides() {
+        assertEquals("fixed", VariableResolver.resolve("{{\$uuid }}", mapOf("\$uuid" to "fixed")))
+        assertEquals("fixed", VariableResolver.resolve("{{ \$random.email  \t}}", mapOf("\$random.email" to "fixed")))
+        assertEquals("fixed", VariableResolver.resolve("{{\$randomInt }}", mapOf("\$randomInt" to "fixed")))
+    }
+
+    @Test fun dynamicReferenceNeverSpansLines() {
+        val text = "{{\$uuid\n(}}"
+        assertEquals(text, VariableResolver.resolve(text, emptyMap()))
+        val text2 = "{{\$random.integer\n(1, 2)}}"
+        assertEquals(text2, VariableResolver.resolve(text2, emptyMap()))
+    }
+
+    @Test
+    fun unclosedDynamicReferenceWithLongWhitespaceIsLinear() {
+        val start = System.nanoTime()
+        val spaces = " ".repeat(200_000)
+        for (text in listOf("{{\$uuid$spaces", "{{\$timestamp$spaces", "{{\$randomInt 1$spaces", "{{\$x$spaces", "{{\$uuid$spaces\t(" + spaces)) {
+            assertEquals(text, VariableResolver.resolve(text, emptyMap()))
+        }
+        assertTrue((System.nanoTime() - start) / 1_000_000 < 5000, "resolution should be linear")
+    }
 }

@@ -10,6 +10,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 class EndToEndTest {
     private lateinit var server: HttpServer
@@ -120,7 +121,8 @@ class EndToEndTest {
         val f = httpFile("# @assert body.\$.token == {{token}}\nPOST {{base}}/login\n")
         val r = cli(f, "--env", "dev")
         assertEquals(1, r.code)
-        assertContains(r.out, "FAIL body.\$.token == {{token}} -- expected body.\$.token to equal abc, but was zzz")
+        assertContains(r.out, "FAIL body.\$.token == {{token}} -- failed (expected value contains substitutions, not shown)")
+        assertFalse(r.out.contains("equal abc"), r.out)
     }
 
     @Test fun requestSelectionOnlyAssertsTheSelectedRequest() {

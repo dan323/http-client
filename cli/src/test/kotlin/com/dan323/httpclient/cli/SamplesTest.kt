@@ -76,6 +76,30 @@ class SamplesTest {
         assertEquals(0, sample("assertions.http", "--request", "numbers").code)
     }
 
+    @Test fun dynamicVariablesV2() {
+        val r = sample("dynamic.http")
+        assertEquals(1, r.code)
+        // Only the env request fails, and because the variable is not allowed (not for any other reason).
+        assertEquals(
+            "Error: Invalid dynamic variable {{\$env.HTTPC_SURELY_UNSET}}: environment variable 'HTTPC_SURELY_UNSET' is not allowed; pass --allow-env NAME",
+            r.err.trim(),
+        )
+        assertEquals(2, Regex("""(?m)^HTTP 200 """).findAll(r.out).count(), r.out)
+        val nl = System.lineSeparator()
+        assertContains(r.out, "### random${nl}HTTP 200")
+        assertContains(r.out, "### offsets${nl}HTTP 200")
+        assertContains(r.out, "### unset-env$nl")
+        assertFalse(r.out.contains("### unset-env${nl}HTTP"), r.out)
+    }
+
+    @Test fun allowedButUnsetEnvIsUndefined() {
+        // The scenario needs the variable to be unset in the inherited process environment.
+        if (System.getenv("HTTPC_SURELY_UNSET") != null) return
+        val r = sample("dynamic.http", "--allow-env", "HTTPC_SURELY_UNSET")
+        assertEquals(1, r.code)
+        assertEquals("Error: Undefined variable: \$env.HTTPC_SURELY_UNSET", r.err.trim())
+    }
+
     @Test fun fileBody() {
         val r = sample("file-body.http")
         assertEquals(0, r.code, r.err)

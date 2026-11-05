@@ -10,6 +10,12 @@ class MainTest {
     private val a = RequestTemplate("a", "GET", "http://x/a")
     private val b = RequestTemplate(null, "GET", "http://x/b")
 
+    @Test fun parsesAllowEnv() {
+        assertEquals(setOf("A", "B", "C"), parseArgs(listOf("f.http", "--allow-env", "A,B", "--allow-env", "C"))!!.allowEnv)
+        assertEquals(emptySet(), parseArgs(listOf("f.http"))!!.allowEnv)
+        assertNull(parseArgs(listOf("f.http", "--allow-env")))
+    }
+
     @Test fun parsesOptions() {
         val o = parseArgs(listOf("f.http", "--env", "dev", "--request", "2", "--list"))
         assertEquals(Options(Path.of("f.http"), "dev", "2", true), o)
