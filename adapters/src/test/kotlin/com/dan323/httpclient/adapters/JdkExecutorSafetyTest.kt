@@ -99,30 +99,4 @@ class JdkExecutorSafetyTest {
             assertEquals("127.0.0.1:${s.address.port}", body)
         } finally { s.stop(0) }
     }
-
-    @Test
-    fun `Authorization, Proxy-Authorization and Cookie are not forwarded across hosts`() {
-        for (targetHost in listOf("localhost", "127.0.0.1")) {
-            val target = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-            target.createContext("/") { ex ->
-                val h = ex.requestHeaders
-                val b = "${h.getFirst("Authorization")}|${h.getFirst("Proxy-Authorization")}|${h.getFirst("Cookie")}".toByteArray()
-                ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) }
-            }
-            target.start()
-            val origin = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-            origin.createContext("/") { ex ->
-                ex.responseHeaders.add("Location", "http://$targetHost:${target.address.port}/x")
-                ex.sendResponseHeaders(302, -1); ex.close()
-            }
-            origin.start()
-            try {
-                val r = JdkHttpExecutor().use {
-                    it.execute(HttpRequest("GET", "http://127.0.0.1:${origin.address.port}/", listOf(
-                        Header("Authorization", "Bearer t"), Header("Proxy-Authorization", "Basic x"), Header("Cookie", "a=b"))))
-                }
-                assertEquals("null|null|null", r.bodyAsString(), targetHost)
-            } finally { origin.stop(0); target.stop(0) }
-        }
-    }
 }

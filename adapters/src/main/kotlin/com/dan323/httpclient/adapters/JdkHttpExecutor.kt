@@ -14,6 +14,8 @@ import java.net.http.HttpRequest.BodyPublishers
 import java.net.http.HttpResponse.BodyHandlers
 import java.time.Duration
 import java.util.concurrent.CancellationException
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
@@ -72,16 +74,22 @@ class JdkHttpExecutor(
         request.headers.filter { it.name.lowercase() !in restricted }.forEach { builder.header(it.name, it.value) }
 
         val start = System.nanoTime()
-        val future = clientFor(request.options).sendAsync(builder.build(), BodyHandlers.ofByteArray())
+        // Client set-up (it may resolve a slow @proxy host) runs inside the future too, so the deadline and
+        // interruption cover it.
+        val inner = AtomicReference<CompletableFuture<*>?>()
+        val future = CompletableFuture.supplyAsync { clientFor(request.options) }.thenCompose { c ->
+            c.sendAsync(builder.build(), BodyHandlers.ofByteArray()).also { inner.set(it) }
+        }
+        fun cancelAll() { future.cancel(true); inner.get()?.cancel(true) }
         val resp = try {
             // The timeout bounds the whole exchange (headers and body), not just the wait for headers.
             val t = request.options.timeoutMillis
             if (t != null) future.get(t, TimeUnit.MILLISECONDS) else future.get()
         } catch (e: TimeoutException) {
-            future.cancel(true)
+            cancelAll()
             throw java.net.http.HttpTimeoutException("request timed out after ${request.options.timeoutMillis} ms")
         } catch (e: InterruptedException) {
-            future.cancel(true)
+            cancelAll()
             Thread.currentThread().interrupt()
             throw CancellationException("Request cancelled").also { it.initCause(e) }
         } catch (e: ExecutionException) {
