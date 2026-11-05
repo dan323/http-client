@@ -16,41 +16,71 @@ object VariableResolver {
 
     private fun nameOf(m: MatchResult): String = m.groupValues[1].trimEnd()
 
+    private const val MAX_EXPANSIONS = 10_000
+    private const val MAX_DEPTH = 100
+
     /**
-     * Replaces `{{name}}` from [variables], or `{{$uuid}}`-style dynamic variables;
+     * Replaces `{{name}}` from [fileVariables], then [variables], then [extra], then the dynamic variables;
      * throws if a variable is undefined so mistakes are not sent silently.
-     * [extra] is consulted after [variables] and before the dynamic variables.
+     *
+     * Only values of [fileVariables] (written in the `.http` file) are themselves expanded; values of
+     * [variables] (environment) and whatever [extra] or a dynamic variable returns are literal, so a secret
+     * containing `{{` is sent as is. Inside a file variable's value a reference to the same name means the
+     * environment value of that name (`@host = {{host}}/api`); a reference to an earlier file variable, an
+     * environment variable or a later file variable is looked up in that order. A cycle fails with
+     * [VariableExpansionException]; one resolve call expands at most [MAX_EXPANSIONS] file variable values
+     * (exponential fan-out) and [MAX_DEPTH] levels, otherwise it fails the same way.
      */
-    fun resolve(text: String, variables: Map<String, String>, extra: (String) -> String? = { null }, dynamic: DynamicVariables = DynamicVariables.DEFAULT): String =
-        resolve(text, variables, extra, dynamic, 0)
+    fun resolve(
+        text: String,
+        variables: Map<String, String>,
+        extra: (String) -> String? = { null },
+        dynamic: DynamicVariables = DynamicVariables.DEFAULT,
+        fileVariables: Map<String, String> = emptyMap(),
+    ): String = Expansion(variables, fileVariables, extra, dynamic).expand(text, null)
 
-    private fun resolve(text: String, variables: Map<String, String>, extra: (String) -> String?, dynamic: DynamicVariables, depth: Int): String =
-        pattern.replace(text) { m ->
-            val name = nameOf(m)
-            val value = variables[name]
-            when {
-                // Variable values (file variables) may themselves hold references; the depth limit stops cycles.
-                value != null -> if (depth < 10 && "{{" in value) resolve(value, variables, extra, dynamic, depth + 1) else value
-                else -> extra(name) ?: dynamic.evaluate(name) ?: throw UndefinedVariableException(name)
+    private class Expansion(
+        private val variables: Map<String, String>,
+        private val fileVariables: Map<String, String>,
+        private val extra: (String) -> String?,
+        private val dynamic: DynamicVariables,
+    ) {
+        private val position = fileVariables.keys.withIndex().associate { it.value to it.index }
+        private val stack = ArrayList<String>()
+        private var budget = MAX_EXPANSIONS
+
+        fun expand(text: String, owner: String?): String = pattern.replace(text) { m -> lookup(nameOf(m), owner) }
+
+        private fun lookup(name: String, owner: String?): String {
+            val file = fileVariables[name]
+            if (file != null && (owner == null || name != owner && position.getValue(name) < position.getValue(owner))) {
+                return expandFile(name, file)
             }
+            variables[name]?.let { return it }
+            if (file != null && name != owner) return expandFile(name, file)
+            extra(name)?.let { return it }
+            dynamic.evaluate(name)?.let { return it }
+            if (file != null) throw VariableExpansionException("Circular variable reference: ${(stack + name).joinToString(" -> ")}")
+            throw UndefinedVariableException(name)
         }
 
-    /**
-     * Layers file variables over [base]: each value may use `{{...}}` of [base] and of earlier file
-     * variables; a reference that cannot be resolved here is kept as written so it can resolve later
-     * (for example a `{{name.response...}}` reference or a dynamic variable).
-     */
-    fun withFileVariables(base: Map<String, String>, fileVariables: Map<String, String>): Map<String, String> {
-        if (fileVariables.isEmpty()) return base
-        val result = base.toMutableMap()
-        for ((name, value) in fileVariables) {
-            result[name] = pattern.replace(value) { m ->
-                val ref = nameOf(m)
-                result[ref] ?: m.value
+        private fun expandFile(name: String, value: String): String {
+            if (name in stack) {
+                throw VariableExpansionException("Circular variable reference: ${(stack.subList(stack.indexOf(name), stack.size) + name).joinToString(" -> ")}")
+            }
+            if (stack.size >= MAX_DEPTH) throw VariableExpansionException("Variables are nested more than $MAX_DEPTH levels deep (at '$name')")
+            if (--budget < 0) throw VariableExpansionException("Variable expansion too large (more than $MAX_EXPANSIONS expansions, at '$name')")
+            stack.add(name)
+            try {
+                return expand(value, name)
+            } finally {
+                stack.removeAt(stack.size - 1)
             }
         }
-        return result
     }
 }
+
+/** A variable cannot be expanded: it refers to itself (directly or through others) or expands too much. */
+class VariableExpansionException(message: String) : RuntimeException(message)
 
 class UndefinedVariableException(val variable: String) : RuntimeException("Undefined variable: $variable")

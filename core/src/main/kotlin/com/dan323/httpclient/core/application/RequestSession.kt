@@ -137,10 +137,9 @@ class RequestSession(
 
     /** Substitutes `{{variables}}` and `{{name.response...}}` in each assertion, like request text, then evaluates it. */
     private fun evaluateAssertions(r: RequestTemplate, response: HttpResponse, variables: Map<String, String>): List<AssertionResult> {
-        val vars = VariableResolver.withFileVariables(variables, r.fileVariables)
         return r.assertions.map { a ->
             try {
-                val resolved = runner.resolveText(a, vars, ::reference)
+                val resolved = runner.resolveText(a, variables, ::reference, r.fileVariables)
                 val result = assertionEvaluator.evaluate(resolved, response).copy(assertion = a)
                 // Substituted values (env, variables, chained responses) may be secrets: keep them out of the result.
                 if (resolved == a) result
@@ -151,6 +150,8 @@ class RequestSession(
             } catch (e: UndefinedVariableException) {
                 AssertionResult(a, false, null, null, "invalid assertion: ${e.message}")
             } catch (e: InvalidDynamicVariableException) {
+                AssertionResult(a, false, null, null, "invalid assertion: ${e.message}")
+            } catch (e: VariableExpansionException) {
                 AssertionResult(a, false, null, null, "invalid assertion: ${e.message}")
             }
         }
