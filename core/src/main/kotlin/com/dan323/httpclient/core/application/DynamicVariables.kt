@@ -172,7 +172,6 @@ class DynamicVariables(
         private const val DIGITS = "0123456789"
         private const val MAX_LENGTH = 10_000
         private val OFFSET = Regex("""([+-]?\d+)\s*([A-Za-z]+)""")
-        val DEFAULT = DynamicVariables()
     }
 }
 

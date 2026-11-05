@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- Session robustness (R3): `RequestSession.runAll` rethrows `InterruptedException` (restoring the interrupt flag) instead of reporting it as a failure and sending the remaining requests; the session is safe for concurrent use (runs are serialised, `hasResponse` is lock-free); an invalid assertion (bad regex, non-numeric `<`, unknown operator) keeps its reason when a `{{variable}}` is used, with the resolved values left out. Refactors: redirect handling moved to `RedirectFollower`, option parsing to `RequestOptionsParser`, merged duplicated catch blocks, removed the shared `DynamicVariables.DEFAULT` (each `RequestRunner` and `VariableResolver.resolve` default creates its own).
 - Executor safety (R4): `# @timeout` now bounds the whole exchange, headers and body, and cancels the request (previously a server that sent headers and stalled hung forever); the default client has a 30 s connect timeout (no default total timeout). Interrupting the calling thread cancels the in-flight request, restores the interrupt flag and throws `CancellationException`. Documented that `Host`/`Content-Length`/`Connection`/`Expect`/`Upgrade` headers are dropped by the JDK client. Verified (tests) that `Authorization`, `Proxy-Authorization` and `Cookie` are not re-sent on cross-host redirects, so no change was needed there.
 
 ### Added
