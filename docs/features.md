@@ -32,7 +32,12 @@ An undefined variable is an error, so nothing is sent with a placeholder left in
 
 ### Environments
 
-Put environments next to the `.http` file and pick one with `--env`:
+Put `http-client.env.json` in the `.http` file's folder or any parent folder and pick one with `--env`. All front ends
+(CLI, desktop, IntelliJ plugin) use the same rule: the nearest enclosing folder containing `http-client.env.json`
+wins (searching upward); the `http-client.private.env.json` beside it is merged. The choice is explicit: no
+environment (variables from the file only; the CLI default) or a named one. A name that does not exist is an error,
+never another environment. A JSON `null` value is treated as undefined; a malformed env file fails with an error
+naming the file (and the position).
 
 ```json
 // http-client.env.json
@@ -220,7 +225,8 @@ More (names modelled on the JetBrains HTTP Client and Postman; see the notes bel
   allowed; <how to allow it>`). An allowed name that is not set fails as `Undefined variable: $env.X`.
   Prefer `http-client.env.json` / `.private.env.json` for secrets; use `$env` only for values you are happy to
   expose to the files you run. How to allow names:
-  - CLI: `--allow-env NAME[,NAME]` (repeatable), e.g. `httpc api.http --allow-env API_TOKEN,HOME`.
+  - CLI: `--allow-env NAME[,NAME]` (repeatable), e.g. `httpc api.http --allow-env API_TOKEN,HOME`; the property and variable below are honoured
+    too and merged with the flag.
   - Desktop app and IntelliJ plugin (no UI for this yet): the system property `-Dhttpclient.allowEnv=NAME,NAME`
     (for the IDE add it under Help | Edit Custom VM Options) or, if the property is absent, the environment
     variable `HTTPC_ALLOW_ENV=NAME,NAME` of the process that starts the app/IDE. Restart to apply.

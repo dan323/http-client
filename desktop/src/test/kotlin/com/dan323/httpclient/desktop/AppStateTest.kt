@@ -68,6 +68,27 @@ class AppStateTest {
         assertFalse(state.dirty)
     }
 
+    @Test fun environmentsComeFromParentFolderAndStaleNameIsAnError() {
+        val sub = Files.createDirectories(dir.resolve("nested/deeper"))
+        val file = sub.resolve("e.http").also { Files.writeString(it, "GET {{base}}/echo\n") }
+        val state = AppState()
+        state.open(file)
+        assertEquals(listOf("dev"), state.environments)
+        state.environment = "gone"
+        state.run(all = true)
+        assertTrue(state.message!!.contains("Unknown environment: gone"), state.message)
+        assertTrue(state.outcomes.isEmpty())
+    }
+
+    @Test fun malformedEnvFileIsShownWithItsName() {
+        val bad = Files.createTempDirectory("httpc-bad")
+        val env = bad.resolve("http-client.env.json").also { Files.writeString(it, "{nope") }
+        val file = bad.resolve("e.http").also { Files.writeString(it, "GET http://x/\n") }
+        val state = AppState()
+        state.open(file)
+        assertTrue(state.message!!.contains(env.toString()), state.message)
+    }
+
     @Test fun failuresAreShownAsOutcomes() {
         val file = dir.resolve("d.http").also { Files.writeString(it, "GET {{nope}}/x\n") }
         val state = AppState()

@@ -33,6 +33,8 @@ class AppState {
         dirty = false
         selected = 0
         outcomes = emptyList()
+        environments = emptyList()
+        environment = null   // the choice belongs to the previous file's environments
         refreshEnvironments()
     }
 
@@ -78,7 +80,7 @@ class AppState {
     private fun refreshEnvironments() {
         val path = file ?: return
         environments = Workspace.environmentNames(path)
-        if (environment !in environments) environment = null
+        // A chosen name that vanished is kept: running reports "Unknown environment" instead of silently running without one.
     }
 
     private fun guarded(block: () -> Unit) {

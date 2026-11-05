@@ -4,7 +4,12 @@ import com.dan323.httpclient.adapters.JdkHttpExecutor
 import com.dan323.httpclient.adapters.JsonRunReport
 import com.dan323.httpclient.core.application.JUnitXmlReport
 import com.dan323.httpclient.core.application.RunReport
-import com.dan323.httpclient.adapters.JsonEnvironmentRepository
+import com.dan323.httpclient.adapters.UpwardEnvironmentLocator
+import com.dan323.httpclient.core.application.EnvironmentChoice
+import com.dan323.httpclient.core.application.UnknownEnvironmentException
+import com.dan323.httpclient.core.application.environments
+import com.dan323.httpclient.core.application.select
+import com.dan323.httpclient.core.port.out.EnvironmentFileException
 import com.dan323.httpclient.adapters.KotlinxJsonExtractor
 import com.dan323.httpclient.adapters.LocalFileReader
 import com.dan323.httpclient.adapters.SystemEnvironmentVariables
@@ -26,10 +31,11 @@ import kotlin.system.exitProcess
 private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] [--list]
                   [--report-json FILE] [--report-junit FILE]
 
-  --env NAME       use variables from NAME in http-client.env.json (next to the file)
+  --env NAME       use variables from NAME in http-client.env.json (nearest http-client.env.json, searching
+                   upward from the file; http-client.private.env.json beside it is merged)
   --request X      run only the request with @name X, or the Nth request (1-based)
   --allow-env N    let {{${'$'}env.N}} read these OS environment variables (comma separated, repeatable);
-                   none are readable by default
+                   none are readable by default; -Dhttpclient.allowEnv and HTTPC_ALLOW_ENV are merged in
   --list           list the requests in the file and exit
   --report-json F  write a JSON run report (results, assertions, timings, totals) to F
   --report-junit F write a JUnit XML run report to F"""
@@ -120,15 +126,18 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream): Int {
         return 0
     }
 
-    val variables = if (opts.env == null) emptyMap() else {
-        JsonEnvironmentRepository(dir).load().firstOrNull { it.name == opts.env }?.variables
-            ?: return failWithReport(opts, err, "Unknown environment: ${opts.env}")
+    val variables = try {
+        EnvironmentChoice.of(opts.env).select(UpwardEnvironmentLocator().environments(opts.file))?.variables ?: emptyMap()
+    } catch (e: UnknownEnvironmentException) {
+        return failWithReport(opts, err, e.message ?: "Unknown environment: ${opts.env}")
+    } catch (e: EnvironmentFileException) {
+        return failWithReport(opts, err, e.message ?: "Invalid environment file")
     }
     val selected = select(requests, opts.request)
         ?: return failWithReport(opts, err, "No such request: ${opts.request}")
     val chosen = withDependencies(requests, selected)
     val executor = JdkHttpExecutor()
-    val session = RequestSession(RequestRunner(executor, LocalFileReader(dir), DynamicVariables(env = SystemEnvironmentVariables(opts.allowEnv, "pass --allow-env NAME"))), executor, KotlinxJsonExtractor())
+    val session = RequestSession(RequestRunner(executor, LocalFileReader(dir), DynamicVariables(env = SystemEnvironmentVariables.fromConfiguration(extra = opts.allowEnv, hint = "pass --allow-env NAME"))), executor, KotlinxJsonExtractor())
 
     // Prerequisites run for their responses only: assertions are evaluated for the selected requests.
     val outcomes = session.runAll(chosen, variables, assertFor = { r -> selected.any { it === r } }) { outcome ->

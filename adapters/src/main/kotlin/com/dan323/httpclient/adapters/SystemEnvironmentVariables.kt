@@ -38,7 +38,9 @@ class SystemEnvironmentVariables(
         fun fromConfiguration(
             property: (String) -> String? = System::getProperty,
             env: (String) -> String? = System::getenv,
+            extra: Set<String> = emptySet(),
+            hint: String = DEFAULT_HINT,
         ): SystemEnvironmentVariables =
-            SystemEnvironmentVariables(parseNames(property(ALLOW_PROPERTY) ?: env(ALLOW_ENV_VAR)))
+            SystemEnvironmentVariables(parseNames(property(ALLOW_PROPERTY) ?: env(ALLOW_ENV_VAR)) + extra, hint)
     }
 }

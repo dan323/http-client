@@ -50,11 +50,13 @@ class SelectEnvironmentAction : AnAction(), DumbAware {
         val project = e.project ?: return
         val vfile = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
         val service = project.getService(HttpClientService::class.java)
-        val names = listOf("(none)") + service.environments(Path.of(vfile.path).parent).map { it.name }
+        val current = service.environmentChoice
+        val names = try { service.environments(Path.of(vfile.path)).map { it.name } } catch (_: Exception) { emptyList() }
+        val items = environmentItems(names, current)
         JBPopupFactory.getInstance()
-            .createPopupChooserBuilder(names)
-            .setTitle("HTTP Environment (current: ${service.environmentName ?: "none"})")
-            .setItemChosenCallback { service.environmentName = it.takeIf { n -> n != "(none)" } }
+            .createPopupChooserBuilder(items.map { it.label })
+            .setTitle("HTTP Environment (current: ${selectedItem(items, current).label})")
+            .setItemChosenCallback { label -> items.firstOrNull { it.label == label }?.let { service.environmentChoice = it.choice } }
             .createPopup()
             .showInBestPositionFor(e.dataContext)
     }
