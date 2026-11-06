@@ -5,10 +5,11 @@ A Postman-style HTTP client compatible with the JetBrains `.http` file format.
 Hexagonal layout:
 
 - `core/` — domain, application services (`HttpFileParser`, `VariableResolver`, `RequestRunner`) and ports. No third-party dependencies.
-- `adapters/` — driven adapters: `JdkHttpExecutor`, `LocalFileReader`, `JsonEnvironmentRepository` (`http-client.env.json` + `.private.env.json`), `SessionFactory` (the composition root: assembles and closes executor, runner and session), `SystemEnvironmentVariables` (`{{$env.NAME}}`, opt-in allowlist; see [docs/features.md](docs/features.md)).
+- `adapters/` — driven adapters: `JdkHttpExecutor`, `LocalFileReader`, `JsonEnvironmentRepository` (`http-client.env.json` + `.private.env.json`) with `UpwardEnvironmentLocator` (nearest env file, searching upward), `FileAccessPolicy` (confines `< path` bodies), report writers (`AtomicReportWriter`, `JUnitXmlReport`, `JsonRunReport`), `SessionFactory` (the composition root: assembles and closes executor, runner and session), `SystemEnvironmentVariables` (`{{$env.NAME}}`, opt-in allowlist; see [docs/features.md](docs/features.md)).
 - `cli/` — command-line front end (`httpc`).
 - `view-model/` — pure view logic (JSON tree/colour spans, status and size formatting, `RunController` run/session cache, `OutcomeDisplay` rows) shared by `desktop` and `intellij-plugin`.
 - `desktop/` — standalone Compose Desktop app for Windows, macOS and Linux ([README](desktop/README.md)).
+- `quality-reports/` — build-only project for aggregated test and coverage reports (below).
 - `mock-server/` — local httpbin-style server used by `samples/` (`./gradlew :mock-server:run`).
 - `samples/` — `.http` files for manual testing ([README](samples/README.md)).
 - `intellij-plugin/` — IntelliJ plugin ([README](intellij-plugin/README.md)) (works in Community editions). Build with `./gradlew :intellij-plugin:buildPlugin`; set `ideaPath` in `gradle.properties` to a local IDE install.
@@ -31,10 +32,14 @@ Documentation: [features](docs/features.md) · [plan](docs/PLAN.md) · [changelo
 ./gradlew :cli:run --args="requests.http --env dev --request login"
 ```
 
-- `--env NAME` — use variables from `NAME` in `http-client.env.json` (next to the file).
+- `--env NAME` — use variables from `NAME` in the nearest `http-client.env.json` (searching upward from the file; see [features](docs/features.md#environments)). Without it no environment is used.
 - `--request X` — run only the request with `# @name X`, or the Nth request (1-based), plus any requests it chains on.
+- `--allow-env NAME[,NAME]` — let `{{$env.NAME}}` read these OS variables (none by default).
+- `--allow-file-root DIR` — also let `< path` bodies be read from `DIR` (by default only the `.http` file's folder).
 - `--list` — list the requests in the file and exit.
-- `--report-json FILE` / `--report-junit FILE` — also write a run report (per-request status, timings, assertion results, totals) as JSON or JUnit XML; console output is unchanged; exit 3 means the report could not be written (see [features](docs/features.md#run-reports)).
+- `--report-json FILE` / `--report-junit FILE` — also write a run report (per-request status, timings, assertion results, totals) as JSON or JUnit XML; console output is unchanged; a report path must differ from the input file (see [features](docs/features.md#run-reports)).
+
+Exit codes: `0` success, `1` a request, assertion or setup failed, `2` bad arguments, `3` the run passed but a report could not be written.
 
 `# @assert status == 200` lines are checked after each response; the CLI prints PASS/FAIL and exits 1 on any failure (see [features](docs/features.md#assertions)).
 

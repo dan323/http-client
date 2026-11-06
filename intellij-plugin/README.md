@@ -11,8 +11,11 @@ It depends only on `com.intellij.modules.platform`, so it is meant to work in Co
 - Green run icon in the gutter on each request line.
 - **Run HTTP Request** (`Ctrl+Alt+Enter`, or the editor context menu) runs the request at the caret,
   plus any requests it chains on (`{{login.response.body.$.token}}`).
-- **Select HTTP Environment** (editor context menu) picks variables from `http-client.env.json`
-  next to the file. The choice is kept per project until the IDE restarts.
+- **Select HTTP Environment** (editor context menu, or the picker in the tool window) picks variables from the nearest
+  `http-client.env.json`, searching upward from the file. The default is "(none)" (variables from the file only); a name that
+  no longer exists is an error. The choice is kept per project until the IDE restarts.
+- Responses of earlier requests (a login) are remembered per file and environment; any edit to the file, or deleting or moving it,
+  drops them, and **Reset chain** in the tool window forgets them all. One request runs at a time.
 - **HTTP Response** tool window with status, timing, headers and the body (JSON pretty-printed).
 
 See [../docs/features.md](../docs/features.md) for the `.http` syntax, variables and chaining.
@@ -25,7 +28,7 @@ The plugin is compiled against a locally installed IDE. Set `ideaPath` in the ro
 ```
 ./gradlew :intellij-plugin:buildPlugin    # zip in intellij-plugin/build/distributions/
 ./gradlew :intellij-plugin:runIde         # sandbox IDE with the plugin
-./gradlew :intellij-plugin:test           # lexer tests
+./gradlew :intellij-plugin:test           # lexer, environment-item and ClientState (run guard, session reuse) tests; needs an IDE
 ```
 
 Install the zip via *Settings → Plugins → ⚙ → Install Plugin from Disk…*.
@@ -36,8 +39,9 @@ Install the zip via *Settings → Plugins → ⚙ → Install Plugin from Disk�
   The PSI is flat (a sequence of tokens); request structure comes from `core`'s `HttpFileParser`.
 - `RunLineMarker.kt` — gutter run icons.
 - `Actions.kt` — run and environment actions.
-- `HttpClientService.kt` — project service that runs requests and publishes the output.
-- `HttpClientService.kt` — per-project state; runs requests through the shared `RunController` and closes the `SessionFactory` when the project is disposed.
+- `ClientState.kt` — IDE-independent state: environment choice, last report and listeners, the run guard, text-based session invalidation, on top of the shared `RunController`.
+- `HttpClientService.kt` — project service wrapping `ClientState`; forgets files on VFS delete/move and closes the `SessionFactory` when the project is disposed.
+- `EnvironmentItems.kt` — the picker entries for the environment choice.
 - `ResponseToolWindowFactory.kt` — the response panel; JSON colouring and status/duration formatting come from the shared `view-model` module (its kotlinx-serialization is excluded from the plugin zip, the IDE provides it).
 - `src/main/resources/META-INF/plugin.xml` — registrations.
 
@@ -67,7 +71,7 @@ visible window or interaction):
 - Whether the IDE's serialization version is binary compatible with what `adapters` was compiled against
   (1.9.0) when a request actually runs.
 
-No completion or navigation for `{{variables}}` yet.
+The VFS listener, gutter icon and tool window are not covered by tests (they need a running IDE). No completion or navigation for `{{variables}}` yet. Assertion results are not shown (the CLI and reports show them).
 
 `{{$env.NAME}}` reads nothing by default: allow names with `-Dhttpclient.allowEnv=NAME,NAME` (JVM option) or the environment variable `HTTPC_ALLOW_ENV=NAME,NAME`; see [docs/features.md](../docs/features.md).
 
