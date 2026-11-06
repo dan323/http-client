@@ -90,7 +90,7 @@ Setting names are case-insensitive and unknown ones are ignored. Invalid values 
 
 ### Cookie jar
 
-Each `RequestSession` (one CLI run, one desktop/plugin session) owns an in-memory `CookieJar` in `core`. `Set-Cookie` headers
+Each `RequestSession` (one CLI run; in the desktop app and plugin one per file, environment and loaded variables, kept by the shared `RunController` so when you send one request, the named requests it chains on that already ran in the session, such as a login, are not sent again until the environment file changes or the chain is reset; the selected request itself, and every request of Send all, always run again) owns an in-memory `CookieJar` in `core`. `Set-Cookie` headers
 of a response are stored, and later requests in the same session to a matching host and path get a `Cookie` header, so a login
 request followed by an authenticated one just works. Sessions never share cookies and nothing is persisted to disk.
 Supported: `Domain` (host-only when absent; a host cannot set cookies for an unrelated domain), `Path` (matched on the raw,
@@ -268,12 +268,22 @@ Requests run in file order. Once a **named** request has run, later requests can
 |-----------------------------------|--------------------------------------|
 | `{{login.response.body.$.token}}` | value at a JSONPath in the JSON body |
 | `{{login.response.body.*}}`       | whole body                           |
-| `{{login.response.headers.X-Id}}` | header value (case-insensitive)      |
+| `{{login.response.headers.X-Id}}` | header value (case-insensitive); the first one if repeated |
+| `{{login.response.headers.Set-Cookie[1]}}` | the second value of a repeated header (0-based; missing when out of range) |
+| `{{login.response.headers.Set-Cookie[*]}}` | all values of the header, joined with a newline |
 | `{{login.response.status}}`       | status code                          |
 | `{{page.response.body.//a/@href}}` | XPath over an XML body (also `body.xpath:count(//a)`) |
 | `{{page.response.body.regex:id=(\d+)}}` | regex over the body: group 1 if present, else the whole match |
 
 The same expressions (via `ResponseExtractor` in `core`) are what assertions will use.
+
+The body is decoded with the `charset` of the response's `Content-Type` (UTF-8 when absent or unknown). XPath is
+evaluated with secure processing (no DOCTYPE, no external access, no extension functions) and stops after 2 seconds,
+finding nothing.
+
+Failure messages (also in `--report-json` / `--report-junit` and on stderr) never contain substituted variable
+values: a value that appears in an error text (for example the resolved URL in an invalid-URI error) is shown as
+`{{name}}`. Values shorter than 3 characters are not replaced.
 
 Supported JSONPath subset: `$`, `.key`, `['key']`, `[index]`. Objects and arrays are returned as JSON text.
 Referencing a request that has not run, or a path that does not exist, is an error.

@@ -37,6 +37,10 @@ class RequestSession(
     private val cookies = CookieJar()
     private val redirects = RedirectFollower(executor, cookies)
 
+    /** Substituted value to variable name for the request being run; guarded by [lock]. */
+    private val substituted = LinkedHashMap<String, String>()
+    private fun record(name: String, value: String) { substituted.putIfAbsent(value, name) }
+
     private fun send(request: HttpRequest): HttpResponse = redirects.send(request)
 
     private inline fun <T> locked(block: () -> T): T {
@@ -50,7 +54,8 @@ class RequestSession(
     }
 
     fun run(template: RequestTemplate, variables: Map<String, String>): HttpResponse = locked {
-        val request = runner.resolve(template, variables, ::reference)
+        substituted.clear()
+        val request = runner.resolve(template, variables, ::reference, ::record)
         val response = send(request)
         template.name?.let { responses[it] = response }
         response
@@ -80,7 +85,7 @@ class RequestSession(
             Thread.currentThread().interrupt() // keep the flag for the caller and do not send the queued requests
             throw e
         } catch (e: Exception) {
-            RunOutcome.Failure(r, e.message ?: e::class.simpleName ?: "error", if (withAssertions) r.assertions.size else 0)
+            RunOutcome.Failure(r, FailureScrubber.scrub(e.message ?: e::class.simpleName ?: "error", substituted), if (withAssertions) r.assertions.size else 0)
         }
         onOutcome(outcome)
         outcome
@@ -109,7 +114,7 @@ class RequestSession(
     private fun evaluateAssertions(r: RequestTemplate, response: HttpResponse, variables: Map<String, String>): List<AssertionResult> {
         return r.assertions.map { a ->
             try {
-                val resolved = runner.resolveText(a, variables, ::reference, r.fileVariables)
+                val resolved = runner.resolveText(a, variables, ::reference, r.fileVariables, ::record)
                 val substituted = resolved != a
                 val result = assertionEvaluator.evaluate(resolved, response, showValues = !substituted).copy(assertion = a)
                 // Substituted values (env, variables, chained responses) may be secrets: keep them out of the result.
