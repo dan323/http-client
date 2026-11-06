@@ -26,11 +26,12 @@ class EnvironmentResolutionTest {
     }
 
     @Test fun malformedEnvFileNamesTheFile() {
-        val env = root.resolve("http-client.env.json").also { Files.writeString(it, "{oops") }
+        root.resolve("http-client.env.json").also { Files.writeString(it, "{oops") }
         val f = root.resolve("x.http").also { Files.writeString(it, "GET http://127.0.0.1:1/\n") }
         val (code, _, err) = cli(f.toString(), "--env", "dev")
         assertEquals(1, code)
-        assertTrue(err.contains(env.toString()) && !err.contains("Unexpected error"), err)
+        // file name only: on Windows the temp dir may be reported in its long form (RUNNER~1 vs runneradmin)
+        assertTrue(err.contains("http-client.env.json") && !err.contains("Unexpected error"), err)
     }
 
     @Test fun systemPropertyAllowlistIsHonouredByTheCli() {
