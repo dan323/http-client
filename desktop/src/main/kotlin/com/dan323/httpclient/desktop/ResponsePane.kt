@@ -20,6 +20,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateMapOf
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,14 +50,38 @@ import kotlinx.serialization.json.JsonElement
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 
-private enum class Tab { BODY, HEADERS }
+internal enum class Tab { BODY, HEADERS }
 
 /** What the user has toggled for one response: tab, raw/pretty, and which JSON nodes are collapsed. */
-private class OutcomeUi(body: String) {
+internal class OutcomeUi(val json: JsonElement?) {
     var tab by mutableStateOf(Tab.BODY)
     var raw by mutableStateOf(false)
     val collapsed = mutableStateSetOf<String>()
-    val json: JsonElement? = parseJsonContainer(body)
+}
+
+internal class OutcomeEntry(val display: OutcomeDisplay, val ui: OutcomeUi?)
+
+/**
+ * Display data for the outcomes on screen. Decoding and JSON parsing happen on [Dispatchers.Default], not in
+ * composition, and entries for outcomes that left the list are dropped so a long session does not retain them.
+ */
+internal class OutcomeModels {
+    private val entries = mutableStateMapOf<RunOutcome, OutcomeEntry>()
+    val size get() = entries.size
+    operator fun get(outcome: RunOutcome): OutcomeEntry? = entries[outcome]
+
+    suspend fun update(outcomes: List<RunOutcome>) {
+        val live = outcomes.toSet()
+        entries.keys.retainAll(live)
+        for (o in outcomes) {
+            if (o in entries) continue
+            val entry = withContext(Dispatchers.Default) {
+                val d = o.display()
+                OutcomeEntry(d, (d as? OutcomeDisplay.Response)?.let { OutcomeUi(parseJsonContainer(it.rawBody)) })
+            }
+            entries[o] = entry
+        }
+    }
 }
 
 private class JsonColors(val key: Color, val string: Color, val number: Color, val keyword: Color, val punctuation: Color, val muted: Color) {
@@ -66,14 +94,14 @@ private class JsonColors(val key: Color, val string: Color, val number: Color, v
 @Composable
 fun ResponsePane(outcomes: List<RunOutcome>, modifier: Modifier = Modifier) {
     val colors = if (isSystemInDarkTheme()) JsonColors.Dark else JsonColors.Light
-    val uis = remember { HashMap<RunOutcome, OutcomeUi>() }
-    val displays = remember { HashMap<RunOutcome, OutcomeDisplay>() }
+    val models = remember { OutcomeModels() }
+    LaunchedEffect(outcomes) { models.update(outcomes) }
     // Read the collapsed sets here, in composition, so toggling a node recomposes the list.
-    val sections = outcomes.map { o ->
-        val d = displays.getOrPut(o) { o.display() }
-        val ui = (d as? OutcomeDisplay.Response)?.let { r -> uis.getOrPut(o) { OutcomeUi(r.rawBody) } }
+    val sections = outcomes.mapNotNull { o ->
+        val entry = models[o] ?: return@mapNotNull null
+        val ui = entry.ui
         val rows = if (ui?.json != null && ui.tab == Tab.BODY && !ui.raw) flattenJson(ui.json, ui.collapsed) else null
-        Triple(d, ui, rows)
+        Triple(entry.display, ui, rows)
     }
 
     LazyColumn(modifier) {

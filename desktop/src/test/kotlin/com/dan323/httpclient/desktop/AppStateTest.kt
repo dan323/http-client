@@ -14,6 +14,9 @@ import kotlin.test.assertTrue
 class AppStateTest {
     private lateinit var server: HttpServer
     private val logins = java.util.concurrent.atomic.AtomicInteger()
+    private val slowHits = java.util.concurrent.atomic.AtomicInteger()
+    private val entered = java.util.concurrent.CountDownLatch(1)
+    private val release = java.util.concurrent.CountDownLatch(1)
     private val dir = Files.createTempDirectory("httpc-desktop")
 
     @BeforeTest fun start() {
@@ -26,11 +29,19 @@ class AppStateTest {
             val b = (ex.requestHeaders.getFirst("X-Token") ?: "none").toByteArray()
             ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) }
         }
+        server.createContext("/slow") { ex ->
+            slowHits.incrementAndGet()
+            entered.countDown()
+            release.await(10, java.util.concurrent.TimeUnit.SECONDS)
+            val b = "slow".toByteArray(); ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) }
+        }
         server.start()
         Files.writeString(dir.resolve("http-client.env.json"), """{"dev":{"base":"http://127.0.0.1:${server.address.port}"}}""")
     }
 
-    @AfterTest fun stop() = server.stop(0)
+    @AfterTest fun stop() { release.countDown(); server.stop(0) }
+
+    private fun slowFile(name: String) = dir.resolve(name).also { Files.writeString(it, "GET {{base}}/slow\n") }
 
     private val chained = "# @name login\nPOST {{base}}/login\n\n###\n# @name me\nGET {{base}}/echo\nX-Token: {{login.response.body.$.token}}\n"
 
@@ -123,6 +134,101 @@ class AppStateTest {
             state.resetChain()
             state.run(all = false)
             assertEquals(2, logins.get())
+        }
+    }
+
+    @Test fun simultaneousRunsExecuteOnce() {
+        AppState().use { state ->
+            state.open(slowFile("race.http"))
+            state.environment = "dev"
+            val n = 8
+            val barrier = java.util.concurrent.CyclicBarrier(n)
+            val threads = (1..n).map { Thread { barrier.await(); state.run(all = true) }.also { it.start() } }
+            assertTrue(entered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            Thread.sleep(300)   // let any losing thread get past the guard
+            release.countDown()
+            threads.forEach { it.join(15_000) }
+            assertEquals(1, slowHits.get())
+            assertEquals(1, state.outcomes.size)
+        }
+    }
+
+    @Test fun openingAnotherFileWhileRunningIsRefusedAndKeepsOutcomesWithTheirFile() {
+        val other = dir.resolve("other.http").also { Files.writeString(it, "GET {{base}}/echo\n") }
+        AppState().use { state ->
+            val slow = slowFile("switch.http")
+            state.open(slow)
+            state.environment = "dev"
+            val t = Thread { state.run(all = true) }.also { it.start() }
+            assertTrue(entered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            state.open(other)
+            assertEquals(slow, state.file)
+            assertTrue(state.message!!.contains("running"), state.message)
+            release.countDown()
+            t.join(15_000)
+            assertEquals(listOf("slow"), state.outcomes.map { bodyOf(it) })
+            assertEquals(slow, state.file)
+        }
+    }
+
+    @Test fun failedOpenKeepsThePreviousFileAndText() {
+        AppState().use { state ->
+            val good = dir.resolve("good.http").also { Files.writeString(it, "GET http://x/\n") }
+            state.open(good)
+            state.open(dir.resolve("missing.http"))
+            assertEquals(good, state.file)
+            assertEquals("GET http://x/\n", state.text)
+            assertTrue(state.message != null)
+        }
+    }
+
+    @Test fun failedEnvironmentRefreshDropsTheOldEnvironments() {
+        val d = Files.createTempDirectory("httpc-envs")
+        Files.writeString(d.resolve("http-client.env.json"), """{"dev":{}}""")
+        val file = d.resolve("e.http").also { Files.writeString(it, "GET http://x/\n") }
+        AppState().use { state ->
+            state.open(file)
+            assertEquals(listOf("dev"), state.environments)
+            Files.writeString(d.resolve("http-client.env.json"), "{nope")
+            state.save()
+            assertEquals(emptyList(), state.environments)
+            assertTrue(state.message!!.contains("http-client.env.json"), state.message)
+        }
+    }
+
+    @Test fun staleSelectionReportsInsteadOfRunningNothing() {
+        AppState().use { state ->
+            state.open(dir.resolve("s.http").also { Files.writeString(it, "GET {{base}}/echo\n") })
+            state.environment = "dev"
+            state.selected = 5
+            state.run(all = false)
+            assertTrue(state.outcomes.isEmpty())
+            assertTrue(state.message!!.contains("No request"), state.message)
+        }
+    }
+
+    @Test fun saveErrorSurvivesTheRunAttempt() {
+        AppState().use { state ->
+            val file = dir.resolve("sv.http").also { Files.writeString(it, "GET {{base}}/echo\n") }
+            state.open(file)
+            state.environment = "dev"
+            Files.delete(file)
+            Files.createDirectory(file)   // writing the file now fails on every platform
+            state.run(all = true)
+            assertTrue(state.message != null)
+            assertTrue(state.outcomes.isEmpty())
+            assertFalse(state.running)
+        }
+    }
+
+    @Test fun requestListIsParsedOncePerEdit() {
+        AppState().use { state ->
+            state.open(dir.resolve("p.http").also { Files.writeString(it, chained) })
+            assertTrue(state.requests === state.requests)
+            val before = state.requests
+            state.edit("GET http://x/\n")
+            assertEquals(1, state.requests.size)
+            assertTrue(before !== state.requests)
         }
     }
 }
