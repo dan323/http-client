@@ -19,7 +19,7 @@ Run tests: `./gradlew test`.
 
 The build-only `quality-reports/` project (not shipped) aggregates reports of all modules except `intellij-plugin`:
 
-- `./gradlew :quality-reports:qualityReports` runs the tests, then writes the aggregated test report (`quality-reports/build/reports/tests/test/index.html`) and the merged JaCoCo report (`quality-reports/build/reports/jacoco/testCodeCoverageReport/`, HTML plus `testCodeCoverageReport.xml`). `:quality-reports:coverageVerification` fails if merged coverage is below the floor set in `quality-reports/build.gradle.kts` (currently lines 95 %, branches 83 %, measured 95.4 % / 83.6 %). The floor only ever goes up.
+- `./gradlew :quality-reports:qualityReports` runs the tests, then writes the aggregated test report (`quality-reports/build/reports/tests/test/aggregated-results/index.html`) and the merged JaCoCo report (`quality-reports/build/reports/jacoco/testCodeCoverageReport/`, HTML plus `testCodeCoverageReport.xml`). `:quality-reports:coverageVerification` fails if merged coverage is below the floor set in `quality-reports/build.gradle.kts` (currently lines 95 %, branches 83 %, measured 95.4 % / 83.6 %). The floor only ever goes up.
 - `./gradlew :core:pitest` runs PIT mutation testing on `core` (about a minute; HTML report in `core/build/reports/pitest/`). Measured mutation score 83 % (820 of 988 mutants killed); the build fails below 80 %.
 - The IntelliJ plugin is excluded from JaCoCo (the IDE test runtime instruments classes itself and its tests need an IDE).
 
