@@ -199,11 +199,7 @@ private fun writeReport(path: Path, err: PrintStream, content: () -> String): Bo
     val tmp = Files.createTempFile(parent, ".httpc-report-", ".tmp")
     try {
         Files.writeString(tmp, content())
-        try {
-            Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-        } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
-            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING)
-        }
+        moveIntoPlace(tmp, target)
     } finally {
         Files.deleteIfExists(tmp)
     }
@@ -211,6 +207,18 @@ private fun writeReport(path: Path, err: PrintStream, content: () -> String): Bo
 } catch (e: Exception) {
     err.println("Error: Cannot write report $path: ${e.message ?: e}")
     false
+}
+
+/**
+ * Moves [tmp] over [target], atomically when the file system supports it (some, e.g. certain Windows and network
+ * file systems, do not: then a plain replacing move is used). [move] is injectable so the fallback is testable.
+ */
+internal fun moveIntoPlace(tmp: Path, target: Path, move: (Path, Path, Array<StandardCopyOption>) -> Unit = { a, b, o -> Files.move(a, b, *o) }) {
+    try {
+        move(tmp, target, arrayOf(StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING))
+    } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
+        move(tmp, target, arrayOf(StandardCopyOption.REPLACE_EXISTING))
+    }
 }
 
 /** Fails with exit 1 and, when reports were requested, writes a report holding the single error. */
