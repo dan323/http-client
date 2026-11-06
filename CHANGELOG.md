@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 - CLI (T10): `--quiet` (no per-request stdout; failed assertions and errors still on stderr), `--output FILE` (response body of the single selected request, through `ReportWriter`/`AtomicReportWriter`, owner-only, same path rules as reports; several selected requests are a usage error), `--var NAME=VALUE` (repeatable, overrides file and environment variables, values scrubbed from failure messages) and a summary line `N requests, P passed, F failed in Xs` on stderr. Exit code 3 now also covers an unwritable output file.
+- Auth shortcut (T7, F3): `Authorization: Basic user password` and `Basic user:password` are Base64-encoded (UTF-8) at send time, after variable resolution; an already-encoded single token and other schemes are unchanged. The encoded value, the plain credentials and the password are scrubbed from failure messages. `Digest` and OAuth helpers are not implemented.
 
 ### Changed
 - Docs refresh (R12b): `docs/features.md` describes the final state (CLI synopsis and exit codes, environment resolution, session behaviour in desktop and plugin); `docs/PLAN.md` lists only open work with statuses; `docs/REMEDIATION.md` records R1-R13 as done with their leftovers; module READMEs and `CLAUDE.md` updated.

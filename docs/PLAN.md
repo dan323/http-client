@@ -12,7 +12,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 |---|---|---|---|
 | F1 | Response assertions (`# @assert ...`) and a test-runner mode with pass/fail results | core, CLI, UIs | partial: engine, CLI and reports done; desktop and plugin do not show assertion results |
 | F2 | File variables (`@host = localhost`) and request settings (`# @timeout`, `# @no-redirect`, `# @no-cookie-jar`, `# @proxy`) | core | done |
-| F3 | Auth helpers (Basic encoding, Bearer shorthand) | core | open |
+| F3 | Auth helpers (Basic encoding; Bearer needs none) | core | done |
 | F4 | Multipart and form bodies, file uploads | core | open |
 | F5 | Cookie jar between requests | core | done |
 | F6 | More dynamic variables (`$random.*`, `$env.X`, timestamp offsets, `$randomInt` range) | core | done |
@@ -37,7 +37,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 ## 2. Tasks
 
 Done tasks are listed in the CHANGELOG, not here: T1 (file variables, settings), T2 (executor options), T3 (cookie jar),
-T4 (`ResponseExtractor`), T5 (assertions), T6 (dynamic variables v2), T9 (`RunReport`, JSON and JUnit export),
+T4 (`ResponseExtractor`), T5 (assertions), T6 (dynamic variables v2), T7 (Basic auth shortcut), T9 (`RunReport`, JSON and JUnit export),
 T12 (`view-model`). Done as well: the review fixes R1-R13 ([REMEDIATION.md](REMEDIATION.md)), including the
 composition root, environment resolution, file confinement, the CI matrix part of T24 and build quality reports.
 
@@ -46,7 +46,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 
 | ID | Task | Serves | Size | Needs |
 |---|---|---|---|---|
-| T7 | **Auth shortcuts:** Basic user/password encoding, `Bearer` directive | F3 | S | – |
 | T8 | **Multipart and form bodies** in parser and executor, with file parts (file reads go through the confined `FileReader`) | F4 | M | – |
 | T11 | **History store:** outbound port + file adapter that saves reports and responses | F9, F13, F15 | M | – |
 | T13 | **Variable analysis in `core`:** list known variables (env, file, names) and find undefined variables and bad `{{name.response...}}` references | F14, F18 | M | – |
@@ -69,7 +68,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 | Feature | Open tasks |
 |---|---|
 | F1 | T17, T22 |
-| F3 | T7 |
 | F4 | T8 |
 | F9 | T11, T26 |
 | F11 | T14 |
@@ -93,7 +91,7 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 
 | Wave | Tasks | Why together |
 |---|---|---|
-| 1 | T21 (plugin GUI check), T7 (auth), T11 (history store) | T21 first on purpose: its findings may reshape T22/T23; the others are independent core/adapters work |
+| 1 | T21 (plugin GUI check), T11 (history store) | T21 first on purpose: its findings may reshape T22/T23; the others are independent core/adapters work |
 | 2 | T13 (variable analysis), T14 (desktop persistence), T26 (saved responses, needs T11) | disjoint areas |
 | 3 | T8 (multipart), T19 (cancel button), T23 (plugin panel) | disjoint areas |
 | 4 | T22 (plugin intelligence), T16 (desktop editor), T15 (workspace) | need T13 / T14 |
