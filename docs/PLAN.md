@@ -19,7 +19,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F7 | More extraction: XPath, regex, headers (for chaining and assertions) | core | done |
 | F8 | Executor settings: redirects, timeouts, proxy | core | done |
 | F9 | Response history and saved responses | core, UIs | open |
-| F10 | CLI: `--json`, `--junit`, `--quiet`, `--output`, `--var`, meaningful exit codes | CLI | partial: `--report-json`, `--report-junit` and exit codes 0/1/2/3 done; `--quiet`, `--output`, `--var` open |
+| F10 | CLI: `--json`, `--junit`, `--quiet`, `--output`, `--var`, meaningful exit codes | CLI | done (T10): reports, exit codes 0/1/2/3, `--quiet`, `--output`, `--var`, summary line |
 | F11 | Desktop: remember last file, environment, window, recent files | desktop | open |
 | F12 | Desktop: several files at once, folder view | desktop | open |
 | F13 | Desktop: history browser and response comparison | desktop | open |
@@ -47,7 +47,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 | ID | Task | Serves | Size | Needs |
 |---|---|---|---|---|
 | T8 | **Multipart and form bodies** in parser and executor, with file parts (file reads go through the confined `FileReader`) | F4 | M | – |
-| T10 | **CLI rest:** `--quiet`, `--output`, `--var`, summary line (reports and exit codes are done) | F10 | S | – |
 | T13 | **Variable analysis in `core`:** list known variables (env, file, names) and find undefined variables and bad `{{name.response...}}` references | F14, F18 | M | – |
 | T14 | **Desktop persistence:** settings port + JSON adapter in the user config dir; last file, environment, window, recents | F11 | M | – |
 | T15 | **Desktop workspace:** several open files (tabs) and a folder view | F12 | L | T14 |
@@ -70,7 +69,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 | F1 | T17, T22 |
 | F4 | T8 |
 | F9 | T26 |
-| F10 | T10 |
 | F11 | T14 |
 | F12 | T15 |
 | F13 | T18 |
@@ -96,7 +94,7 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 | 2 | T13 (variable analysis), T14 (desktop persistence), T26 (saved responses, needs T11) | disjoint areas |
 | 3 | T8 (multipart), T19 (cancel button), T23 (plugin panel) | disjoint areas |
 | 4 | T22 (plugin intelligence), T16 (desktop editor), T15 (workspace) | need T13 / T14 |
-| 5 | T17 (desktop extras), T18 (history browser), T20 (environment editor), T10 (CLI rest), T24 (packaging) | up to three at a time |
+| 5 | T17 (desktop extras), T18 (history browser), T20 (environment editor), T10 (CLI rest, done), T24 (packaging) | up to three at a time |
 | 6 | T25 (QA and release notes) | needs everything |
 
 ### Rules for every task
