@@ -39,7 +39,13 @@ Documentation: [features](docs/features.md) · [plan](docs/PLAN.md) · [changelo
 - `--list` — list the requests in the file and exit.
 - `--report-json FILE` / `--report-junit FILE` — also write a run report (per-request status, timings, assertion results, totals) as JSON or JUnit XML; console output is unchanged; a report path must differ from the input file (see [features](docs/features.md#run-reports)).
 
-Exit codes: `0` success, `1` a request, assertion or setup failed, `2` bad arguments, `3` the run passed but a report could not be written.
+- `--quiet` — no per-request output on stdout; failed assertions and errors still go to stderr.
+- `--output FILE` — write the response body of the single selected request to `FILE` (needs `--request` when the file holds several requests; owner-only file).
+- `--var NAME=VALUE` — set a variable (repeatable); it overrides file and environment variables.
+
+After a run a summary line such as `3 requests, 2 passed, 1 failed in 1.2s` is printed to stderr.
+
+Exit codes: `0` success, `1` a request, assertion or setup failed, `2` bad arguments, `3` the run passed but a report or output file could not be written.
 
 `# @assert status == 200` lines are checked after each response; the CLI prints PASS/FAIL and exits 1 on any failure (see [features](docs/features.md#assertions)).
 
