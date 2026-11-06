@@ -5,6 +5,8 @@ import com.intellij.execution.lineMarker.RunLineMarkerContributor
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.util.TextRange
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.util.CachedValueProvider
@@ -15,12 +17,11 @@ class RunLineMarker : RunLineMarkerContributor() {
     override fun getInfo(element: PsiElement): Info? {
         if (element.firstChild != null) return null // leaves only
         val file = element.containingFile ?: return null
-        val text = file.text
+        val document = PsiDocumentManager.getInstance(file.project).getCachedDocument(file) ?: return null
         val offset = element.textRange.startOffset
-        val lineStart = text.lastIndexOf('\n', offset - 1) + 1
+        val line = document.getLineNumber(offset)
         // Only the first non-blank token of a line can carry the icon.
-        if (text.substring(lineStart, offset).isNotBlank()) return null
-        val line = text.take(offset).count { it == '\n' }
+        if (document.getText(TextRange(document.getLineStartOffset(line), offset)).isNotBlank()) return null
         if (line !in requestLines(file)) return null
 
         val action = object : AnAction("Run HTTP Request", null, AllIcons.RunConfigurations.TestState.Run) {
