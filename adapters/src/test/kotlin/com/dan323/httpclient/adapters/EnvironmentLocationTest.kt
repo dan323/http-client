@@ -69,6 +69,31 @@ class EnvironmentLocationTest {
         assertTrue(UpwardEnvironmentLocator(setOf(home)).environments(file).isEmpty())
     }
 
+    private fun link(rel: String, target: Path): Boolean = try {
+        Files.createDirectories(root.resolve(rel).parent); Files.createSymbolicLink(root.resolve(rel), target); true
+    } catch (_: Exception) { false }   // e.g. Windows without the privilege: the test is skipped
+
+    @Test fun symlinkedAliasOfTheHomeBoundaryDoesNotBypassIt() {
+        val home = root.resolve("home")
+        write("home/http-client.env.json", """{"stray":{}}""")
+        write("home/proj/.keep", "")
+        if (!link("alias", home)) return
+        val file = root.resolve("alias/proj/x.http").also { Files.writeString(it, "GET http://x") }
+        assertTrue(UpwardEnvironmentLocator(setOf(home)).environments(file).isEmpty())
+        // and the boundary given as the alias, the file reached through the real path
+        val real = write("home/proj/y.http", "GET http://x")
+        assertTrue(UpwardEnvironmentLocator(setOf(root.resolve("alias"))).environments(real).isEmpty())
+    }
+
+    @Test fun brokenSymlinkedNearestEnvFileFailsInsteadOfUsingAnAncestor() {
+        write("http-client.env.json", """{"ancestor":{}}""")
+        val file = write("proj/x.http", "GET http://x")
+        if (!link("proj/http-client.env.json", root.resolve("nowhere/secret.json"))) return
+        val e = assertFailsWith<EnvironmentFileException> { UpwardEnvironmentLocator(emptySet()).find(file) }
+        assertTrue(e.message!!.contains("http-client.env.json"), e.message)
+        assertTrue(!e.message!!.contains("ancestor"), e.message)
+    }
+
     @Test fun envFileInTheHttpFilesOwnFolderIsFoundEvenInHome() {
         val home = root.resolve("home")
         write("home/http-client.env.json", """{"own":{}}""")
