@@ -197,6 +197,31 @@ Caveats: a prerequisite or an unasserted request answering HTTP 500 still counts
 failed assertions fail a run), so a green report does not mean "no 5xx". Reports contain URLs as written in the file
 and error messages, which may include secrets (tokens in query strings); treat them as sensitive CI artifacts.
 
+### Run history store
+
+`HistoryStore` (port in `core`) remembers past runs of a `.http` file: `record` (a `RunReport` plus the response of
+each request), `list` (newest first), `read`, `readResponse` and `latestResponse` (by request name). It is not yet
+used by the CLI, desktop app or plugin (planned: history browsing and `<>` links). `FileHistoryStore` (`adapters`)
+keeps it in `.http-history/<file name>/` next to the `.http` file; the folder is injectable
+(`FileHistoryStore.underRoot(dir)` for a shared root, or any `(Path) -> Path`).
+
+Layout: one folder per run, named by its id (`20261106T101500123Z-a1b2c3d4`: UTC time + random), holding `run.json`
+(version, id, timestamp, the report in the `JsonRunReport` format, and per response: status, headers, duration,
+body size, `bodyTruncated`) and `<index>.body` (raw bytes). `run.json` is written last; a folder without it is
+incomplete and ignored (removed after an hour). There is no shared index file, so two processes recording at once
+cannot lose each other's runs; all files are written atomically.
+
+- Retention: the newest 50 runs per file are kept (`maxRuns`); older ones are deleted when recording.
+- Bodies are stored in full up to 5 MB (`maxBodyBytes`); larger ones are cut, with `bodyTruncated = true` and the real
+  size in `originalBodySize`.
+- Confinement: only the history folder is written. Body files are named by index, never by request name; the `.http`
+  file name used as folder name is sanitized (separators, Windows-illegal characters, `.`/`..`, reserved names such
+  as `CON`, trailing dots, length over 80); run ids are validated before use; symlinked entries are not followed.
+- Corrupt, foreign or newer-version entries are skipped with a warning, never fatal.
+- Secrets: stored responses are raw (tokens, cookies, personal data). On POSIX, folders are `rwx------` and files
+  `rw-------` from creation (Windows uses the default ACLs). Add `.http-history/` to your `.gitignore` (this repository
+  does) and never share the folder.
+
 ### Authorization shortcuts
 
 As in the JetBrains HTTP Client, `Authorization: Basic` accepts plain credentials, which are Base64-encoded (UTF-8) when the request is sent:

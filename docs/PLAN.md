@@ -47,20 +47,19 @@ Each remaining task is listed once even when it serves several features. Size: S
 | ID | Task | Serves | Size | Needs |
 |---|---|---|---|---|
 | T8 | **Multipart and form bodies** in parser and executor, with file parts (file reads go through the confined `FileReader`) | F4 | M | – |
-| T11 | **History store:** outbound port + file adapter that saves reports and responses | F9, F13, F15 | M | – |
 | T13 | **Variable analysis in `core`:** list known variables (env, file, names) and find undefined variables and bad `{{name.response...}}` references | F14, F18 | M | – |
 | T14 | **Desktop persistence:** settings port + JSON adapter in the user config dir; last file, environment, window, recents | F11 | M | – |
 | T15 | **Desktop workspace:** several open files (tabs) and a folder view | F12 | L | T14 |
 | T16 | **Desktop editor intelligence:** variable completion, diagnostics from T13, find/replace | F14 | L | T13 |
 | T17 | **Desktop response extras:** body search, save to file, image/HTML preview; also show assertion results (F1) | F15, F1 | M | – |
-| T18 | **Desktop history and compare:** browse stored responses, diff two | F13 | M | T11 |
+| T18 | **Desktop history and compare:** browse stored responses, diff two | F13 | M | – (T11 done: `HistoryStore` / `FileHistoryStore`) |
 | T19 | **Cancel button:** desktop (and plugin) cancel of the running request; core and the executor already cancel on interrupt | F16 | S | – |
 | T20 | **Environment editor:** write support on the environment port and a UI to edit variables | F17 | M | T14 |
 | T21 | **Plugin GUI verification:** the sandbox IDE loads without errors; still to check by hand: highlighting, gutter icons, tool window, actions, in a Community IDE | F20, F19, F18 | S | – |
 | T22 | **Plugin intelligence:** completion, go-to-request, inspections from T13; show assertion results | F18, F14, F1 | L | T13, T21 |
 | T23 | **Plugin response panel:** remember the environment across restarts, run all | F19 | M | T21 |
 | T24 | **Packaging in CI** (rest of F20): build DMG/MSI/DEB and the plugin zip on the matching OS (tests on three OS already run) | F20 | S | – |
-| T26 | **Saved responses and links:** parse `>> file` / `>>! file` (today they are skipped with a parser warning, like other handlers) and `<> file`; write the response body to the named file (`>>` never overwrites, `>>!` does) through a port, with paths confined like `< path` (`FileAccessPolicy`); keep a `<> file` link to the latest stored response up to date, with the response files kept in a history folder next to the `.http` file (location to decide; default `.http-history/`); open the linked response from desktop and plugin | F21, F9 | M | T11 |
+| T26 | **Saved responses and links:** parse `>> file` / `>>! file` (today they are skipped with a parser warning, like other handlers) and `<> file`; write the response body to the named file (`>>` never overwrites, `>>!` does) through a port, with paths confined like `< path` (`FileAccessPolicy`); keep a `<> file` link to the latest stored response up to date, with the response files kept in a history folder next to the `.http` file (`.http-history/` via the T11 `HistoryStore`); open the linked response from desktop and plugin | F21, F9 | M | – (T11 done: `HistoryStore` / `FileHistoryStore`) |
 | T25 | **Final cross-platform QA and release notes:** manual pass of CLI, desktop (dialogs, MSI) and plugin; fix findings | F20 | M | all |
 
 ### Feature to task map
@@ -69,20 +68,20 @@ Each remaining task is listed once even when it serves several features. Size: S
 |---|---|
 | F1 | T17, T22 |
 | F4 | T8 |
-| F9 | T11, T26 |
+| F9 | T26 |
 | F11 | T14 |
 | F12 | T15 |
-| F13 | T11, T18 |
+| F13 | T18 |
 | F14 | T13, T16, T22 |
-| F15 | T11, T17 |
+| F15 | T17 |
 | F16 | T19 |
 | F17 | T20 |
 | F18 | T13, T21, T22 |
 | F19 | T21, T23 |
 | F20 | T21, T24, T25 |
-| F21 | T11, T26 |
+| F21 | T26 |
 
-Shared work, written once: T11 (F9, F13, F15, F21), T13 (F14, F18), T14 (F11, F12, F17), T21 (F18, F19, F20).
+Shared work, written once: T13 (F14, F18), T14 (F11, F12, F17), T21 (F18, F19, F20).
 
 ## 3. Order
 
@@ -91,11 +90,11 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 
 | Wave | Tasks | Why together |
 |---|---|---|
-| 1 | T21 (plugin GUI check), T11 (history store) | T21 first on purpose: its findings may reshape T22/T23; the others are independent core/adapters work |
-| 2 | T13 (variable analysis), T14 (desktop persistence), T26 (saved responses, needs T11) | disjoint areas |
+| 1 | T21 (plugin GUI check) | Done by hand in a real IDE; its findings may reshape T22/T23 |
+| 2 | T13 (variable analysis), T14 (desktop persistence), T26 (saved responses, builds on the done T11) | disjoint areas |
 | 3 | T8 (multipart), T19 (cancel button), T23 (plugin panel) | disjoint areas |
 | 4 | T22 (plugin intelligence), T16 (desktop editor), T15 (workspace) | need T13 / T14 |
-| 5 | T17 (desktop extras), T18 (history browser), T20 (environment editor), T10 (CLI rest, done), T24 (packaging) | up to three at a time |
+| 5 | T17 (desktop extras), T18 (history browser), T20 (environment editor), T24 (packaging) | up to three at a time |
 | 6 | T25 (QA and release notes) | needs everything |
 
 ### Rules for every task

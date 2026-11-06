@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- History store (T11): `HistoryStore` port in `core` (`HistoryRun`, `StoredResponse`) and `FileHistoryStore` in `adapters` (`.http-history/` next to the `.http` file, injectable root, newest 50 runs kept, bodies cut at 5 MB with a marker, owner-only files on POSIX, atomic writes, one folder per run so concurrent writers cannot corrupt it, corrupt entries skipped). Not wired into the front ends yet. `.http-history/` added to `.gitignore`; stored responses are raw and may contain secrets. See `docs/features.md`.
 - CLI (T10): `--quiet` (no per-request stdout; failed assertions and errors still on stderr), `--output FILE` (response body of the single selected request, through `ReportWriter`/`AtomicReportWriter`, owner-only, same path rules as reports; several selected requests are a usage error), `--var NAME=VALUE` (repeatable, overrides file and environment variables, values scrubbed from failure messages) and a summary line `N requests, P passed, F failed in Xs` on stderr. Exit code 3 now also covers an unwritable output file.
 - Auth shortcut (T7, F3): `Authorization: Basic user password` and `Basic user:password` are Base64-encoded (UTF-8) at send time, after variable resolution; an already-encoded single token and other schemes are unchanged. The encoded value, the plain credentials and the password are scrubbed from failure messages. `Digest` and OAuth helpers are not implemented.
 
