@@ -62,14 +62,43 @@ class AppState(private val runner: DesktopRunner = DesktopRunner()) : AutoClosea
         refreshEnvironments()
     }
 
+    /** Ignored while a run or file switch is in progress, so the buffer cannot diverge from what is being sent. */
     fun edit(newText: String) {
+        if (busy.get()) return
         assignText(newText)
         dirty = true
     }
 
-    /** Returns false (with [message] set) when the file could not be written. */
-    fun save(): Boolean = guarded {
-        file?.let { Files.writeString(it, text); dirty = false; refreshEnvironments() }
+    /** Returns false (with [message] set) when the file could not be written; refused while a run is in progress. */
+    fun save(): Boolean {
+        if (!busy.compareAndSet(false, true)) {
+            message = "Cannot save while a request is running."
+            return false
+        }
+        try {
+            val path = file ?: return true
+            if (!write(path, text)) return false
+            message = null
+            refreshQuietly()
+            return true
+        } finally {
+            busy.set(false)
+        }
+    }
+
+    /** Writes [t]; [dirty] is cleared only if the buffer still equals what was written. False (with [message]) on failure. */
+    private fun write(path: Path, t: String): Boolean = try {
+        Files.writeString(path, t)
+        if (text == t) dirty = false
+        true
+    } catch (e: Exception) {
+        message = e.message ?: e::class.simpleName
+        false
+    }
+
+    /** An environment-file error is reported but never counts as a failed write or blocks a run. */
+    private fun refreshQuietly() {
+        try { refreshEnvironments() } catch (e: Exception) { message = e.message ?: e::class.simpleName }
     }
 
     /** Runs the selected request (with prerequisites), or all requests when [all]. Blocking. */
@@ -78,15 +107,17 @@ class AppState(private val runner: DesktopRunner = DesktopRunner()) : AutoClosea
         try {
             val path = file ?: return
             running = true
-            if (!save()) return   // keep the save error visible instead of running stale text
-            synchronized(lock) { outcomes = emptyList() }
+            synchronized(lock) { outcomes = emptyList() }   // never leave the previous run's results next to a new error
+            val t = text   // one snapshot for the write and the run
+            if (!write(path, t)) return   // keep the save error visible instead of running stale text
+            message = null
+            refreshQuietly()
             val index = selected
             if (!all && requests.isNotEmpty() && index !in requests.indices) {
                 message = "No request is selected (the file has ${requests.size}); pick one from the list."
                 return
             }
-            message = null
-            runner.execute(path, text, if (all) null else index, environment) { o -> synchronized(lock) { outcomes = outcomes + o } }
+            runner.execute(path, t, if (all) null else index, environment) { o -> synchronized(lock) { outcomes = outcomes + o } }
         } catch (e: Exception) {
             message = e.message ?: e::class.simpleName
         } finally {
