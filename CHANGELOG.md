@@ -5,6 +5,9 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- CLI (T10): `--quiet` (no per-request stdout; failed assertions and errors still on stderr), `--output FILE` (response body of the single selected request, through `ReportWriter`/`AtomicReportWriter`, owner-only, same path rules as reports; several selected requests are a usage error), `--var NAME=VALUE` (repeatable, overrides file and environment variables, values scrubbed from failure messages) and a summary line `N requests, P passed, F failed in Xs` on stderr. Exit code 3 now also covers an unwritable output file.
+
 ### Changed
 - Docs refresh (R12b): `docs/features.md` describes the final state (CLI synopsis and exit codes, environment resolution, session behaviour in desktop and plugin); `docs/PLAN.md` lists only open work with statuses; `docs/REMEDIATION.md` records R1-R13 as done with their leftovers; module READMEs and `CLAUDE.md` updated.
 - CLI and reports (R8): `JUnitXmlReport` moved from `core` to `adapters` (package `com.dan323.httpclient.adapters`); new `ReportWriter` port in `core` with `AtomicReportWriter` in `adapters` (the CLI no longer does report file I/O). New report files are owner-only (0600) on POSIX, replaced ones keep their permissions. `--report-*` equal to the input `.http` file and `--report-*` with `--list` are usage errors (exit 2). A failed run whose report cannot be written now exits 1 (was 3); 3 is only for a passed run. The CLI uses `RunReport.passed` instead of recomputing.

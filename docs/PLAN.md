@@ -48,7 +48,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 |---|---|---|---|---|
 | T7 | **Auth shortcuts:** Basic user/password encoding, `Bearer` directive | F3 | S | – |
 | T8 | **Multipart and form bodies** in parser and executor, with file parts (file reads go through the confined `FileReader`) | F4 | M | – |
-| T10 | **CLI rest:** `--quiet`, `--output`, `--var`, summary line (reports and exit codes are done) | F10 | S | – |
 | T11 | **History store:** outbound port + file adapter that saves reports and responses | F9, F13, F15 | M | – |
 | T13 | **Variable analysis in `core`:** list known variables (env, file, names) and find undefined variables and bad `{{name.response...}}` references | F14, F18 | M | – |
 | T14 | **Desktop persistence:** settings port + JSON adapter in the user config dir; last file, environment, window, recents | F11 | M | – |
@@ -73,7 +72,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 | F3 | T7 |
 | F4 | T8 |
 | F9 | T11, T26 |
-| F10 | T10 |
 | F11 | T14 |
 | F12 | T15 |
 | F13 | T11, T18 |
