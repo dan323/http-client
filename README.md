@@ -5,7 +5,7 @@ A Postman-style HTTP client compatible with the JetBrains `.http` file format.
 Hexagonal layout:
 
 - `core/` — domain, application services (`HttpFileParser`, `VariableResolver`, `RequestRunner`) and ports. No third-party dependencies.
-- `adapters/` — driven adapters: `JdkHttpExecutor`, `LocalFileReader`, `JsonEnvironmentRepository` (`http-client.env.json` + `.private.env.json`) with `UpwardEnvironmentLocator` (nearest env file, searching upward), `FileAccessPolicy` (confines `< path` bodies), report writers (`AtomicReportWriter`, `JUnitXmlReport`, `JsonRunReport`), `SessionFactory` (the composition root: assembles and closes executor, runner and session), `SystemEnvironmentVariables` (`{{$env.NAME}}`, opt-in allowlist; see [docs/features.md](docs/features.md)).
+- `adapters/` — driven adapters: `JdkHttpExecutor`, `LocalFileReader`, `JsonEnvironmentRepository` (`http-client.env.json` + `.private.env.json`) with `UpwardEnvironmentLocator` (nearest env file, searching upward), `FileAccessPolicy` (confines `< path` bodies), report writers (`AtomicReportWriter`, `JUnitXmlReport`, `JsonRunReport`), `FileHistoryStore` (run history in `.http-history/`; raw responses, keep out of version control), `SessionFactory` (the composition root: assembles and closes executor, runner and session), `SystemEnvironmentVariables` (`{{$env.NAME}}`, opt-in allowlist; see [docs/features.md](docs/features.md)).
 - `cli/` — command-line front end (`httpc`).
 - `view-model/` — pure view logic (JSON tree/colour spans, status and size formatting, `RunController` run/session cache, `OutcomeDisplay` rows) shared by `desktop` and `intellij-plugin`.
 - `desktop/` — standalone Compose Desktop app for Windows, macOS and Linux ([README](desktop/README.md)).
