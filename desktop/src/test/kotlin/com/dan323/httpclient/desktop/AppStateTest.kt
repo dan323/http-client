@@ -169,6 +169,28 @@ class AppStateTest {
         }
     }
 
+    @Test fun openingAVanishedRecentFileWhileRunningIsRefusedAndLeavesTheList() {
+        val gone = dir.resolve("gone.http").also { Files.writeString(it, "GET {{base}}/echo\n") }
+        val cfg = Files.createTempDirectory("httpc-cfg")
+        try {
+            AppState(settings = SettingsPersistence(com.dan323.httpclient.adapters.JsonSettingsStore(cfg.resolve("c")))).use { state ->
+                state.open(gone)
+                state.open(slowFile("busy.http"))
+                state.environment = "dev"
+                Files.delete(gone)
+                val runner = Thread { state.run(all = true) }.also { it.start() }
+                assertTrue(entered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                state.openRecent(state.recentFiles.last())
+                assertEquals(2, state.recentFiles.size)
+                assertTrue(state.message!!.startsWith("Cannot"))
+                release.countDown()
+                runner.join(15_000)
+                state.openRecent(state.recentFiles.last())   // idle again: removed
+                assertEquals(1, state.recentFiles.size)
+            }
+        } finally { cfg.toFile().deleteRecursively() }
+    }
+
     @Test fun openingAnotherFileWhileRunningIsRefusedAndKeepsOutcomesWithTheirFile() {
         val other = dir.resolve("other.http").also { Files.writeString(it, "GET {{base}}/echo\n") }
         AppState().use { state ->

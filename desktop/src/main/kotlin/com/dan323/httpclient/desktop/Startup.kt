@@ -16,11 +16,15 @@ fun createAppState(args: Array<String>, newStore: () -> SettingsStore = { JsonSe
 
 /**
  * Follows the window so that the saved geometry is the normal (not maximized) one: a maximized window keeps the
- * last normal size and only sets the flag, and a zero-sized window (minimized, not laid out) is ignored.
+ * last normal size and only sets the flag, and a zero-sized or off-screen "minimized" window is ignored. Fullscreen counts as maximized.
  */
 class WindowTracker(private var normal: Placement) {
+    private companion object { const val MINIMIZED_COORDINATE = -30000 }
+
     fun observe(width: Int, height: Int, x: Int?, y: Int?, maximized: Boolean): WindowSettings {
-        if (!maximized && width > 0 && height > 0) normal = Placement(width, height, x, y, false)
+        // Windows reports about (-32000, -32000) for a minimized frame: not a real position, ignore the observation
+        val minimized = (x ?: 0) <= MINIMIZED_COORDINATE || (y ?: 0) <= MINIMIZED_COORDINATE
+        if (!maximized && !minimized && width > 0 && height > 0) normal = Placement(width, height, x, y, false)
         return WindowSettings(normal.width, normal.height, normal.x, normal.y, maximized)
     }
 }
