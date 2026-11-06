@@ -94,13 +94,14 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
     // Middle: editor.
     Column(Modifier.weight(1f).fillMaxHeight().padding(vertical = 12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(enabled = state.file != null && state.dirty, onClick = { state.save() }) { Text("Save") }
+            OutlinedButton(enabled = state.file != null && state.dirty && !state.running, onClick = { state.save() }) { Text("Save") }
             state.message?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
         }
         OutlinedTextField(
             value = state.text,
             onValueChange = state::edit,
             enabled = state.file != null,
+            readOnly = state.running,
             textStyle = mono,
             visualTransformation = remember(dark) { HttpVisualTransformation(if (dark) HighlightPalette.Dark else HighlightPalette.Light) },
             placeholder = { Text("Open or create a .http file") },

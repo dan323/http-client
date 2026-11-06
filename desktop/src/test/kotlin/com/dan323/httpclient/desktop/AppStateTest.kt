@@ -49,66 +49,72 @@ class AppStateTest {
 
     @Test fun opensFileAndListsRequestsAndEnvironments() {
         val file = dir.resolve("a.http").also { Files.writeString(it, chained) }
-        val state = AppState()
-        state.open(file)
-        assertEquals(listOf("login", "me"), state.requests.map { it.name })
-        assertEquals(listOf("dev"), state.environments)
-        assertFalse(state.dirty)
+        AppState().use { state ->
+            state.open(file)
+            assertEquals(listOf("login", "me"), state.requests.map { it.name })
+            assertEquals(listOf("dev"), state.environments)
+            assertFalse(state.dirty)
+        }
     }
 
     @Test fun sendRunsSelectedRequestWithPrerequisites() {
         val file = dir.resolve("b.http").also { Files.writeString(it, chained) }
-        val state = AppState()
-        state.open(file)
-        state.environment = "dev"
-        state.selected = 1
-        state.run(all = false)
-        assertEquals(listOf("login", "me"), state.outcomes.map { it.request.name })
-        assertEquals("zzz", bodyOf(state.outcomes.last()))
-        assertFalse(state.running)
+        AppState().use { state ->
+            state.open(file)
+            state.environment = "dev"
+            state.selected = 1
+            state.run(all = false)
+            assertEquals(listOf("login", "me"), state.outcomes.map { it.request.name })
+            assertEquals("zzz", bodyOf(state.outcomes.last()))
+            assertFalse(state.running)
+        }
     }
 
     @Test fun editsAreSavedBeforeRunning() {
         val file = dir.resolve("c.http").also { Files.writeString(it, "GET {{base}}/echo\n") }
-        val state = AppState()
-        state.open(file)
-        state.environment = "dev"
-        state.edit("GET {{base}}/echo\nX-Token: edited\n")
-        assertTrue(state.dirty)
-        state.run(all = true)
-        assertEquals("edited", bodyOf(state.outcomes.single()))
-        assertEquals("GET {{base}}/echo\nX-Token: edited\n", Files.readString(file))
-        assertFalse(state.dirty)
+        AppState().use { state ->
+            state.open(file)
+            state.environment = "dev"
+            state.edit("GET {{base}}/echo\nX-Token: edited\n")
+            assertTrue(state.dirty)
+            state.run(all = true)
+            assertEquals("edited", bodyOf(state.outcomes.single()))
+            assertEquals("GET {{base}}/echo\nX-Token: edited\n", Files.readString(file))
+            assertFalse(state.dirty)
+        }
     }
 
     @Test fun environmentsComeFromParentFolderAndStaleNameIsAnError() {
         val sub = Files.createDirectories(dir.resolve("nested/deeper"))
         val file = sub.resolve("e.http").also { Files.writeString(it, "GET {{base}}/echo\n") }
-        val state = AppState()
-        state.open(file)
-        assertEquals(listOf("dev"), state.environments)
-        state.environment = "gone"
-        state.run(all = true)
-        assertTrue(state.message!!.contains("Unknown environment: gone"), state.message)
-        assertTrue(state.outcomes.isEmpty())
+        AppState().use { state ->
+            state.open(file)
+            assertEquals(listOf("dev"), state.environments)
+            state.environment = "gone"
+            state.run(all = true)
+            assertTrue(state.message!!.contains("Unknown environment: gone"), state.message)
+            assertTrue(state.outcomes.isEmpty())
+        }
     }
 
     @Test fun malformedEnvFileIsShownWithItsName() {
         val bad = Files.createTempDirectory("httpc-bad")
         bad.resolve("http-client.env.json").also { Files.writeString(it, "{nope") }
         val file = bad.resolve("e.http").also { Files.writeString(it, "GET http://x/\n") }
-        val state = AppState()
-        state.open(file)
-        // file name only: Windows may report the temp dir in its long form (RUNNER~1 vs runneradmin)
-        assertTrue(state.message!!.contains("http-client.env.json"), state.message)
+        AppState().use { state ->
+            state.open(file)
+            // file name only: Windows may report the temp dir in its long form (RUNNER~1 vs runneradmin)
+            assertTrue(state.message!!.contains("http-client.env.json"), state.message)
+        }
     }
 
     @Test fun failuresAreShownAsOutcomes() {
         val file = dir.resolve("d.http").also { Files.writeString(it, "GET {{nope}}/x\n") }
-        val state = AppState()
-        state.open(file)
-        state.run(all = true)
-        assertTrue(state.outcomes.single() is RunOutcome.Failure)
+        AppState().use { state ->
+            state.open(file)
+            state.run(all = true)
+            assertTrue(state.outcomes.single() is RunOutcome.Failure)
+        }
     }
 
     @Test fun badFileAccessConfigurationIsReportedAsFailure() {
@@ -143,9 +149,17 @@ class AppStateTest {
             state.environment = "dev"
             val n = 8
             val barrier = java.util.concurrent.CyclicBarrier(n)
-            val threads = (1..n).map { Thread { barrier.await(); state.run(all = true) }.also { it.start() } }
+            val finished = java.util.concurrent.CountDownLatch(n - 1)
+            val threads = (1..n).map {
+                Thread {
+                    barrier.await()
+                    state.run(all = true)
+                    if (state.running) finished.countDown()   // only losers return while the winner is still blocked
+                }.also { it.start() }
+            }
             assertTrue(entered.await(10, java.util.concurrent.TimeUnit.SECONDS))
-            Thread.sleep(300)   // let any losing thread get past the guard
+            // every losing thread has returned from run() while the winner is still inside the server
+            assertTrue(finished.await(15, java.util.concurrent.TimeUnit.SECONDS))
             release.countDown()
             threads.forEach { it.join(15_000) }
             assertEquals(1, slowHits.get())
@@ -229,6 +243,53 @@ class AppStateTest {
             state.edit("GET http://x/\n")
             assertEquals(1, state.requests.size)
             assertTrue(before !== state.requests)
+        }
+    }
+
+    @Test fun malformedEnvFileDoesNotBlockSendingWithoutAnEnvironment() {
+        val bad = Files.createTempDirectory("httpc-bad2")
+        Files.writeString(bad.resolve("http-client.env.json"), "{nope")
+        val file = bad.resolve("e.http").also { Files.writeString(it, "GET http://127.0.0.1:${server.address.port}/echo\n") }
+        AppState().use { state ->
+            state.open(file)
+            state.edit("GET http://127.0.0.1:${server.address.port}/echo\nX-Token: t\n")
+            assertTrue(state.save())   // the write succeeded even though the env refresh failed
+            assertFalse(state.dirty)
+            assertTrue(state.message!!.contains("http-client.env.json"), state.message)
+            assertEquals(emptyList(), state.environments)
+            state.run(all = true)
+            assertEquals("t", bodyOf(state.outcomes.single()))
+        }
+    }
+
+    @Test fun editAndSaveAreRefusedWhileRunning() {
+        AppState().use { state ->
+            val file = slowFile("busy.http")
+            state.open(file)
+            state.environment = "dev"
+            val t = Thread { state.run(all = true) }.also { it.start() }
+            assertTrue(entered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            state.edit("GET http://changed/\n")
+            assertEquals("GET {{base}}/slow\n", state.text)
+            assertFalse(state.dirty)
+            assertFalse(state.save())
+            assertTrue(state.message!!.contains("running"), state.message)
+            release.countDown()
+            t.join(15_000)
+            assertEquals("GET {{base}}/slow\n", Files.readString(file))
+        }
+    }
+
+    @Test fun staleSelectionClearsThePreviousRunsOutcomes() {
+        AppState().use { state ->
+            state.open(dir.resolve("clr.http").also { Files.writeString(it, "GET {{base}}/echo\n") })
+            state.environment = "dev"
+            state.run(all = true)
+            assertEquals(1, state.outcomes.size)
+            state.selected = 5
+            state.run(all = false)
+            assertTrue(state.outcomes.isEmpty())
+            assertTrue(state.message!!.contains("No request"), state.message)
         }
     }
 }

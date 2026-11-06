@@ -61,26 +61,47 @@ internal class OutcomeUi(val json: JsonElement?) {
 
 internal class OutcomeEntry(val display: OutcomeDisplay, val ui: OutcomeUi?)
 
+/** Identity key: two equal outcomes (e.g. the same failure twice) are separate sections with separate UI state. */
+private class IdKey(val outcome: RunOutcome) {
+    override fun equals(other: Any?) = other is IdKey && other.outcome === outcome
+    override fun hashCode() = System.identityHashCode(outcome)
+}
+
 /**
  * Display data for the outcomes on screen. Decoding and JSON parsing happen on [Dispatchers.Default], not in
- * composition, and entries for outcomes that left the list are dropped so a long session does not retain them.
+ * composition, entries for outcomes that left the list are dropped so a long session does not retain them, and an
+ * outcome already processed is never processed again. A body that cannot be displayed becomes an error section
+ * (with the raw body) instead of an exception in composition.
  */
-internal class OutcomeModels {
-    private val entries = mutableStateMapOf<RunOutcome, OutcomeEntry>()
+internal class OutcomeModels(
+    private val render: (RunOutcome) -> OutcomeDisplay = { it.display() },
+    private val parseJson: (String) -> JsonElement? = { parseJsonContainer(it) },
+) {
+    private val entries = mutableStateMapOf<IdKey, OutcomeEntry>()
     val size get() = entries.size
-    operator fun get(outcome: RunOutcome): OutcomeEntry? = entries[outcome]
+    operator fun get(outcome: RunOutcome): OutcomeEntry? = entries[IdKey(outcome)]
 
     suspend fun update(outcomes: List<RunOutcome>) {
-        val live = outcomes.toSet()
+        val live = outcomes.map { IdKey(it) }.toSet()
         entries.keys.retainAll(live)
         for (o in outcomes) {
-            if (o in entries) continue
-            val entry = withContext(Dispatchers.Default) {
-                val d = o.display()
-                OutcomeEntry(d, (d as? OutcomeDisplay.Response)?.let { OutcomeUi(parseJsonContainer(it.rawBody)) })
-            }
-            entries[o] = entry
+            val key = IdKey(o)
+            if (key in entries) continue
+            entries[key] = withContext(Dispatchers.Default) { build(o) }
         }
+    }
+
+    private fun build(o: RunOutcome): OutcomeEntry = try {
+        val d = render(o)
+        val json = (d as? OutcomeDisplay.Response)?.let { r ->
+            try { parseJson(r.rawBody) } catch (e: Exception) { null }   // unparsable: show the raw body
+        }
+        OutcomeEntry(d, (d as? OutcomeDisplay.Response)?.let { OutcomeUi(json) })
+    } catch (e: Exception) {
+        val title = o.request.name ?: "${o.request.method} ${o.request.url}"
+        val body = (o as? RunOutcome.Success)?.let { runCatching { it.response.bodyAsString() }.getOrNull() }
+        val detail = "Could not display this response (${e.message ?: e::class.simpleName})" + (body?.let { ":\n$it" } ?: "")
+        OutcomeEntry(OutcomeDisplay.Error(title, "", detail), null)
     }
 }
 
