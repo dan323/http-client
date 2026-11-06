@@ -61,6 +61,7 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             OutlinedButton(enabled = !state.running, onClick = { state.pick { chooseFile(parent, "New .http file", save = true) }?.let(state::create) }) { Text("New…") }
         }
         Text(state.file?.fileName?.toString()?.plus(if (state.dirty) " •" else "") ?: "No file open", fontWeight = FontWeight.Bold)
+        RecentFilesMenu(state)
         EnvironmentPicker(state)
         HorizontalDivider()
         state.parseError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
@@ -119,6 +120,20 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             )
         }
         ResponsePane(state.outcomes, Modifier.fillMaxSize())
+    }
+}
+
+@Composable
+private fun RecentFilesMenu(state: AppState) {
+    var open by remember { mutableStateOf(false) }
+    OutlinedButton(enabled = !state.running && state.recentFiles.isNotEmpty(), onClick = { open = true }) { Text("Recent files") }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        state.recentFiles.forEach { path ->
+            DropdownMenuItem(
+                text = { Column { Text(path.fileName.toString()); Text(path.parent?.toString() ?: "", style = MaterialTheme.typography.bodySmall) } },
+                onClick = { open = false; state.openRecent(path) },
+            )
+        }
     }
 }
 
