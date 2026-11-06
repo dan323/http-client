@@ -50,7 +50,7 @@ fun main(args: Array<String>) = application {
             val abs = pos as? WindowPosition.Absolute
             state.rememberWindow(tracker.observe(
                 size.width.value.toInt(), size.height.value.toInt(),
-                abs?.x?.value?.toInt(), abs?.y?.value?.toInt(), place == WindowPlacement.Maximized,
+                abs?.x?.value?.toInt(), abs?.y?.value?.toInt(), place != WindowPlacement.Floating,
             ))
         }
     }

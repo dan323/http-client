@@ -18,6 +18,10 @@ object WindowGeometry {
     private const val MIN_VISIBLE_WIDTH = 120
     private const val MIN_VISIBLE_HEIGHT = 60
 
+    /**
+     * With an empty [screens] list (headless, or the query failed) the position cannot be checked and is dropped
+     * (the platform places the window); the size is kept and only bounded by [MAX].
+     */
     fun restore(saved: WindowSettings?, screens: List<Bounds>): Placement {
         if (saved == null) return Placement(DEFAULT_WIDTH, DEFAULT_HEIGHT, null, null, false)
         val maxW = screens.maxOfOrNull { it.width }?.coerceAtLeast(MIN_WIDTH) ?: MAX

@@ -129,7 +129,7 @@ class PersistenceTest {
     @Test fun `geometry is clamped to the screens`() {
         val screens = listOf(Bounds(0, 0, 1920, 1080))
         assertEquals(Placement(1280, 800, null, null, false), WindowGeometry.restore(null, screens))
-        assertEquals(Placement(1280, 800, null, null, false), WindowGeometry.restore(WindowSettings(-5, 0, 10, 10), screens).copy(x = null, y = null, maximized = false))
+        assertEquals(Placement(1280, 800, 10, 10, false), WindowGeometry.restore(WindowSettings(-5, 0, 10, 10), screens))
         assertEquals(Placement(1920, 1080, null, null, false), WindowGeometry.restore(WindowSettings(99999, 99999), screens))
         assertEquals(Placement(600, 400, 10, 10, false), WindowGeometry.restore(WindowSettings(10, 10, 10, 10), screens))
         // off screen: position dropped, size kept
@@ -138,8 +138,8 @@ class PersistenceTest {
         // second monitor to the left is valid when attached
         val two = screens + Bounds(-1920, 0, 1920, 1080)
         assertEquals(Placement(800, 600, -1500, 100, false), WindowGeometry.restore(WindowSettings(800, 600, -1500, 100), two))
-        // no display information: size sane, position dropped only when there is a screen list to check
-        assertEquals(800, WindowGeometry.restore(WindowSettings(800, 600, 1, 1), emptyList()).width)
+        // no display information: the position cannot be checked and is dropped, the size is kept
+        assertEquals(Placement(800, 600, null, null, false), WindowGeometry.restore(WindowSettings(800, 600, 1, 1), emptyList()))
     }
 
     private fun fakeStore(onLoad: () -> LoadedSettings = { LoadedSettings(DesktopSettings()) }, onSave: (DesktopSettings) -> String? = { null }) =
@@ -226,9 +226,10 @@ class PersistenceTest {
         assertEquals(600, WindowGeometry.restore(WindowSettings(100, 100), listOf(Bounds(0, 0, 300, 200))).width)
     }
 
-    @Test fun `current screens are sane or empty when headless`() {
+    @Test fun `current screens match the display availability`() {
         val screens = WindowGeometry.currentScreens()
-        assertTrue(screens.all { it.width > 0 && it.height > 0 })
+        if (java.awt.GraphicsEnvironment.isHeadless()) assertTrue(screens.isEmpty())
+        else assertTrue(screens.isNotEmpty() && screens.all { it.width > 0 && it.height > 0 })
     }
 
     @Test fun `window tracker keeps the normal size while maximized and ignores empty sizes`() {
@@ -237,6 +238,10 @@ class PersistenceTest {
         assertEquals(WindowSettings(1000, 600, 5, 6, true), t.observe(1920, 1080, 0, 0, true))
         assertEquals(WindowSettings(1000, 600, 5, 6, false), t.observe(0, 0, 0, 0, false))
         assertEquals(WindowSettings(700, 500, null, null, false), t.observe(700, 500, null, null, false))
+        // a minimized Windows frame sits at (-32000, -32000): not remembered, in either coordinate
+        assertEquals(WindowSettings(700, 500, null, null, false), t.observe(160, 28, -32000, -32000, false))
+        assertEquals(WindowSettings(700, 500, null, null, false), t.observe(800, 600, 10, -32000, false))
+        assertEquals(WindowSettings(700, 500, null, null, false), t.observe(800, 600, -32000, 10, false))
     }
 
     @Test fun `run within reports whether the action finished in time`() {
@@ -257,5 +262,57 @@ class PersistenceTest {
         createAppState(emptyArray()) { store }.use { assertEquals(canonical(a), canonical(it.file!!)) }
         createAppState(arrayOf(b.toString())) { store }.use { assertEquals(canonical(b), canonical(it.file!!)) }
         createAppState(emptyArray()) { throw IllegalStateException("no store") }.use { assertNull(it.file) }
+    }
+
+    @Test fun `a save in flight cannot overwrite the final snapshot written by close`() {
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val saved = CopyOnWriteArrayList<Int>()
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        val store = fakeStore(onSave = {
+            if (calls.incrementAndGet() == 1) { entered.countDown(); gate.await() }
+            saved += it.window!!.width
+            null
+        })
+        val p = SettingsPersistence(store, debounceMillis = 1)
+        p.update { it.withWindow(WindowSettings(1, 1)) }
+        assertTrue(entered.await(10, java.util.concurrent.TimeUnit.SECONDS))   // the background save of snapshot 1 is stuck
+        p.update { it.withWindow(WindowSettings(2, 1)) }
+        val closer = Thread { p.close() }.apply { start() }
+        while (closer.state == Thread.State.RUNNABLE) Thread.onSpinWait()   // close() waits for the save in flight instead of racing it
+        gate.countDown()
+        closer.join(10_000)
+        assertEquals(listOf(1, 2), saved.toList())   // the newest snapshot is written last
+    }
+
+    @Test fun `close gives up waiting for a stuck save after the bound`() {
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val p = SettingsPersistence(fakeStore(onSave = { entered.countDown(); gate.await(); null }), debounceMillis = 1, closeWaitMillis = 20)
+        try {
+            p.update { it.opened("a") }
+            assertTrue(entered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            p.update { it.opened("b") }
+            val done = runWithin(10_000) { p.close() }
+            assertTrue(done)   // returned although the save is still stuck
+        } finally { gate.countDown() }
+    }
+
+    @Test fun `a fullscreen window is remembered as maximized`() {
+        val t = WindowTracker(Placement(1280, 800, null, null, false))
+        assertEquals(WindowSettings(1280, 800, null, null, true), t.observe(2560, 1440, 0, 0, true))
+    }
+
+    @Test fun `recent files missing right now are hidden but stay stored`() {
+        val a = http("a.http")
+        val b = http("b.http")
+        state().use { it.open(a); it.open(b) }
+        Files.move(a, root.resolve("moved.http"))   // e.g. an absent drive
+        state().use { s ->
+            assertEquals(listOf("b.http"), s.recentFiles.map { it.fileName.toString() })
+            s.open(b)
+        }
+        Files.move(root.resolve("moved.http"), a)
+        state().use { s -> assertEquals(listOf("b.http", "a.http"), s.recentFiles.map { it.fileName.toString() }) }
     }
 }

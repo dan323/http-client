@@ -13,7 +13,7 @@ data class WindowSettings(
  * What the desktop app remembers between runs. Only paths, names and window geometry: never variable values,
  * headers, bodies or any other secret. Paths are plain text (canonical absolute paths as written by the app).
  *
- * @property environments the last chosen environment name, by file path
+ * @property environments the last chosen environment name, by file path, at most [MAX_ENVIRONMENTS] (least recently used dropped first)
  * @property recentFiles most recent first, without duplicates, at most [MAX_RECENT] entries
  */
 data class DesktopSettings(
@@ -23,19 +23,28 @@ data class DesktopSettings(
     val recentFiles: List<String> = emptyList(),
 ) {
     /** Marks [path] as the last opened file and moves it to the front of the recent files. */
-    fun opened(path: String): DesktopSettings = copy(lastFile = path, recentFiles = bounded(listOf(path) + recentFiles))
+    fun opened(path: String): DesktopSettings = copy(
+            lastFile = path,
+            recentFiles = bounded(listOf(path) + recentFiles),
+            environments = environments[path]?.let { boundedEnvironments((environments - path) + (path to it)) } ?: environments,
+        )
 
     fun withoutRecent(path: String): DesktopSettings =
         copy(recentFiles = recentFiles - path, lastFile = lastFile?.takeIf { it != path })
 
     /** Remembers [name] for [path]; null forgets the choice. */
     fun withEnvironment(path: String, name: String?): DesktopSettings =
-        copy(environments = if (name == null) environments - path else environments + (path to name))
+        copy(environments = if (name == null) environments - path else boundedEnvironments((environments - path) + (path to name)))
 
     fun withWindow(window: WindowSettings?): DesktopSettings = copy(window = window)
 
     companion object {
         const val MAX_RECENT = 10
+        const val MAX_ENVIRONMENTS = 50
+
+        /** Keeps the last [MAX_ENVIRONMENTS] entries (the map is ordered least recently used first). */
+        fun boundedEnvironments(environments: Map<String, String>): Map<String, String> =
+            if (environments.size <= MAX_ENVIRONMENTS) environments else environments.entries.toList().takeLast(MAX_ENVIRONMENTS).associate { it.key to it.value }
 
         /** De-duplicates (keeping the first occurrence) and cuts to [MAX_RECENT]. */
         fun bounded(paths: List<String>): List<String> = paths.distinct().take(MAX_RECENT)

@@ -68,8 +68,9 @@ class JsonSettingsStoreTest {
         assertNull(store().load().warning)
     }
 
-    @Test fun `corrupt empty and foreign files fall back to defaults and keep the first backup`() {
-        for ((i, content) in listOf("", "{not json", "[1,2]", """{"name":"other app"}""").withIndex()) {
+    @Test fun `corrupt empty and foreign files fall back to defaults and each keeps its own backup`() {
+        val contents = listOf("", "{not json", "[1,2]", """{"name":"other app"}""")
+        for ((i, content) in contents.withIndex()) {
             Files.createDirectories(dir)
             Files.writeString(dir.resolve("settings.json"), content)
             val st = store()
@@ -78,11 +79,106 @@ class JsonSettingsStoreTest {
             assertNotNull(l.warning, "case $i")
             assertNull(st.save(DesktopSettings()))
             assertTrue(Files.readString(dir.resolve("settings.json")).contains("\"version\""))
-            assertEquals("", Files.readString(dir.resolve("settings.json.corrupt")), "the first backup is kept, case $i")
         }
+        assertEquals(contents, backupNames(contents.size).map { Files.readString(dir.resolve(it)) })
     }
 
-    @Test fun `recents are bounded deduplicated most recent first and missing files dropped on load`() {
+    private fun backupNames(count: Int) = listOf("settings.json.corrupt") + (1 until count).map { "settings.json.corrupt-$it" }
+
+    private fun brokenSave(content: String) {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("settings.json"), content)
+        val st = store()
+        st.load()
+        assertNull(st.save(DesktopSettings()))
+    }
+
+    @Test fun `a newer version file is kept even when a backup already exists`() {
+        brokenSave("{broken")
+        val newer = """{"version":99,"lastFile":"x"}"""
+        brokenSave(newer)
+        assertEquals("{broken", Files.readString(dir.resolve("settings.json.corrupt")))
+        assertEquals(newer, Files.readString(dir.resolve("settings.json.corrupt-1")))
+    }
+
+    @Test fun `only the newest five backups are kept`() {
+        (0..6).forEach { brokenSave("broken $it") }
+        val kept = Files.list(dir).use { l -> l.map { it.fileName.toString() }.filter { it.startsWith("settings.json.corrupt") }.sorted().toList() }
+        assertEquals(5, kept.size)
+        val contents = kept.map { Files.readString(dir.resolve(it)) }.toSet()
+        assertEquals((2..6).map { "broken $it" }.toSet(), contents)
+    }
+
+    @Test fun `a backup name taken by a folder is skipped and pruning failures are ignored`() {
+        Files.createDirectories(dir.resolve("settings.json.corrupt").resolve("sub"))   // cannot be deleted while non empty
+        (1..6).forEach { brokenSave("broken $it") }
+        assertEquals("broken 6", Files.readString(dir.resolve("settings.json.corrupt-6")))
+        assertTrue(Files.isDirectory(dir.resolve("settings.json.corrupt")))
+        assertTrue(Files.readString(dir.resolve("settings.json")).contains("\"version\""))
+    }
+
+    @Test fun `a broken file that vanished before the save needs no backup`() {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("settings.json"), "{broken")
+        val st = store()
+        st.load()
+        Files.delete(dir.resolve("settings.json"))
+        assertNull(st.save(DesktopSettings(recentFiles = listOf("a"))))
+        assertFalse(Files.exists(dir.resolve("settings.json.corrupt")))
+    }
+
+    @Test fun `a transient read error never replaces the file and saving resumes after it clears`() {
+        val a = realFile("a.http")
+        val original = DesktopSettings(a, mapOf(a to "dev"), WindowSettings(900, 700, 10, 20), listOf(a))
+        assertNull(store().save(original))
+        var failing = true
+        val st = JsonSettingsStore(dir, AtomicReportWriter()) { if (failing) throw java.io.IOException("locked") else Files.readString(it) }
+        val l = st.load()
+        assertEquals(DesktopSettings(), l.settings)
+        assertTrue(l.warning!!.contains("locked"))
+        val msg = st.save(DesktopSettings(window = WindowSettings(1, 2)))
+        assertTrue(msg!!.contains("locked"))   // skipped and reported
+        assertEquals(original, store().load().settings)   // nothing written
+        failing = false
+        assertNull(st.save(DesktopSettings(window = WindowSettings(1000, 800))))
+        val merged = store().load().settings
+        assertEquals(WindowSettings(1000, 800), merged.window)
+        assertEquals(a, merged.lastFile)
+        assertEquals(listOf(a), merged.recentFiles)
+        assertEquals(mapOf(a to "dev"), merged.environments)
+        assertFalse(Files.exists(dir.resolve("settings.json.corrupt")))   // not treated as corrupt
+    }
+
+    @Test fun `a file that turns out to be corrupt once readable is backed up`() {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("settings.json"), "{broken")
+        var failing = true
+        val st = JsonSettingsStore(dir, AtomicReportWriter()) { if (failing) throw java.io.IOException("locked") else Files.readString(it) }
+        st.load()
+        failing = false
+        assertNull(st.save(DesktopSettings(lastFile = "x")))
+        assertEquals("{broken", Files.readString(dir.resolve("settings.json.corrupt")))
+        assertEquals("x", store().load().settings.lastFile)
+    }
+
+    @Test fun `a newly created folder is owner only on posix`() {
+        store().save(DesktopSettings())
+        assumeTrue(dir.fileSystem.supportedFileAttributeViews().contains("posix"))
+        assertEquals(PosixFilePermissions.fromString("rwx------"), Files.getPosixFilePermissions(dir))
+    }
+
+    @Test fun `environments are cut to the most recently used 50`() {
+        val envs = (1..60).associate { "f$it" to "e" }
+        assertNull(store().save(DesktopSettings(environments = envs)))
+        assertEquals((11..60).map { "f$it" }, store().load().settings.environments.keys.toList())
+        val touched = DesktopSettings(environments = (1..50).associate { "f$it" to "e" }).opened("f1").withEnvironment("new", "e")
+        assertEquals(50, touched.environments.size)
+        assertFalse("f2" in touched.environments)   // least recently used went first
+        assertTrue("f1" in touched.environments)
+        assertEquals(touched.environments, touched.opened("unknown").environments)
+    }
+
+    @Test fun `recents are bounded deduplicated most recent first and missing files are kept`() {
         var s = DesktopSettings()
         val files = (1..12).map { realFile("f$it.http") }
         files.forEach { s = s.opened(it) }
@@ -90,18 +186,16 @@ class JsonSettingsStoreTest {
         assertEquals(10, s.recentFiles.size)
         assertEquals(files[5], s.recentFiles.first())
         assertEquals(1, s.recentFiles.count { it == files[5] })
-        assertNull(store().save(s.copy(recentFiles = s.recentFiles + root.resolve("gone.http").toString())))
-        Files.delete(Path.of(s.recentFiles[1]))
-        val loaded = store().load().settings
-        assertEquals(s.recentFiles.filter { it != s.recentFiles[1] }, loaded.recentFiles)
-        assertFalse(loaded.recentFiles.any { it.endsWith("gone.http") })
+        assertNull(store().save(s))
+        Files.delete(Path.of(s.recentFiles[1]))   // e.g. an unplugged drive: still remembered
+        assertEquals(s, store().load().settings)
     }
 
-    @Test fun `last file that no longer exists is dropped`() {
+    @Test fun `last file that no longer exists is kept for the app to skip`() {
         val a = realFile("a.http")
         store().save(DesktopSettings(lastFile = a))
         Files.delete(Path.of(a))
-        assertNull(store().load().settings.lastFile)
+        assertEquals(a, store().load().settings.lastFile)
     }
 
     @Test fun `unwritable location degrades to a message`() {
@@ -121,16 +215,6 @@ class JsonSettingsStoreTest {
         assertNotNull(l.warning)
         assertNull(st.save(DesktopSettings()))
         assertTrue(bytes.contentEquals(Files.readAllBytes(dir.resolve("settings.json.corrupt"))))
-    }
-
-    @Test fun `a failing backup is reported by save and the broken file is left alone`() {
-        Files.createDirectories(dir)
-        Files.writeString(dir.resolve("settings.json"), "{broken")
-        Files.createDirectories(dir.resolve("settings.json.corrupt").resolve("sub"))   // backup name taken by a non empty folder
-        val st = store()
-        st.load()
-        assertNull(st.save(DesktopSettings()))   // an existing backup is never overwritten, the save still goes ahead
-        assertTrue(Files.readString(dir.resolve("settings.json")).contains("\"version\""))
     }
 
     @Test fun `a writer that fails is reported as a message`() {

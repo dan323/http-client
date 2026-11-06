@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
-- Desktop persistence (T14, F11): `SettingsStore` port and `DesktopSettings` in `core`; `JsonSettingsStore` and `ConfigDirLocator` in `adapters` (per-OS user config folder, atomic owner-only `settings.json`, corrupt/newer files ignored and backed up as `settings.json.corrupt` before the next save). The desktop app restores the last file, its environment and the window (clamped to the current screens), saves changes in the background (debounced, flushed on close) and has a **Recent files** menu (10 entries). See `docs/features.md`.
+- Desktop persistence (T14, F11): `SettingsStore` port and `DesktopSettings` in `core`; `JsonSettingsStore` and `ConfigDirLocator` in `adapters` (per-OS user config folder, atomic owner-only `settings.json`, corrupt/newer files ignored and backed up as `settings.json.corrupt`, `.corrupt-1`, ... (newest 5 kept) before the next save; a transient read error never replaces the file; owner-only config folder). The desktop app restores the last file, its environment and the window (clamped to the current screens), saves changes in the background (debounced, flushed on close) and has a **Recent files** menu (10 entries; missing files are hidden but kept, environments capped at 50). Saves are serialised and `close` waits (2 s) for the one in flight; fullscreen is stored as maximized; the Windows minimized position is ignored. See `docs/features.md`.
 
 ## [0.3.0] - 2026-11-06
 

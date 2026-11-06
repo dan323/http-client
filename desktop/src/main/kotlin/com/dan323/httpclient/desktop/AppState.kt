@@ -36,13 +36,13 @@ class AppState(
     var message by mutableStateOf<String?>(null)
         private set
 
-    /** Recently opened files, most recent first; only files that existed when last checked. */
+    /** Recently opened files, most recent first; entries whose file is missing right now (deleted, drive absent) are hidden but stay stored. */
     var recentFiles by mutableStateOf<List<Path>>(emptyList())
         private set
 
     init {
         settings?.let { s ->
-            recentFiles = s.current.recentFiles.map { Path.of(it) }
+            recentFiles = existingRecents(s)
             message = s.loadWarning
         }
     }
@@ -81,7 +81,7 @@ class AppState(
         chosenEnvironment = null   // the choice belongs to the previous file's environments
         val key = canonical(path)
         settings?.update { it.opened(key) }
-        recentFiles = settings?.current?.recentFiles?.map { Path.of(it) } ?: recentFiles
+        recentFiles = settings?.let { existingRecents(it) } ?: recentFiles
         refreshEnvironments()
         // Restore the remembered environment only if it still exists; never an error for a vanished name.
         settings?.current?.environments?.get(key)?.takeIf { it in environments }?.let { chosenEnvironment = it }
@@ -97,10 +97,16 @@ class AppState(
     /** Opens an entry of the recent list; a file that has vanished is dropped from the list with a short message. */
     fun openRecent(path: Path) {
         if (Files.isRegularFile(path)) { open(path); return }
-        settings?.update { it.withoutRecent(canonical(path)).withoutRecent(path.toString()) }
-        recentFiles = recentFiles.filter { it != path }
-        message = "${path.fileName} no longer exists and was removed from the recent files."
+        var removed = false
+        exclusive("update the recent files") {
+            settings?.update { it.withoutRecent(canonical(path)).withoutRecent(path.toString()) }
+            recentFiles = recentFiles.filter { it != path }
+            removed = true
+        }
+        if (removed) message = "${path.fileName} no longer exists and was removed from the recent files."   // after the guard, which clears the message
     }
+
+    private fun existingRecents(s: SettingsPersistence) = s.current.recentFiles.map { Path.of(it) }.filter { Files.isRegularFile(it) }
 
     /** The window geometry of the previous session, if any. */
     fun savedWindow(): com.dan323.httpclient.core.port.out.WindowSettings? = settings?.current?.window
