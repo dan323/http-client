@@ -255,4 +255,31 @@ class FileHistoryStoreTest {
         val run = s.record(http, RunReport(listOf(failing)), listOf(null))
         assertEquals(failing, s.read(http, run.id)?.report?.entries?.single())
     }
+
+    @Test fun `the latest record of every link key survives runs of other keys`() {
+        val s = store(maxRuns = 3)
+        s.recordLinked(http, "a", report("a"), response("A"))
+        repeat(10) { s.recordLinked(http, "b", report("b"), response("B$it")) }
+        s.record(http, report("x"), listOf(response("plain")))
+        assertEquals("A", s.latestLinked(http, "a")!!.response.bodyAsString())
+        assertEquals("B9", s.latestLinked(http, "b")!!.response.bodyAsString())
+        // 3 newest runs + the older run that holds the newest "a"; "b" is inside the window
+        assertEquals(4, s.list(http).size)
+        // a newer record of "a" replaces the old one, which is then pruned
+        s.recordLinked(http, "a", report("a"), response("A2"))
+        s.recordLinked(http, "a", report("a"), response("A3"))
+        s.recordLinked(http, "a", report("a"), response("A4"))
+        assertEquals("A4", s.latestLinked(http, "a")!!.response.bodyAsString())
+        assertEquals("B9", s.latestLinked(http, "b")!!.response.bodyAsString())
+        assertEquals(4, s.list(http).size)
+    }
+
+    @Test fun `ordinary runs and entries without keys are still limited to maxRuns`() {
+        val s = store(maxRuns = 2)
+        repeat(6) { s.record(http, report("r$it"), listOf(response("b$it"))) }
+        assertEquals(2, s.list(http).size)
+        // an old file without keys loads and is pruned as before
+        val old = runFolder().resolve(s.list(http).last().id).resolve("run.json")
+        assertFalse("\"key\"" in Files.readString(old))
+    }
 }

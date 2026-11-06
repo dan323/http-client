@@ -151,6 +151,7 @@ private fun StyledDocument.addSection(s: Section) {
             val color = when (d.statusClass) { StatusClass.SUCCESS -> ok; StatusClass.REDIRECT -> redirect; else -> bad }
             add("  ${d.statusLabel}", color, bold = true)
             add("   ${d.durationLabel}\n", muted)
+            d.notices.forEach { add("  ${it.text}\n", if (it.isError) bad else muted) }
             d.headers.forEach { (k, v) -> add("  $k", keyColor); add(": ", muted); add("$v\n") }
             add("\n")
             addJson(d.prettyBody)

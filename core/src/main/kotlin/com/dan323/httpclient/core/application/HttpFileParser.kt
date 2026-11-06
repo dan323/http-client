@@ -115,6 +115,15 @@ class HttpFileParser : ParseHttpFile {
         val lastBody = (from until lines.size).lastOrNull { it !in handlerLines && lines[it].isNotBlank() } ?: -1
         val bodyLines = mutableListOf<String>()
         for (j in from until lines.size) if (j !in handlerLines || j < lastBody) bodyLines += lines[j]
+        // Ambiguity (JetBrains has it too): `>> x` / `<> x` directly under the last body line cannot be told from body text
+        // that starts that way. We keep the JetBrains reading (a directive, so existing files keep working) and, instead of
+        // inventing quoting rules for paths, warn when the "path" has whitespace, which is what prose looks like. A blank
+        // line before the directive removes the doubt and the warning.
+        fun warnIfProse(line: Int, lastBodyLine: Int, shown: String, path: String, what: String) {
+            if (line - 1 == lastBodyLine && lastBodyLine >= 0 && path.any { it.isWhitespace() }) {
+                warnings += "Line ${lineNo(line)}: $shown directly after the body is read as a directive that $what; if it is part of the body, put more text after it, otherwise add a blank line before it"
+            }
+        }
         var saveResponse: ResponseSave? = null
         val links = mutableListOf<String>()
         for (h in handlers.filter { it.first > lastBody }) {
@@ -123,10 +132,12 @@ class HttpFileParser : ParseHttpFile {
                     if (h.save.path.isEmpty()) throw HttpParseException(lineNo(h.first), "'${if (h.save.overwrite) ">>!" else ">>"}' needs a file path")
                     if (saveResponse != null) throw HttpParseException(lineNo(h.first), "only one '>>' / '>>!' response save is allowed per request")
                     saveResponse = ResponseSave(h.save.path, h.save.overwrite)
+                    warnIfProse(h.first, lastBody, "'${if (h.save.overwrite) ">>!" else ">>"} ${h.save.path}'", h.save.path, "saves the response to the file '${h.save.path}'")
                 }
                 h.link != null -> {
                     if (h.link.isEmpty()) throw HttpParseException(lineNo(h.first), "'<>' needs a file path")
                     links += h.link
+                    warnIfProse(h.first, lastBody, "'<> ${h.link}'", h.link, "links to the file '${h.link}'")
                 }
                 else -> warnings += h.message
             }

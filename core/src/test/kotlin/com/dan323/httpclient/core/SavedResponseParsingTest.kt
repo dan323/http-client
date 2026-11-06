@@ -59,4 +59,51 @@ class SavedResponseParsingTest {
         val kinds = HttpLineLexer.tokenize("GET /x\n\n>>! o-{{v}}.json").map { it.kind }.filter { it != WHITESPACE }
         assertEquals(listOf(METHOD, URL, COMMENT, FILE_REF, VARIABLE, FILE_REF), kinds)
     }
+
+    @Test
+    fun `a last body line starting with a save is a directive, with a warning when the path looks like prose`() {
+        val f = parser.parse("POST http://x\n\nhello\n>> quoted reply\n\n")
+        val r = f.requests.single()
+        assertEquals(Body.Text("hello"), r.body)
+        assertEquals(ResponseSave("quoted reply", false), r.saveResponse)
+        assertEquals(1, f.warnings.size)
+        assertTrue("Line 4" in f.warnings[0] && "quoted reply" in f.warnings[0] && "blank line" in f.warnings[0], f.warnings[0])
+        // a blank line before it removes the doubt: no warning
+        assertTrue(parser.parse("POST http://x\n\nhello\n\n>> quoted reply\n").warnings.isEmpty())
+        // links behave alike
+        assertEquals(1, parser.parse("POST http://x\n\nhello\n<> see above\n").warnings.size)
+    }
+
+    @Test
+    fun `a plain path right after a JSON body is a directive without a warning`() {
+        val f = parser.parse("POST http://x\nContent-Type: application/json\n\n{\"a\": 1}\n>> out.json\n")
+        val r = f.requests.single()
+        assertEquals(Body.Text("{\"a\": 1}"), r.body)
+        assertEquals(ResponseSave("out.json", false), r.saveResponse)
+        assertTrue(f.warnings.isEmpty())
+    }
+
+    @Test
+    fun `a save line inside a multi-line body followed by more body stays body`() {
+        val r = parser.parse("POST http://x\n\nline one\n>> out.json\n<> other.json\nline four\n").requests.single()
+        assertNull(r.saveResponse)
+        assertTrue(r.responseLinks.isEmpty())
+        assertEquals(Body.Text("line one\n>> out.json\n<> other.json\nline four"), r.body)
+        // even when only a blank line separates it from the following text
+        val r2 = parser.parse("POST http://x\n\none\n>> out.json\n\ntwo\n").requests.single()
+        assertNull(r2.saveResponse)
+        assertEquals(Body.Text("one\n>> out.json\n\ntwo"), r2.body)
+    }
+
+    @Test
+    fun `CRLF files parse the same for body plus directive`() {
+        val f = parser.parse("POST http://x\r\n\r\nhello\r\n>> out.json\r\n<> l.json\r\n")
+        val r = f.requests.single()
+        assertEquals(Body.Text("hello"), r.body)
+        assertEquals(ResponseSave("out.json", false), r.saveResponse)
+        assertEquals(listOf("l.json"), r.responseLinks)
+        val prose = parser.parse("POST http://x\r\n\r\nhello\r\n>> quoted reply\r\n").requests.single()
+        assertEquals(ResponseSave("quoted reply", false), prose.saveResponse)
+        assertEquals(Body.Text("hello"), prose.body)
+    }
 }

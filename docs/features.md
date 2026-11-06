@@ -212,11 +212,20 @@ GET {{host}}/orders/1
   suffix before the extension: `out.json`, `out-1.json`, `out-2.json`. `>>! path` overwrites.
 - `<> path` links the request to its latest stored response (see below).
 - Order: JetBrains writes the handler, then `>>`, then `<>` lines; this parser accepts the `>>`/`<>` lines in any order
-  but only after the body (an earlier line starting with `>>` is body text; `>>x` without a space never is a directive).
+  but only after the body: a `>>`/`>>!`/`<>` line is a directive only in the trailing region, i.e. when every non-blank
+  line after it is also a directive or a response handler. A line starting with `>> ` followed by more body text is body
+  (`>>x` without a space never is a directive). Ambiguity, the same as in JetBrains: a last body line that starts with
+  `>> ` (`hello` then `>> quoted reply`) is read as a directive, so existing files keep working; to avoid surprises the
+  parser adds a warning when such a line directly follows the body (no blank line) and its path contains whitespace
+  (what prose looks like), and a blank line before the directive removes both the doubt and the warning. To keep a
+  line like that as body text, put more body text after it.
   At most one `>>`/`>>!` per request (JetBrains allows one): a second is a parse error with its line number. Several `<>`
   lines are fine (JetBrains accumulates them). An empty path is a parse error naming the line.
 - The path may contain `{{variables}}`, resolved when the request runs. It is relative to the `.http` file; paths with
-  spaces are fine, `\` counts as a separator on every platform.
+  spaces are fine, `\` counts as a separator on every platform. Names that cannot exist on Windows are refused on every
+  platform, so a project shared between systems does not save files another system cannot hold: reserved device names
+  (`CON`, `PRN`, `AUX`, `NUL`, `COM0-9`, `LPT0-9`, also with an extension), a segment ending in a dot or a space, and
+  the characters `< > : " | ? *` and control characters (which also rules out `file.txt:stream`).
 - Confinement is the one of `< path` bodies (`FileAccessPolicy`: the `.http` file's folder plus the allowlist): `..`
   out of the allowed folders, absolute paths (`/x`, `\x`, `C:\x`), symlinks leading out, a final symlink, a folder,
   the `.http` file itself and (for `>>!`) a read-only file are refused. Missing parent folders are created, only
@@ -226,7 +235,18 @@ GET {{host}}/orders/1
 - A save happens after the assertions are evaluated, also when they failed, but not when the request itself failed.
   A rejected or failed save fails only the save: the request's result stays, `RunOutcome.Success.saveError` holds the
   message (names the path, hides substituted values, never contains the body) and `savedTo` the path written.
-  Paths are not part of reports.
+  Paths are not part of reports. The path shown after a successful save (`savedTo`, the CLI line) follows the same rule
+  as error messages: values substituted into `{{variables}}` (3 characters or more) come back as `{{name}}`, so
+  `>> out/{{token}}.json` prints `out/{{token}}.json`, never the token. The file on disk has the real name.
+- After the write the final real path of the file is checked again; if a folder was swapped for a symlink in between
+  and the file landed outside the allowed folders, it is deleted and the save fails. As with `< path` reads, an attacker
+  who can write inside the allowed folders can still race the window between check and write (the JDK has no
+  openat-style API).
+- Prerequisites: a request that only runs to feed `{{name.response...}}` to the request you asked for (`@import`/chained
+  dependencies) is sent like any other, so its own `>>` and `<>` directives fire too (it saved its `pre.json`). A
+  prerequisite that is reused instead of re-sent does not save or link again.
+- Desktop app and plugin show `Saved to PATH` (or the save/link error) under the status of the response; the desktop
+  app passes a `FileHistoryStore` like the CLI and the plugin, so `<>` links are recorded there too.
 - CLI: `Saved response: PATH` (relative to the `.http` file) on stderr, also with `--quiet`; a failed save prints
   `Error: Cannot save response to ...` on stderr and makes the exit code 1.
 
@@ -238,7 +258,10 @@ response of that request (`HistoryStore.latestLinked`). A request is identified 
 share one link: the newest run wins) or, unnamed, by the line where it starts (so adding lines above it breaks the
 link). Recording is opt-in: `SessionFactory(history = FileHistoryStore())` (or any `HistoryStore`, with an injectable
 root); the CLI and the plugin pass it, so the response of a linked request lands in `.http-history/`. The history keeps
-the newest 50 runs, so a link whose request has not run for 50 recordings may be gone. Opening the linked response in
+the newest 50 runs per file, and additionally the newest record of every `<>` key even when it is older than that, so a
+link keeps resolving however often other requests run (at most one extra run folder per distinct linked request; an
+entry whose request lost its `<>` line or was removed stays until you delete it from `.http-history/`). Entries written
+before keys existed carry no key and are pruned as ordinary runs. Opening the linked response in
 the desktop app or the plugin is not implemented yet.
 
 ### Run history store
