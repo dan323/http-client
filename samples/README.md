@@ -21,6 +21,7 @@ starts with "(none)", so samples that use `{{base}}` fail with an undefined vari
 | `variables.http` | environment and dynamic variables; two requests that are expected to fail |
 | `chaining.http` | `{{name.response...}}` references, prerequisites, a missing-path failure |
 | `assertions.http` | `# @assert` lines; the last request is expected to fail an assertion |
+| `dynamic.http` | dynamic variables (`$random.*`, offsets, `$env`) |
 | `file-body.http` | `< ./payload.json` body |
 | `methods.http` | PUT, PATCH, DELETE, HEAD, OPTIONS, 404, redirects |
 

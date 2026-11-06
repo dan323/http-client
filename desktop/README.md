@@ -12,8 +12,10 @@ It runs on Windows, macOS and Linux and reuses `core` and `adapters` unchanged; 
 - Shortcuts: **Ctrl/Cmd+S** saves, **Ctrl/Cmd+Enter** sends the selected request.
 - The left list shows the requests in the file. **Send** runs the selected one together with the
   requests it chains on (`{{login.response.body.$.token}}`); **Send all** runs every request in order.
-- **Environment** picks a set of variables from `http-client.env.json` (and `http-client.private.env.json`)
-  in the same folder as the file.
+- **Environment** picks a set of variables from the nearest `http-client.env.json` (and the `http-client.private.env.json` beside it),
+  searching upward from the file's folder like the CLI and the plugin. The default is "none" (variables from the file only); a name that no longer exists is an error.
+- Responses of earlier requests (a login) are remembered per file and environment, so **Send** does not resend them; **Forget responses** clears them.
+- While a request runs, editing, saving, opening and creating files are disabled; a run saves the file first and a save error stops it.
 - The right pane shows each response: a colored status badge (2xx green, 3xx orange, 4xx red), time, size and
   content type, with **Body** and **Headers** tabs. JSON bodies are shown as a syntax-colored tree: click a
   `{` / `[` line to collapse or expand it. **Raw** shows the body exactly as received; **Copy** copies what the
@@ -47,10 +49,10 @@ Not verified: the native Open…/New… file dialogs, the Windows MSI, and how i
 
 ## Layout
 
-- `Workspace.kt` — parsing and running requests (no UI).
-- `AppState.kt` — Compose state: open file, editor text, selection, environment, outcomes.
+- `Workspace.kt` — parsing, environment names and `DesktopRunner` (no UI).
+- `AppState.kt` — Compose state: open file, editor text, selection, environment, outcomes, the run guard.
 - `App.kt` / `Main.kt` — the Compose UI and window (`AppRoot` is the testable content).
-- `Workspace.kt` — `DesktopRunner` runs requests through the shared `RunController` (one session per file and environment, so a login request runs once; closed with the window).
+- `DesktopRunner` (in `Workspace.kt`) runs requests through the shared `RunController` (one session per file and environment, so a login request runs once; closed with the window).
 - `ResponsePane.kt` — the response viewer and the collapsible JSON tree; the pure logic (JSON flattening in `JsonTree.kt`, status/size/duration labels) lives in the shared `view-model` module and is tested there. Durations are shown as `1.5 s` (or `2m 5s`) instead of `1500 ms`, and numbers are always formatted with `.` regardless of the system locale.
 - `SyntaxHighlighting.kt` — colors tokens from `core`'s shared `HttpLineLexer`.
 
@@ -59,7 +61,7 @@ because installers require a major version of at least 1.
 
 ## Not yet implemented
 
-Request history, saving responses, and persisting the window,
+Request history, saving responses, showing assertion results, a cancel button, and persisting the window,
 last file and selected environment between sessions.
 
 `{{$env.NAME}}` reads nothing by default: allow names with `-Dhttpclient.allowEnv=NAME,NAME` (JVM option) or the environment variable `HTTPC_ALLOW_ENV=NAME,NAME`; see [docs/features.md](../docs/features.md).
