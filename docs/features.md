@@ -311,7 +311,7 @@ Referencing a request that has not run, or a path that does not exist, is an err
 
 ```
 httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] [--allow-file-root DIR] [--list]
-                  [--report-json FILE] [--report-junit FILE]
+                  [--report-json FILE] [--report-junit FILE] [--quiet] [--output FILE] [--var NAME=VALUE]
 ```
 
 | Option        | Effect                                               |
@@ -322,11 +322,22 @@ httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] 
 | `--allow-file-root DIR` | also let `< path` bodies be read from `DIR` (repeatable) |
 | `--list`      | list requests and exit (cannot be combined with `--report-*`) |
 | `--report-json FILE` / `--report-junit FILE` | write a run report (see Run reports) |
+| `--quiet`     | no per-request output on stdout (see below) |
+| `--output FILE` | write the response body of the single selected request to `FILE` |
+| `--var NAME=VALUE` | set a variable, overriding file and environment variables (repeatable) |
 
 For each request the output is the status line with timing, the response headers, then the body.
 After a response, each assertion is printed as `PASS ...` or `FAIL ... -- message`; for a request that failed its assertions are listed as `NOT RUN ...`.
 A total line `Assertions: N passed, M failed, K not run` follows the run. With `--request`, only the selected request's assertions run, not its prerequisites.
-Exit codes, by precedence: `2` bad arguments (usage is printed, nothing runs); `1` a request or setup failed (missing file, unknown environment or request), an assertion failed, or any other error; `3` the run passed but a requested report could not be written; `0` otherwise. Parser warnings (ignored response handlers, see above) go to stderr as `warning: FILE: ...`; request failures go to stderr as `Error: ...`.
+**Summary line:** after a run the CLI prints `3 requests, 2 passed, 1 failed in 1.2s` to **stderr** (so stdout stays the response data, e.g. when piped); it counts every request that ran, prerequisites included, and a request passes when it completed and its assertions held. It is not printed for `--list` or when the run cannot start.
+
+**`--quiet`:** nothing per request is printed on stdout (no `###` heading, status, headers, body, `PASS`, `NOT RUN` or the `Assertions:` total). Failed assertions are printed to stderr as `FAIL ...`, request errors as `Error: ...`, and the summary line still appears, so a quiet run says what failed. Exit codes are unchanged.
+
+**`--output FILE`:** after the run, the body of the selected request's response is written to `FILE` (decoded with the response charset, then written as UTF-8; binary bodies are therefore not byte-exact). It needs exactly one selected request: use `--request`, or a file with one request; otherwise it is a usage error (exit `2`, discovered before anything is sent). Prerequisites are never written. Nothing is written when that request fails. It goes through the `ReportWriter` port and `AtomicReportWriter` like reports: parent folders are created, the write is atomic and a new file is owner-only (`rw-------`, POSIX) because bodies may contain secrets. `FILE` must differ from the input `.http` file and from the report paths (also through `..`, symlinks or case-only differences) and cannot be repeated or combined with `--list`. An unwritable output counts like an unwritable report (exit `3` on a passed run, `1` on a failed one).
+
+**`--var NAME=VALUE`:** the name is everything before the first `=` and must be non-empty without whitespace or braces; the value may be empty or contain `=`. Repeating a name is a usage error. Precedence: `--var` beats file variables (`@name = value` lines), which beat the environment file. The resolver prefers file variables over the variable map, so the CLI removes the overridden names from the file variables first; other file variables that mention them then see the `--var` value. Values are treated like any resolved variable: they are replaced by `{{name}}` in failure messages, and usage errors never echo the value. `--quiet` and `--var` cannot be combined with `--list`.
+
+Exit codes, by precedence: `2` bad arguments (usage is printed, nothing runs); `1` a request or setup failed (missing file, unknown environment or request), an assertion failed, or any other error; `3` the run passed but a requested report or output file could not be written; `0` otherwise. Parser warnings (ignored response handlers, see above) go to stderr as `warning: FILE: ...`; request failures go to stderr as `Error: ...`.
 
 Run with `./gradlew :cli:run --args="requests.http --env dev"`, or build a launcher with
 `./gradlew :cli:installDist` (output in `cli/build/install/httpc/bin`).
