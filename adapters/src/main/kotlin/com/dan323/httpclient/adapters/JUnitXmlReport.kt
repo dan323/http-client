@@ -1,4 +1,6 @@
-package com.dan323.httpclient.core.application
+package com.dan323.httpclient.adapters
+
+import com.dan323.httpclient.core.application.RunReport
 
 /**
  * Renders a [RunReport] as JUnit XML. Exactly one `testcase` per reported request, so `tests`, `failures` and
@@ -25,8 +27,9 @@ object JUnitXmlReport {
             val head = "  <testcase classname=\"${attr(suiteName)}\" name=\"${attr("${i + 1}. ${e.name}")}\" time=\"${seconds(e.durationMillis ?: 0)}\""
             if (e.passed) { append("$head/>\n"); continue }
             append("$head>\n")
-            if (e.error != null) {
-                append("    <error message=\"${attr(e.error)}\" type=\"RequestError\">${escape("${e.method} ${e.url}: ${e.error}")}</error>\n")
+            val error = e.error
+            if (error != null) {
+                append("    <error message=\"${attr(error)}\" type=\"RequestError\">${escape("${e.method} ${e.url}: $error")}</error>\n")
             } else {
                 val failed = e.assertions.filterNot { it.passed }
                 val message = failed.joinToString("\n") { it.message }
