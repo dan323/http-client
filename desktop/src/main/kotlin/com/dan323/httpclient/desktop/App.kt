@@ -57,13 +57,13 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
     // Left: file, environment and request list.
     Column(Modifier.width(300.dp).fillMaxHeight().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { state.pick { chooseFile(parent, "Open .http file", save = false) }?.let(state::open) }) { Text("Open…") }
-            OutlinedButton(onClick = { state.pick { chooseFile(parent, "New .http file", save = true) }?.let(state::create) }) { Text("New…") }
+            Button(enabled = !state.running, onClick = { state.pick { chooseFile(parent, "Open .http file", save = false) }?.let(state::open) }) { Text("Open…") }
+            OutlinedButton(enabled = !state.running, onClick = { state.pick { chooseFile(parent, "New .http file", save = true) }?.let(state::create) }) { Text("New…") }
         }
         Text(state.file?.fileName?.toString()?.plus(if (state.dirty) " •" else "") ?: "No file open", fontWeight = FontWeight.Bold)
         EnvironmentPicker(state)
         HorizontalDivider()
-        Workspace.parseError(state.text)?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        state.parseError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         LazyColumn(Modifier.weight(1f)) {
             itemsIndexed(state.requests) { i, r ->
                 Column(
@@ -94,13 +94,14 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
     // Middle: editor.
     Column(Modifier.weight(1f).fillMaxHeight().padding(vertical = 12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(enabled = state.file != null && state.dirty, onClick = { state.save() }) { Text("Save") }
+            OutlinedButton(enabled = state.file != null && state.dirty && !state.running, onClick = { state.save() }) { Text("Save") }
             state.message?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
         }
         OutlinedTextField(
             value = state.text,
             onValueChange = state::edit,
             enabled = state.file != null,
+            readOnly = state.running,
             textStyle = mono,
             visualTransformation = remember(dark) { HttpVisualTransformation(if (dark) HighlightPalette.Dark else HighlightPalette.Light) },
             placeholder = { Text("Open or create a .http file") },
