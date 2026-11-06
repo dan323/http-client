@@ -10,7 +10,9 @@ import java.nio.file.Path
  * `.http` file is in that directory. No such directory means no environments.
  */
 fun interface EnvironmentLocator {
-    /** The repository for [httpFile], or null when no enclosing directory has an `http-client.env.json`. */
+    /** The repository for [httpFile], or null when neither `http-client.env.json` nor
+     * `http-client.private.env.json` is found within the search boundaries. Throws [EnvironmentFileException]
+     * when the nearest candidate is a link that cannot be followed. */
     fun find(httpFile: Path): EnvironmentRepository?
 }
 

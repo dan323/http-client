@@ -54,12 +54,13 @@ class SelectEnvironmentAction : AnAction(), DumbAware {
         val service = project.getService(HttpClientService::class.java)
         val current = service.environmentChoice
         // null (not empty) when the env file cannot be read: the current choice is then not reported as missing.
-        val names = try { service.environments(Path.of(vfile.path)).map { it.name } } catch (_: EnvironmentFileException) { null }
+        var error: String? = null
+        val names = try { service.environments(Path.of(vfile.path)).map { it.name } } catch (e: EnvironmentFileException) { error = e.message; null }
         val items = environmentItems(names, current)
         JBPopupFactory.getInstance()
             .createPopupChooserBuilder(items)
             .setRenderer(SimpleListCellRenderer.create("") { it.label })
-            .setTitle("HTTP Environment (current: ${selectedItem(items, current).label})")
+            .setTitle("HTTP Environment (current: ${selectedItem(items, current).label})" + (error?.let { " - $it" } ?: ""))
             .setItemChosenCallback { service.environmentChoice = it.choice }
             .createPopup()
             .showInBestPositionFor(e.dataContext)

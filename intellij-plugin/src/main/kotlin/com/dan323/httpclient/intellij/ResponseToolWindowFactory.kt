@@ -10,6 +10,7 @@ import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.editor.colors.EditorFontType
 import com.dan323.httpclient.core.application.EnvironmentChoice
 import com.dan323.httpclient.core.port.out.EnvironmentFileException
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
@@ -65,25 +66,33 @@ class ResponseToolWindowFactory : ToolWindowFactory, DumbAware {
         val combo = JComboBox<String>()   // entries are matched by index into [items], never by label
         var items = environmentItems(emptyList(), service.environmentChoice)
         var reloading = false   // setting the model/selection programmatically fires the listener: ignore it
+        fun selectedHttpFile() = FileEditorManager.getInstance(project).selectedFiles.firstOrNull { it.extension == "http" }?.path
+        // Env files are read on a pooled thread; the combo is updated on the EDT, and a result for a file that is
+        // no longer the active one is discarded.
         fun reload() {
-            val file = FileEditorManager.getInstance(project).selectedFiles.firstOrNull { it.extension == "http" }
-            // null names = unknown (no .http file open, or the env file is unreadable): never shown as "(missing)".
-            var names: List<String>? = null
-            var hint: String? = if (file == null) "Open a .http file to list its environments" else null
-            if (file != null) {
-                try { names = service.environments(Path.of(file.path)).map { e -> e.name } }
-                catch (e: EnvironmentFileException) { hint = e.message }
-            }
-            reloading = true
-            try {
-                items = environmentItems(names, service.environmentChoice)
-                combo.model = DefaultComboBoxModel(items.map { it.label }.toTypedArray())
-                combo.selectedIndex = selectedIndex(items, service.environmentChoice)
-                val chosen = service.environmentChoice
-                combo.toolTipText = hint ?: if (names != null && chosen is EnvironmentChoice.Named && chosen.name !in names)
-                    "'${chosen.name}' is not defined for this file; running will fail until you pick another" else null
-            } finally {
-                reloading = false
+            val path = selectedHttpFile()
+            ApplicationManager.getApplication().executeOnPooledThread {
+                // null names = unknown (no .http file open, or the env file is unreadable): never shown as "(missing)".
+                var names: List<String>? = null
+                var hint: String? = if (path == null) "Open a .http file to list its environments" else null
+                if (path != null) {
+                    try { names = service.environments(Path.of(path)).map { e -> e.name } }
+                    catch (e: EnvironmentFileException) { hint = e.message }
+                }
+                SwingUtilities.invokeLater {
+                    if (selectedHttpFile() != path) return@invokeLater
+                    reloading = true
+                    try {
+                        items = environmentItems(names, service.environmentChoice)
+                        combo.model = DefaultComboBoxModel(items.map { it.label }.toTypedArray())
+                        combo.selectedIndex = selectedIndex(items, service.environmentChoice)
+                        val chosen = service.environmentChoice
+                        combo.toolTipText = hint ?: if (names != null && chosen is EnvironmentChoice.Named && chosen.name !in names)
+                            "'${chosen.name}' is not defined for this file; running will fail until you pick another" else null
+                    } finally {
+                        reloading = false
+                    }
+                }
             }
         }
         combo.addActionListener {

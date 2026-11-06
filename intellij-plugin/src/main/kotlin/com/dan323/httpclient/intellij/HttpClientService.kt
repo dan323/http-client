@@ -25,7 +25,7 @@ import com.intellij.openapi.project.Project
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 
-private data class SessionKey(val file: Path, val environment: String?, val variablesHash: Int)
+private data class SessionKey(val file: Path, val environment: String?, val variables: Map<String, String>)
 
 /** One request's result as shown in the response window. [reused] means it was not re-sent. */
 data class Section(
@@ -55,8 +55,9 @@ class HttpClientService(private val project: Project) {
     private val choiceListeners = mutableListOf<() -> Unit>()
     private val listeners = mutableListOf<(Report) -> Unit>()
     // One session per (file, environment): named responses survive between runs, so a login runs once.
-    // The key includes a hash of the loaded variables, so editing the env file starts a fresh session.
+    // The key includes the loaded variables, so editing the env file starts a fresh session.
     private val sessions = ConcurrentHashMap<SessionKey, RequestSession>()
+    private val running: MutableSet<SessionKey> = ConcurrentHashMap.newKeySet()
 
     /** Called whenever the environment choice is set, from any thread. */
     fun onEnvironmentChoice(listener: () -> Unit) { synchronized(choiceListeners) { choiceListeners += listener } }
@@ -102,9 +103,15 @@ class HttpClientService(private val project: Project) {
             return publish(Report(message = "File access configuration error: ${it.message}"))
         }
         val executor = JdkHttpExecutor()
-        val session = sessions.getOrPut(SessionKey(file.toAbsolutePath(), env?.name, variables.hashCode())) {
+        val key = SessionKey(file.toAbsolutePath(), env?.name, variables)
+        // Sessions for the same file+environment with other (older) variables are obsolete; drop them unless running.
+        sessions.keys.filter { it.file == key.file && it.environment == key.environment && it != key && it !in running }
+            .forEach { sessions.remove(it) }
+        val session = sessions.getOrPut(key) {
             RequestSession(RequestRunner(executor, LocalFileReader(dir, accessPolicy), DynamicVariables(env = SystemEnvironmentVariables.fromConfiguration())), executor, KotlinxJsonExtractor())
         }
+        running.add(key)
+        try {
         val sections = mutableListOf<Section>()
         val report = { Report(environment = env?.name ?: "none", sections = sections.toList()) }
         session.runChained(requests, current, variables,
@@ -124,6 +131,7 @@ class HttpClientService(private val project: Project) {
             }
             publish(report())
         }
+        } finally { running.remove(key) }
     }
 
     private fun describe(r: RequestTemplate) = r.name?.let { "$it  ·  ${r.method} ${r.url}" } ?: "${r.method} ${r.url}"
