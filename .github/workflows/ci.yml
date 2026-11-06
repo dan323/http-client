@@ -4,6 +4,10 @@ on:
   push:
     branches: [master]
   pull_request:
+  # PIT is slower than the tests, so it only runs weekly and on demand (Actions > CI > Run workflow).
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -11,6 +15,7 @@ concurrency:
 
 jobs:
   test:
+    if: github.event_name != 'schedule'
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -44,6 +49,7 @@ jobs:
   # Catches a plugin build break. There is no local IDE on the runner, so the build downloads
   # IntelliJ IDEA (ideaVersion in gradle.properties); ideaPath is ignored when it does not exist.
   plugin:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,3 +60,44 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Build plugin
         run: ./gradlew :intellij-plugin:buildPlugin --console=plain
+
+  # Aggregated test report + merged JaCoCo report (+ coverage floor). The JaCoCo XML is what SonarCloud reads
+  # (sonar.coverage.jacoco.xmlReportPaths=quality-reports/build/reports/jacoco/testCodeCoverageReport/testCodeCoverageReport.xml).
+  quality:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Quality reports
+        run: xvfb-run -a ./gradlew :quality-reports:qualityReports --console=plain
+      - name: Upload quality reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-reports
+          path: quality-reports/build/reports
+
+  # Mutation testing on the hexagon (core). Not on every push: see the schedule trigger above.
+  mutation:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: PIT (core)
+        run: ./gradlew :core:pitest --console=plain
+      - name: Upload PIT report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pitest-core
+          path: core/build/reports/pitest

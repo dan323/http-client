@@ -12,6 +12,7 @@ A Postman-style HTTP client compatible with the JetBrains `.http` file format. K
 - One module: `./gradlew :core:test`, `:adapters:test`, `:cli:test`, `:desktop:test`, `:intellij-plugin:test`
 - Single test class/method: `./gradlew :core:test --tests "com.dan323.httpclient.core.HttpFileParserTest"` (append `.methodName` for one method)
 - Build the IntelliJ plugin: `./gradlew :intellij-plugin:buildPlugin` (uses `ideaPath` if it exists, else downloads `ideaVersion`)
+- Build quality reports (build-only `quality-reports` project, not shipped; excludes `intellij-plugin`): `./gradlew :quality-reports:qualityReports` runs the tests and writes the aggregated JUnit HTML report (`quality-reports/build/reports/tests/test/index.html`) and the merged JaCoCo report (`quality-reports/build/reports/jacoco/testCodeCoverageReport/`, HTML + `testCodeCoverageReport.xml` for SonarCloud), then `:quality-reports:coverageVerification` fails if merged coverage drops below the floor (lines 95 %, branches 83 %, in `quality-reports/build.gradle.kts`; raise it, never lower it). Mutation testing on `core` only: `./gradlew :core:pitest` (~1 minute, report in `core/build/reports/pitest/`, threshold 80 %, measured 83 %). PIT runs in CI on a schedule / manually, not on every push.
 - Dependency and plugin versions live in `gradle/libs.versions.toml`
 
 Tests use `kotlin("test")` on JUnit Platform. There is no linter configured.
