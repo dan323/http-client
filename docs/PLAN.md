@@ -46,15 +46,14 @@ Each remaining task is listed once even when it serves several features. Size: S
 | ID | Task | Serves | Size | Needs |
 |---|---|---|---|---|
 | T8 | **Multipart and form bodies** in parser and executor, with file parts (file reads go through the confined `FileReader`) | F4 | M | – |
-| T13 | **Variable analysis in `core`:** list known variables (env, file, names) and find undefined variables and bad `{{name.response...}}` references | F14, F18 | M | – |
 | T15 | **Desktop workspace:** several open files (tabs) and a folder view | F12 | L | – |
-| T16 | **Desktop editor intelligence:** variable completion, diagnostics from T13, find/replace | F14 | L | T13 |
+| T16 | **Desktop editor intelligence:** variable completion, diagnostics from T13, find/replace | F14 | L | – (T13 done: `VariableAnalysis`) |
 | T17 | **Desktop response extras:** body search, save to file, image/HTML preview; also show assertion results (F1) | F15, F1 | M | – |
 | T18 | **Desktop history and compare:** browse stored responses, diff two | F13 | M | – (T11 done: `HistoryStore` / `FileHistoryStore`) |
 | T19 | **Cancel button:** desktop (and plugin) cancel of the running request; core and the executor already cancel on interrupt | F16 | S | – |
 | T20 | **Environment editor:** write support on the environment port and a UI to edit variables | F17 | M | – |
 | T21 | **Plugin GUI verification:** the sandbox IDE loads without errors; still to check by hand: highlighting, gutter icons, tool window, actions, in a Community IDE | F20, F19, F18 | S | – |
-| T22 | **Plugin intelligence:** completion, go-to-request, inspections from T13; show assertion results | F18, F14, F1 | L | T13, T21 |
+| T22 | **Plugin intelligence:** completion, go-to-request, inspections from T13; show assertion results | F18, F14, F1 | L | T21 (T13 done: `VariableAnalysis`) |
 | T23 | **Plugin response panel:** remember the environment across restarts, run all | F19 | M | T21 |
 | T24 | **Packaging in CI** (rest of F20): build DMG/MSI/DEB and the plugin zip on the matching OS (tests on three OS already run) | F20 | S | – |
 | T27 | **Plugin: open the linked/stored response** of a request (`<>` link, `ResponseLinks.latest`) in the plugin | F9 | S | T21 |
