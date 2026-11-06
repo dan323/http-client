@@ -5,6 +5,7 @@ import com.dan323.httpclient.adapters.UpwardEnvironmentLocator
 import com.dan323.httpclient.core.application.EnvironmentChoice
 import com.dan323.httpclient.core.application.environments
 import com.dan323.httpclient.core.application.resolve
+import com.dan323.httpclient.adapters.FileAccessPolicy
 import com.dan323.httpclient.adapters.KotlinxJsonExtractor
 import com.dan323.httpclient.adapters.LocalFileReader
 import com.dan323.httpclient.adapters.SystemEnvironmentVariables
@@ -41,6 +42,7 @@ object Workspace {
         text: String,
         index: Int?,
         environment: String?,
+        policy: () -> Result<FileAccessPolicy> = { FileAccessPolicy.load() },
         onOutcome: (RunOutcome) -> Unit = {},
     ): List<RunOutcome> {
         val dir = file.toAbsolutePath().parent
@@ -48,8 +50,13 @@ object Workspace {
         val selected = if (index == null) requests else withDependencies(requests, listOfNotNull(requests.getOrNull(index)))
         // A name that no longer exists throws UnknownEnvironmentException, never runs another environment.
         val variables = EnvironmentChoice.of(environment).resolve(UpwardEnvironmentLocator(), file)?.variables ?: emptyMap()
+        val accessPolicy = policy().getOrElse { e ->
+            val failure = RunOutcome.Failure(selected.firstOrNull() ?: return emptyList(), "File access configuration error: ${e.message}")
+            onOutcome(failure)
+            return listOf(failure)
+        }
         val executor = JdkHttpExecutor()
-        val session = RequestSession(RequestRunner(executor, LocalFileReader(dir), DynamicVariables(env = SystemEnvironmentVariables.fromConfiguration())), executor, KotlinxJsonExtractor())
+        val session = RequestSession(RequestRunner(executor, LocalFileReader(dir, accessPolicy), DynamicVariables(env = SystemEnvironmentVariables.fromConfiguration())), executor, KotlinxJsonExtractor())
         return session.runAll(selected, variables, onOutcome = onOutcome)
     }
 }
