@@ -8,7 +8,12 @@ import com.dan323.httpclient.viewmodel.statusClass
 import com.dan323.httpclient.viewmodel.statusText
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.editor.colors.EditorFontType
+import com.dan323.httpclient.core.application.EnvironmentChoice
+import com.dan323.httpclient.core.port.out.EnvironmentFileException
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileEditor.FileEditorManagerEvent
+import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
@@ -30,8 +35,6 @@ import javax.swing.SwingUtilities
 import javax.swing.text.SimpleAttributeSet
 import javax.swing.text.StyleConstants
 import javax.swing.text.StyledDocument
-
-private const val NONE = "(none)"
 
 private val ok = JBColor(Color(0x2E7D32), Color(0x6AAB73))
 private val redirect = JBColor(Color(0xB26A00), Color(0xE0A030))
@@ -60,18 +63,54 @@ class ResponseToolWindowFactory : ToolWindowFactory, DumbAware {
         service.onReport { r -> SwingUtilities.invokeLater { render(r) } }
 
         // Environment picker: always visible, lists the env file next to the open .http file.
-        val combo = JComboBox<String>()
+        val combo = JComboBox<String>()   // entries are matched by index into [items], never by label
+        var items = environmentItems(emptyList(), service.environmentChoice)
+        var reloading = false   // setting the model/selection programmatically fires the listener: ignore it
+        fun selectedHttpFile() = FileEditorManager.getInstance(project).selectedFiles.firstOrNull { it.extension == "http" }?.path
+        // Env files are read on a pooled thread; the combo is updated on the EDT, and a result for a file that is
+        // no longer the active one is discarded.
         fun reload() {
-            val file = FileEditorManager.getInstance(project).selectedFiles.firstOrNull { it.extension == "http" }
-            val names = file?.let { runCatching { service.environments(Path.of(it.path).parent).map { e -> e.name } }.getOrNull() }.orEmpty()
-            combo.model = DefaultComboBoxModel((listOf(NONE) + names).toTypedArray())
-            combo.selectedItem = service.environmentName?.takeIf { it in names } ?: names.firstOrNull() ?: NONE
+            val path = selectedHttpFile()
+            ApplicationManager.getApplication().executeOnPooledThread {
+                // null names = unknown (no .http file open, or the env file is unreadable): never shown as "(missing)".
+                var names: List<String>? = null
+                var hint: String? = if (path == null) "Open a .http file to list its environments" else null
+                if (path != null) {
+                    try { names = service.environments(Path.of(path)).map { e -> e.name } }
+                    catch (e: EnvironmentFileException) { hint = e.message }
+                }
+                SwingUtilities.invokeLater {
+                    if (selectedHttpFile() != path) return@invokeLater
+                    reloading = true
+                    try {
+                        items = environmentItems(names, service.environmentChoice)
+                        combo.model = DefaultComboBoxModel(items.map { it.label }.toTypedArray())
+                        combo.selectedIndex = selectedIndex(items, service.environmentChoice)
+                        val chosen = service.environmentChoice
+                        combo.toolTipText = hint ?: if (names != null && chosen is EnvironmentChoice.Named && chosen.name !in names)
+                            "'${chosen.name}' is not defined for this file; running will fail until you pick another" else null
+                    } finally {
+                        reloading = false
+                    }
+                }
+            }
         }
-        combo.addActionListener { service.environmentName = (combo.selectedItem as? String)?.takeIf { it != NONE } }
+        combo.addActionListener {
+            if (reloading) return@addActionListener
+            items.getOrNull(combo.selectedIndex)?.let { service.environmentChoice = it.choice }
+        }
         combo.addMouseListener(object : java.awt.event.MouseAdapter() {
             override fun mousePressed(e: java.awt.event.MouseEvent?) { reload() }
         })
         reload()
+        // Keep the combo in step with the active file and with changes made through the popup action.
+        project.messageBus.connect(toolWindow.disposable).subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER,
+            object : FileEditorManagerListener {
+                override fun selectionChanged(event: FileEditorManagerEvent) { SwingUtilities.invokeLater { reload() } }
+            })
+        service.onEnvironmentChoice {
+            SwingUtilities.invokeLater { if (items.getOrNull(combo.selectedIndex)?.choice != service.environmentChoice) reload() }
+        }
 
         val reset = JButton("Reset chain").apply {
             toolTipText = "Forget remembered responses (e.g. an expired login) so chained requests run again"

@@ -25,7 +25,7 @@ class SystemEnvironmentVariables(
         /** System property listing the allowed names (comma separated); used by the desktop app and the IDE plugin. */
         const val ALLOW_PROPERTY = "httpclient.allowEnv"
 
-        /** Process environment variable listing the allowed names (comma separated); fallback for [ALLOW_PROPERTY]. */
+        /** Process environment variable listing the allowed names (comma separated); unioned with [ALLOW_PROPERTY]. */
         const val ALLOW_ENV_VAR = "HTTPC_ALLOW_ENV"
 
         const val DEFAULT_HINT = "add it to the system property -D$ALLOW_PROPERTY=NAME or the environment variable $ALLOW_ENV_VAR=NAME (comma separated)"
@@ -34,11 +34,13 @@ class SystemEnvironmentVariables(
         fun parseNames(text: String?): Set<String> =
             text.orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
 
-        /** Allowlist from [ALLOW_PROPERTY], else [ALLOW_ENV_VAR]. For front ends without command-line flags. */
+        /** Union of [ALLOW_PROPERTY], [ALLOW_ENV_VAR] and [extra]. For front ends without command-line flags. */
         fun fromConfiguration(
             property: (String) -> String? = System::getProperty,
             env: (String) -> String? = System::getenv,
+            extra: Set<String> = emptySet(),
+            hint: String = DEFAULT_HINT,
         ): SystemEnvironmentVariables =
-            SystemEnvironmentVariables(parseNames(property(ALLOW_PROPERTY) ?: env(ALLOW_ENV_VAR)))
+            SystemEnvironmentVariables(parseNames(property(ALLOW_PROPERTY)) + parseNames(env(ALLOW_ENV_VAR)) + extra, hint)
     }
 }

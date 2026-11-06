@@ -1,8 +1,11 @@
 package com.dan323.httpclient.desktop
 
 import com.dan323.httpclient.adapters.JdkHttpExecutor
+import com.dan323.httpclient.adapters.UpwardEnvironmentLocator
+import com.dan323.httpclient.core.application.EnvironmentChoice
+import com.dan323.httpclient.core.application.environments
+import com.dan323.httpclient.core.application.resolve
 import com.dan323.httpclient.adapters.FileAccessPolicy
-import com.dan323.httpclient.adapters.JsonEnvironmentRepository
 import com.dan323.httpclient.adapters.KotlinxJsonExtractor
 import com.dan323.httpclient.adapters.LocalFileReader
 import com.dan323.httpclient.adapters.SystemEnvironmentVariables
@@ -26,9 +29,9 @@ object Workspace {
     fun parseError(text: String): String? =
         try { HttpFileParser().parse(text); null } catch (e: HttpParseException) { e.message }
 
-    /** Environment names from `http-client.env.json` next to [file]. */
+    /** Environment names from the nearest enclosing `http-client.env.json` (same rule as the CLI and the plugin). */
     fun environmentNames(file: Path): List<String> =
-        JsonEnvironmentRepository(file.toAbsolutePath().parent).load().map { it.name }
+        UpwardEnvironmentLocator().environments(file).map { it.name }
 
     /**
      * Runs the request at [index] in [text] (with the requests it chains on), or every request when
@@ -45,9 +48,8 @@ object Workspace {
         val dir = file.toAbsolutePath().parent
         val requests = HttpFileParser().parse(text).requests
         val selected = if (index == null) requests else withDependencies(requests, listOfNotNull(requests.getOrNull(index)))
-        val variables = environment
-            ?.let { name -> JsonEnvironmentRepository(dir).load().firstOrNull { it.name == name }?.variables }
-            ?: emptyMap()
+        // A name that no longer exists throws UnknownEnvironmentException, never runs another environment.
+        val variables = EnvironmentChoice.of(environment).resolve(UpwardEnvironmentLocator(), file)?.variables ?: emptyMap()
         val accessPolicy = policy().getOrElse { e ->
             val failure = RunOutcome.Failure(selected.firstOrNull() ?: return emptyList(), "File access configuration error: ${e.message}")
             onOutcome(failure)
