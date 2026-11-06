@@ -82,11 +82,12 @@ class AppStateTest {
 
     @Test fun malformedEnvFileIsShownWithItsName() {
         val bad = Files.createTempDirectory("httpc-bad")
-        val env = bad.resolve("http-client.env.json").also { Files.writeString(it, "{nope") }
+        bad.resolve("http-client.env.json").also { Files.writeString(it, "{nope") }
         val file = bad.resolve("e.http").also { Files.writeString(it, "GET http://x/\n") }
         val state = AppState()
         state.open(file)
-        assertTrue(state.message!!.contains(env.toString()), state.message)
+        // file name only: Windows may report the temp dir in its long form (RUNNER~1 vs runneradmin)
+        assertTrue(state.message!!.contains("http-client.env.json"), state.message)
     }
 
     @Test fun failuresAreShownAsOutcomes() {
