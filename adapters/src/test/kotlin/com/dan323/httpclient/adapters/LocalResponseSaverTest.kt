@@ -158,6 +158,83 @@ class LocalResponseSaverTest {
         assertEquals("ro-1.txt", saver().save("ro.txt", body, false))
     }
 
+    @Test fun `names that cannot exist on Windows are refused on every platform`() {
+        val bad = listOf(
+            "CON", "con.txt", "out/NUL", "nul.json", "PRN", "aux", "COM1", "com9.log", "LPT1", "lpt3.txt", "a/../CON",
+            "trail.", "dir /x.txt", "out/name.", "file.txt:stream", "a<b", "a>b", "a\"b", "a|b", "a?b", "a*b", "tab\there",
+        )
+        for (p in bad) {
+            val e = assertFailsWith<IOException>(p) { saver().save(p, body, true) }
+            assertTrue("invalid file path" in e.message!!, "$p: ${e.message}")
+            assertFailsWith<IOException>(p) { saver().save(p, body, false) }
+        }
+        // look-alikes that are fine
+        for (p in listOf("console.txt", "COM10.txt", "nulled", "a.b.c", "x/.hidden", "con-sole/x")) assertEquals(p, saver().save(p, body, true))
+    }
+
+    @Test fun `a NUL character in the path is refused`() {
+        val e = assertFailsWith<IOException> { saver().save("a\u0000b.txt", body, true) }
+        assertTrue("invalid file path" in e.message!!)
+    }
+
+    @Test fun `all suffixes taken ends with a clear error and no temp file`() {
+        val s = LocalResponseSaver(http, FileAccessPolicy(), maxSuffix = 3)
+        assertEquals("r.json", s.save("r.json", body, false))
+        for (n in 1..3) assertEquals("r-$n.json", s.save("r.json", body, false))
+        val e = assertFailsWith<IOException> { s.save("r.json", body, false) }
+        assertTrue("no free file name" in e.message!! && "r.json" in e.message!!, e.message)
+        assertEquals(setOf("api.http", "r.json", "r-1.json", "r-2.json", "r-3.json"), Files.list(dir).use { st -> st.map { it.fileName.toString() }.toList().toSet() })
+    }
+
+    @Test fun `a failed move removes the reservation and the temp file`() {
+        val failing = LocalResponseSaver(http, FileAccessPolicy(), move = { _, _ -> throw IOException("disk full") })
+        assertFailsWith<IOException> { failing.save("m.json", body, false) }
+        assertFailsWith<IOException> { failing.save("m.json", body, true) }
+        assertEquals(listOf("api.http"), Files.list(dir).use { st -> st.map { it.fileName.toString() }.toList() })
+        assertEquals("m.json", saver().save("m.json", body, false)) // the name was not left reserved
+    }
+
+    @Test fun `a hard link to the http file is protected`() {
+        val link = dir.resolve("hard.http")
+        try { Files.createLink(link, http) } catch (e: Exception) {
+            assumeFalse(true, "hard links unavailable: $e")
+        }
+        val e = assertFailsWith<IOException> { saver().save("hard.http", body, true) }
+        assertTrue("the .http file itself" in e.message!!)
+        assertEquals("GET http://x\n", Files.readString(http))
+    }
+
+    @Test fun `a case alias of the http file is protected where the file system ignores case`() {
+        assumeTrue(Files.exists(dir.resolve("API.HTTP")), "case-sensitive file system")
+        assertFailsWith<IOException> { saver().save("API.HTTP", body, true) }
+        assertEquals("GET http://x\n", Files.readString(http))
+    }
+
+    @Test fun `a dangling symlink as parent folder pointing out creates nothing outside`() {
+        symlink(dir.resolve("dlink"), outside.resolve("missing-dir"))
+        assertFailsWith<FileAccessDeniedException> { saver().save("dlink/x.txt", body, true) }
+        assertFailsWith<FileAccessDeniedException> { saver().save("dlink/sub/x.txt", body, false) }
+        assertFalse(Files.exists(outside.resolve("missing-dir")))
+    }
+
+    @Test fun `a file that ended up outside the roots is removed and reported`() {
+        // a folder swapped for a symlink after the checks and before the move; simulated inside the move step
+        val swapping = LocalResponseSaver(http, FileAccessPolicy(), move = { tmp, target ->
+            val sub = target.parent
+            val held = Files.move(tmp, dir.resolve("held.tmp"))
+            Files.deleteIfExists(target) // the reservation of a save without overwrite
+            Files.delete(sub)
+            symlink(sub, outside)
+            Files.move(held, target)
+        })
+        for (overwrite in listOf(true, false)) {
+            val e = assertFailsWith<FileAccessDeniedException> { swapping.save("sub$overwrite/x.txt", body, overwrite) }
+            assertTrue("changed while being saved" in e.message!!, e.message)
+            assertFalse(Files.exists(outside.resolve("x.txt")), "the escaped file must be deleted")
+            Files.delete(dir.resolve("sub$overwrite"))
+        }
+    }
+
     @Test fun `end to end through SessionFactory the failed save leaves the result and leaks nothing`() {
         val secretBody = "SECRETBODY".toByteArray()
         val executor = HttpExecutor { HttpResponse(200, emptyList(), secretBody, 1) }
@@ -166,7 +243,7 @@ class LocalResponseSaverTest {
         SessionFactory(executor).use { f ->
             val out = f.create(http, FileAccessPolicy()).runAll(HttpFileParser().parse(text).requests, mapOf("n" to "one"))
             val a = assertIs<RunOutcome.Success>(out[0])
-            assertEquals("out/one.json", a.savedTo)
+            assertEquals("out/{{n}}.json", a.savedTo) // substituted values are not shown, like in error messages
             assertContentEquals(secretBody, Files.readAllBytes(dir.resolve("out/one.json")))
             val b = assertIs<RunOutcome.Success>(out[1])
             assertEquals(200, b.response.statusCode)

@@ -87,4 +87,43 @@ class SavedResponseSessionTest {
         assertEquals("Cannot keep the response link: disk full", o.linkError)
         assertEquals(200, o.response.statusCode)
     }
+
+    @Test fun `the shown saved path hides substituted values like error messages do`() {
+        saverBehaviour = { it }
+        val o = run(req(ResponseSave("out/{{token}}.json", false)), mapOf("token" to "hunter22secret")) as RunOutcome.Success
+        assertEquals("out/hunter22secret.json", saved.single().first) // the real write uses the value
+        assertEquals("out/{{token}}.json", o.savedTo)
+        assertFalse("hunter22secret" in o.savedTo!!)
+    }
+
+    private fun prerequisiteFile() = com.dan323.httpclient.core.application.HttpFileParser().parse(
+        "# @name pre\nGET http://h/pre\n\n>> pre.json\n<> pre-link.json\n###\n" +
+            "# @name main\n# @import pre\nGET http://h/main?x={{pre.response.status}}\n\n>> main.json\n<> main-link.json\n",
+    ).requests
+
+    @Test fun `a prerequisite request saves and links when it runs for a chained request`() {
+        val all = prerequisiteFile()
+        val outcomes = session().runChained(all, all[1], emptyMap())
+        assertEquals(listOf("pre", "main"), outcomes.map { it.request.name })
+        assertEquals(listOf("pre.json", "main.json"), outcomes.map { (it as RunOutcome.Success).savedTo })
+        assertEquals(listOf("pre", "main"), linked)
+        assertEquals(listOf("pre.json", "main.json"), saved.map { it.first })
+    }
+
+    @Test fun `a reused prerequisite neither saves nor links again`() {
+        val all = prerequisiteFile()
+        val s = session()
+        s.runChained(all, all[1], emptyMap())
+        s.runChained(all, all[1], emptyMap())
+        assertEquals(listOf("pre.json", "main.json", "main.json"), saved.map { it.first })
+        assertEquals(listOf("pre", "main", "main"), linked)
+    }
+
+    @Test fun `a prerequisite whose save fails does not stop the chain`() {
+        val all = prerequisiteFile()
+        saverBehaviour = { if (it == "pre.json") throw IOException("read-only") else it }
+        val outcomes = session().runChained(all, all[1], emptyMap())
+        assertTrue("read-only" in (outcomes[0] as RunOutcome.Success).saveError!!)
+        assertEquals("main.json", (outcomes[1] as RunOutcome.Success).savedTo)
+    }
 }

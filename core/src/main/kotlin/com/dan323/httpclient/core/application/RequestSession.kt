@@ -138,7 +138,8 @@ class RequestSession(
                 val target = saver ?: throw java.io.IOException("saving responses is not available here")
                 val path = runner.resolveText(save.path, variables, ::reference, r.fileVariables, ::record)
                 try {
-                    result.copy(savedTo = target.save(path, outcome.response.body, save.overwrite))
+                    // the shown path follows the same rule as error messages: substituted values come back as {{name}}
+                    result.copy(savedTo = scrubbed(target.save(path, outcome.response.body, save.overwrite)))
                 } catch (e: java.io.IOException) {
                     result.copy(saveError = scrubbed("Cannot save response to '$path': ${e.message ?: e::class.simpleName}"))
                 }

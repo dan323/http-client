@@ -41,7 +41,8 @@ import java.time.format.DateTimeFormatter
  *
  * Stored responses are raw: bodies and headers may contain secrets. On POSIX, files and folders are created
  * owner-only (`rw-------` / `rwx------`) and never readable by others, even briefly. Nothing outside the history
- * folder is written. Only the newest [maxRuns] runs per file are kept. A body larger than [maxBodyBytes] is
+ * folder is written. Only the newest [maxRuns] runs per file are kept, plus the newest run of every `<>` link key
+ * (see [recordLinked]) that is older than that, so a link never stops resolving because of other requests' runs. A body larger than [maxBodyBytes] is
  * stored cut, with `bodyTruncated` set. Corrupt or foreign entries are skipped with a call to [onWarning].
  *
  * @param historyDirFor the history folder of a `.http` file; see [nextToHttpFile] and [underRoot]
@@ -229,8 +230,19 @@ class FileHistoryStore(
             if (!Files.exists(dir.resolve(RUN_FILE), LinkOption.NOFOLLOW_LINKS) && runOf(id)?.isBefore(cutoff) == true) deleteTree(dir)
         }
         val complete = ids.filter { Files.exists(fileDir.resolve(it).resolve(RUN_FILE), LinkOption.NOFOLLOW_LINKS) }
-        complete.drop(maxRuns).forEach { deleteTree(fileDir.resolve(it)) }
+        // The newest record of every `<>` link key survives, whatever other keys record later: a link must keep
+        // resolving even when unrelated requests are run more than maxRuns times. At most one extra run per distinct key.
+        val seen = HashSet<String>()
+        complete.take(maxRuns).forEach { id -> keysOf(fileDir, id).let(seen::addAll) }
+        for (id in complete.drop(maxRuns)) {
+            val fresh = keysOf(fileDir, id).filter { seen.add(it) }
+            if (fresh.isEmpty()) deleteTree(fileDir.resolve(id))
+        }
     }
+
+    /** The `<>` link keys recorded in run [id] (empty for ordinary runs and for runs written before keys existed). */
+    private fun keysOf(fileDir: Path, id: String): List<String> =
+        loadRun(fileDir, id)?.dto?.responses?.mapNotNull { it.key } ?: emptyList()
 
     private fun runOf(id: String): Instant? = HistoryNames.timeOf(id)
 

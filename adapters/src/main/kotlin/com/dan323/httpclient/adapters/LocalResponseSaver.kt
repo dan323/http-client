@@ -22,10 +22,21 @@ import java.nio.file.attribute.PosixFilePermissions
  * added before the extension (`out.json`, `out-1.json`, `out-2.json`, ...); the name is reserved with an exclusive
  * create, so concurrent saves to the same name end up in different files. New files are owner-only (`rw-------`) on
  * POSIX; an overwritten file keeps its permissions. Errors name the path and never contain the body.
+ *
+ * Names that cannot exist on Windows (`CON`, `NUL`, `COM1`, `LPT1`, ... also with an extension, a trailing dot or space,
+ * and any of `<>:"|?*` or a control character, which also rules out `file:stream`) are refused on every platform, so a
+ * project shared between systems never saves a file another system cannot hold.
+ *
+ * Residual risk (the same as [LocalFileReader]): the confinement is checked before the write and the final real path is
+ * re-verified afterwards (the file is deleted if it ended up outside), but an attacker who can write inside the allowed
+ * folders can still race that window, e.g. by swapping a parent folder for a symlink between the check and the write;
+ * closing it fully would need openat-style APIs the JDK lacks.
  */
 class LocalResponseSaver(
     private val httpFile: Path,
     private val policy: FileAccessPolicy = FileAccessPolicy(),
+    private val maxSuffix: Int = MAX_SUFFIX,
+    private val move: (Path, Path) -> Unit = { a, b -> moveIntoPlace(a, b) },
 ) : ResponseSaver {
     private val baseDir: Path = (httpFile.toAbsolutePath().parent ?: httpFile.toAbsolutePath().root).normalize()
 
@@ -37,6 +48,7 @@ class LocalResponseSaver(
             throw FileAccessDeniedException("File '$path' must be relative to the .http file, not an absolute path")
         }
         if (rel.endsWith("/")) throw IOException("'$path' names a folder, not a file")
+        rel.split('/').firstNotNullOfOrNull { windowsProblem(it) }?.let { throw IOException("invalid file path '$path': $it") }
         val target = try { baseDir.resolve(rel).normalize() } catch (e: java.nio.file.InvalidPathException) {
             throw IOException("invalid file path '$path': ${e.reason}")
         }
@@ -58,9 +70,13 @@ class LocalResponseSaver(
         }
         Files.createDirectories(dir)
         checkInside(dir) // a folder swapped for a symlink in the meantime
-        if (Files.exists(dir) && dir.toRealPath() != realPathOf(dir)) throw FileAccessDeniedException("File '$path' changed while being saved; refusing to write it")
 
         val written = if (overwrite) replace(dir, target, body) else createNew(dir, target, body)
+        // Post-check: where the file really is now (a parent swapped for a symlink after the checks above).
+        if (roots.none { realPathOf(written).startsWith(it) }) {
+            Files.deleteIfExists(written)
+            throw FileAccessDeniedException("File '$path' changed while being saved; refusing to write it (the file was removed)")
+        }
         // an allowed root outside the .http folder, reached with `..`, yields `../x`
         return baseDir.relativize(written).joinToString("/")
     }
@@ -73,7 +89,7 @@ class LocalResponseSaver(
             if (POSIX && Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
                 runCatching { Files.setPosixFilePermissions(tmp, Files.getPosixFilePermissions(target, LinkOption.NOFOLLOW_LINKS)) }
             }
-            moveIntoPlace(tmp, target)
+            move(tmp, target)
         } finally {
             Files.deleteIfExists(tmp)
         }
@@ -88,7 +104,7 @@ class LocalResponseSaver(
             val name = wanted.fileName.toString()
             val dot = name.lastIndexOf('.')
             val (stem, ext) = if (dot > 0) name.substring(0, dot) to name.substring(dot) else name to ""
-            for (n in 0..MAX_SUFFIX) {
+            for (n in 0..maxSuffix) {
                 val candidate = if (n == 0) wanted else dir.resolve("$stem-$n$ext")
                 try {
                     Files.createFile(candidate, *ownerOnlyAttrs())
@@ -96,14 +112,14 @@ class LocalResponseSaver(
                     continue
                 }
                 try {
-                    moveIntoPlace(tmp, candidate)
+                    move(tmp, candidate)
                 } catch (e: IOException) {
                     Files.deleteIfExists(candidate)
                     throw e
                 }
                 return candidate
             }
-            throw IOException("no free file name for '${baseDir.relativize(wanted)}' (tried $MAX_SUFFIX suffixes)")
+            throw IOException("no free file name for '${baseDir.relativize(wanted)}' (tried $maxSuffix suffixes)")
         } finally {
             Files.deleteIfExists(tmp)
         }
@@ -116,6 +132,16 @@ class LocalResponseSaver(
         if (POSIX) arrayOf(PosixFilePermissions.asFileAttribute(OWNER_ONLY)) else emptyArray()
 
     private companion object {
+        val RESERVED = Regex("^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])$", RegexOption.IGNORE_CASE)
+
+        /** Why [segment] cannot be a file name on Windows, or null. `.` and `..` are navigation, not names. */
+        fun windowsProblem(segment: String): String? = when {
+            segment == "." || segment == ".." || segment.isEmpty() -> null
+            segment.any { it in "<>:\"|?*" || it.code < 32 } -> "'$segment' contains a character that is not allowed in file names on Windows (one of < > : \" | ? * or a control character)"
+            segment.endsWith(".") || segment.endsWith(" ") -> "'$segment' ends with a dot or a space, which Windows does not allow"
+            RESERVED.matches(segment.substringBefore('.').trimEnd(' ')) -> "'$segment' is a reserved device name on Windows"
+            else -> null
+        }
         val DRIVE = Regex("""^[A-Za-z]:""")
         const val MAX_SUFFIX = 9999
         val POSIX = java.nio.file.FileSystems.getDefault().supportedFileAttributeViews().contains("posix")

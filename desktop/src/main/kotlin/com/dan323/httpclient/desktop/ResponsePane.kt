@@ -172,6 +172,9 @@ private fun OutcomeHeader(outcome: OutcomeDisplay, ui: OutcomeUi?) {
                     Text(outcome.sizeLabel, style = MaterialTheme.typography.bodySmall)
                     outcome.contentType?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline) }
                 }
+                outcome.notices.forEach {
+                    Text(it.text, style = MaterialTheme.typography.bodySmall, color = if (it.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline)
+                }
                 if (ui != null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         FilterChip(ui.tab == Tab.BODY, { ui.tab = Tab.BODY }, label = { Text("Body") })

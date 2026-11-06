@@ -43,7 +43,24 @@ sealed interface OutcomeDisplay {
         val prettyBody: String,
         /** True when the body is a JSON object or array (so pretty/raw and the tree view make sense). */
         val isJson: Boolean,
-    ) : OutcomeDisplay
+        /** `Saved to out/a.json` after a successful `>>` / `>>!` (the path is relative to the .http file); null otherwise. */
+        val savedLabel: String? = null,
+        /** The `>>` / `>>!` save failed (the response itself is fine), e.g. `Cannot save response to 'x': ...`; null otherwise. */
+        val saveError: String? = null,
+        /** Keeping the `<>` link failed, e.g. `Cannot keep the response link: ...`; null otherwise. */
+        val linkError: String? = null,
+    ) : OutcomeDisplay {
+        /** Save/link feedback lines for the response pane, in display order; each is flagged as an error or not. */
+        val notices: List<Notice>
+            get() = listOfNotNull(
+                savedLabel?.let { Notice(it, isError = false) },
+                saveError?.let { Notice(it, isError = true) },
+                linkError?.let { Notice(it, isError = true) },
+            )
+    }
+
+    /** One line about saving the response; UI modules only choose the colour for [isError]. */
+    data class Notice(val text: String, val isError: Boolean)
 
     data class Error(override val title: String, override val summary: String, val message: String) : OutcomeDisplay
 
@@ -73,6 +90,9 @@ fun RunOutcome.display(): OutcomeDisplay = when (this) {
             rawBody = body,
             prettyBody = pretty ?: body,
             isJson = pretty != null,
+            savedLabel = savedTo?.let { "Saved to $it" },
+            saveError = saveError,
+            linkError = linkError,
         )
     }
 }
