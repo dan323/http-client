@@ -91,10 +91,10 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 | Wave | Tasks | Why together |
 |---|---|---|
 | 1 | T21 (plugin GUI check) | Done by hand in a real IDE; its findings may reshape T22/T23 |
-| 2 | T13 (variable analysis), T14 (desktop persistence), T26 (saved responses, needs T11) | disjoint areas |
+| 2 | T13 (variable analysis), T14 (desktop persistence), T26 (saved responses, builds on the done T11) | disjoint areas |
 | 3 | T8 (multipart), T19 (cancel button), T23 (plugin panel) | disjoint areas |
 | 4 | T22 (plugin intelligence), T16 (desktop editor), T15 (workspace) | need T13 / T14 |
-| 5 | T17 (desktop extras), T18 (history browser), T20 (environment editor), T10 (CLI rest, done), T24 (packaging) | up to three at a time |
+| 5 | T17 (desktop extras), T18 (history browser), T20 (environment editor), T24 (packaging) | up to three at a time |
 | 6 | T25 (QA and release notes) | needs everything |
 
 ### Rules for every task
