@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Changed
+- Build quality reports (R13): new build-only `quality-reports` project aggregating JUnit results (`test-report-aggregation`) and JaCoCo coverage (`jacoco-report-aggregation`, XML for SonarCloud) across `core`, `adapters`, `view-model`, `cli`, `desktop` and `mock-server` (`intellij-plugin` excluded); `:quality-reports:qualityReports` also enforces a coverage floor (lines 95 %, branches 83 %; measured 95.4 % / 83.6 %), which must never decrease. PIT mutation testing (gradle-pitest-plugin, version in the catalog) on `core`: `:core:pitest`, measured 83 % (820/988), threshold 80 %. CI: new `quality` job uploads the reports as artifacts; PIT runs weekly / on manual dispatch only.
 - Build and CI (R12a): Gradle version catalog `gradle/libs.versions.toml` (Kotlin, kotlinx-serialization, Compose, IntelliJ platform plugin versions in one place; the repeated `1.9.0` and `2.2.20` literals are gone). CI now runs the tests on Ubuntu (under xvfb), Windows and macOS, and has a `plugin` job running `:intellij-plugin:buildPlugin`. The plugin build uses the IDE at `ideaPath` when it exists, otherwise downloads IntelliJ IDEA `ideaVersion` (new in `gradle.properties`), which is what CI does. Tests run on the JDK 21 toolchain on every OS. Mock-server cleanups from R12 were not done (low priority).
 
 ### Security
