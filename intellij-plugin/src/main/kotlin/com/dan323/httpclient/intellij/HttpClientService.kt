@@ -1,6 +1,7 @@
 package com.dan323.httpclient.intellij
 
 import com.dan323.httpclient.adapters.JdkHttpExecutor
+import com.dan323.httpclient.adapters.FileAccessPolicy
 import com.dan323.httpclient.adapters.JsonEnvironmentRepository
 import com.dan323.httpclient.adapters.KotlinxJsonExtractor
 import com.dan323.httpclient.adapters.LocalFileReader
@@ -81,9 +82,12 @@ class HttpClientService(private val project: Project) {
         val env = envs.firstOrNull { it.name == environmentName } ?: envs.firstOrNull()
         val variables = env?.variables ?: emptyMap()
 
+        val accessPolicy = FileAccessPolicy.load().getOrElse {
+            return publish(Report(message = "File access configuration error: ${it.message}"))
+        }
         val executor = JdkHttpExecutor()
         val session = sessions.getOrPut(file.toAbsolutePath() to env?.name) {
-            RequestSession(RequestRunner(executor, LocalFileReader(dir), DynamicVariables(env = SystemEnvironmentVariables.fromConfiguration())), executor, KotlinxJsonExtractor())
+            RequestSession(RequestRunner(executor, LocalFileReader(dir, accessPolicy), DynamicVariables(env = SystemEnvironmentVariables.fromConfiguration())), executor, KotlinxJsonExtractor())
         }
         val sections = mutableListOf<Section>()
         val report = { Report(environment = env?.name ?: "none", sections = sections.toList()) }
