@@ -20,6 +20,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateMapOf
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,14 +50,59 @@ import kotlinx.serialization.json.JsonElement
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 
-private enum class Tab { BODY, HEADERS }
+internal enum class Tab { BODY, HEADERS }
 
 /** What the user has toggled for one response: tab, raw/pretty, and which JSON nodes are collapsed. */
-private class OutcomeUi(body: String) {
+internal class OutcomeUi(val json: JsonElement?) {
     var tab by mutableStateOf(Tab.BODY)
     var raw by mutableStateOf(false)
     val collapsed = mutableStateSetOf<String>()
-    val json: JsonElement? = parseJsonContainer(body)
+}
+
+internal class OutcomeEntry(val display: OutcomeDisplay, val ui: OutcomeUi?)
+
+/** Identity key: two equal outcomes (e.g. the same failure twice) are separate sections with separate UI state. */
+private class IdKey(val outcome: RunOutcome) {
+    override fun equals(other: Any?) = other is IdKey && other.outcome === outcome
+    override fun hashCode() = System.identityHashCode(outcome)
+}
+
+/**
+ * Display data for the outcomes on screen. Decoding and JSON parsing happen on [Dispatchers.Default], not in
+ * composition, entries for outcomes that left the list are dropped so a long session does not retain them, and an
+ * outcome already processed is never processed again. A body that cannot be displayed becomes an error section
+ * (with the raw body) instead of an exception in composition.
+ */
+internal class OutcomeModels(
+    private val render: (RunOutcome) -> OutcomeDisplay = { it.display() },
+    private val parseJson: (String) -> JsonElement? = { parseJsonContainer(it) },
+) {
+    private val entries = mutableStateMapOf<IdKey, OutcomeEntry>()
+    val size get() = entries.size
+    operator fun get(outcome: RunOutcome): OutcomeEntry? = entries[IdKey(outcome)]
+
+    suspend fun update(outcomes: List<RunOutcome>) {
+        val live = outcomes.map { IdKey(it) }.toSet()
+        entries.keys.retainAll(live)
+        for (o in outcomes) {
+            val key = IdKey(o)
+            if (key in entries) continue
+            entries[key] = withContext(Dispatchers.Default) { build(o) }
+        }
+    }
+
+    private fun build(o: RunOutcome): OutcomeEntry = try {
+        val d = render(o)
+        val json = (d as? OutcomeDisplay.Response)?.let { r ->
+            try { parseJson(r.rawBody) } catch (e: Exception) { null }   // unparsable: show the raw body
+        }
+        OutcomeEntry(d, (d as? OutcomeDisplay.Response)?.let { OutcomeUi(json) })
+    } catch (e: Exception) {
+        val title = o.request.name ?: "${o.request.method} ${o.request.url}"
+        val body = (o as? RunOutcome.Success)?.let { runCatching { it.response.bodyAsString() }.getOrNull() }
+        val detail = "Could not display this response (${e.message ?: e::class.simpleName})" + (body?.let { ":\n$it" } ?: "")
+        OutcomeEntry(OutcomeDisplay.Error(title, "", detail), null)
+    }
 }
 
 private class JsonColors(val key: Color, val string: Color, val number: Color, val keyword: Color, val punctuation: Color, val muted: Color) {
@@ -66,14 +115,14 @@ private class JsonColors(val key: Color, val string: Color, val number: Color, v
 @Composable
 fun ResponsePane(outcomes: List<RunOutcome>, modifier: Modifier = Modifier) {
     val colors = if (isSystemInDarkTheme()) JsonColors.Dark else JsonColors.Light
-    val uis = remember { HashMap<RunOutcome, OutcomeUi>() }
-    val displays = remember { HashMap<RunOutcome, OutcomeDisplay>() }
+    val models = remember { OutcomeModels() }
+    LaunchedEffect(outcomes) { models.update(outcomes) }
     // Read the collapsed sets here, in composition, so toggling a node recomposes the list.
-    val sections = outcomes.map { o ->
-        val d = displays.getOrPut(o) { o.display() }
-        val ui = (d as? OutcomeDisplay.Response)?.let { r -> uis.getOrPut(o) { OutcomeUi(r.rawBody) } }
+    val sections = outcomes.mapNotNull { o ->
+        val entry = models[o] ?: return@mapNotNull null
+        val ui = entry.ui
         val rows = if (ui?.json != null && ui.tab == Tab.BODY && !ui.raw) flattenJson(ui.json, ui.collapsed) else null
-        Triple(d, ui, rows)
+        Triple(entry.display, ui, rows)
     }
 
     LazyColumn(modifier) {
