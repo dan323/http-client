@@ -63,7 +63,21 @@ data class HttpResponse(
     val durationMillis: Long,
 ) {
     fun header(name: String): String? = headers.firstOrNull { it.name.equals(name, ignoreCase = true) }?.value
-    fun bodyAsString(): String = body.toString(Charsets.UTF_8)
+
+    /** All values of the header, case-insensitive name, in response order (repeated headers such as `Set-Cookie`). */
+    fun headerValues(name: String): List<String> = headers.filter { it.name.equals(name, ignoreCase = true) }.map { it.value }
+
+    /** The body decoded with the `charset` of the Content-Type header; UTF-8 when it is absent, malformed or unsupported. */
+    fun bodyAsString(): String = body.toString(charset())
+
+    private fun charset(): java.nio.charset.Charset {
+        val type = header("Content-Type") ?: return Charsets.UTF_8
+        val name = type.split(';').drop(1).map { it.trim() }
+            .firstOrNull { it.startsWith("charset=", ignoreCase = true) }
+            ?.substringAfter('=')?.trim()?.trim('"', '\'')
+            ?: return Charsets.UTF_8
+        return runCatching { java.nio.charset.Charset.forName(name) }.getOrDefault(Charsets.UTF_8)
+    }
 }
 
 /** [warnings] are non-fatal parse notes (e.g. ignored response handlers), each prefixed with its 1-based line. */
