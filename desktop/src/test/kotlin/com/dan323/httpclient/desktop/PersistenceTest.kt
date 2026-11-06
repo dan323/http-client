@@ -141,4 +141,121 @@ class PersistenceTest {
         // no display information: size sane, position dropped only when there is a screen list to check
         assertEquals(800, WindowGeometry.restore(WindowSettings(800, 600, 1, 1), emptyList()).width)
     }
+
+    private fun fakeStore(onLoad: () -> LoadedSettings = { LoadedSettings(DesktopSettings()) }, onSave: (DesktopSettings) -> String? = { null }) =
+        object : SettingsStore {
+            override fun load() = onLoad()
+            override fun save(settings: DesktopSettings) = onSave(settings)
+        }
+
+    @Test fun `a store that throws on load degrades to defaults with a warning`() {
+        SettingsPersistence(fakeStore(onLoad = { throw IllegalStateException("boom") })).use { p ->
+            assertEquals(DesktopSettings(), p.current)
+            assertTrue(p.loadWarning!!.contains("boom"))
+        }
+        SettingsPersistence(fakeStore(onLoad = { throw IllegalStateException() })).use { p ->
+            assertTrue(p.loadWarning!!.contains("IllegalStateException"))
+        }
+    }
+
+    @Test fun `a store that throws on save is reported once and never propagates`() {
+        val warnings = CopyOnWriteArrayList<String>()
+        SettingsPersistence(fakeStore(onSave = { throw java.io.IOException() }), debounceMillis = 60_000, onWarning = { warnings += it }).use { p ->
+            p.update { it.opened("a") }
+            p.flush()
+            p.update { it.opened("b") }
+            p.flush()
+        }
+        assertEquals(listOf("IOException"), warnings)
+    }
+
+    @Test fun `unchanged settings are not saved and updates after close are ignored`() {
+        val saves = CopyOnWriteArrayList<DesktopSettings>()
+        val p = SettingsPersistence(fakeStore(onSave = { saves += it; null }), debounceMillis = 60_000)
+        p.update { it }
+        p.flush()
+        assertTrue(saves.isEmpty())
+        p.close()
+        p.update { it.opened("late") }
+        assertNull(p.current.lastFile)
+        p.flush()
+        assertTrue(saves.isEmpty())
+    }
+
+    @Test fun `the debounce eventually writes in the background`() {
+        val saved = java.util.concurrent.CountDownLatch(1)
+        val thread = java.util.concurrent.atomic.AtomicReference<String>()
+        SettingsPersistence(fakeStore(onSave = { thread.set(Thread.currentThread().name); saved.countDown(); null }), debounceMillis = 10).use { p ->
+            p.update { it.opened("a") }
+            assertTrue(saved.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals("settings-saver", thread.get())
+        }
+    }
+
+    @Test fun `removing a recent file also forgets it as last file`() {
+        val a = http("a.http")
+        state().use { s ->
+            s.open(a)
+            val entry = s.recentFiles.single()
+            Files.delete(a)
+            s.openRecent(entry)
+            assertTrue(s.recentFiles.isEmpty())
+            assertNotNull(s.message)
+        }
+        state().use { it.restoreLastFile(); assertNull(it.file) }
+    }
+
+    @Test fun `changing the environment of no file is not remembered`() {
+        state().use { s -> s.environment = "x"; assertEquals("x", s.environment) }
+        assertNull(persistence().use { it.current.environments.values.firstOrNull() })
+    }
+
+    @Test fun `window geometry with a position partly on screen keeps it and zero sizes use defaults`() {
+        val screens = listOf(Bounds(0, 0, 1000, 700))
+        // 200 px of the window are visible on the right edge
+        assertEquals(Placement(800, 600, 800, 50, false), WindowGeometry.restore(WindowSettings(800, 600, 800, 50), screens))
+        // too little visible horizontally or vertically, or above the top edge
+        assertNull(WindowGeometry.restore(WindowSettings(800, 600, 950, 50), screens).x)
+        assertNull(WindowGeometry.restore(WindowSettings(800, 600, 10, 680), screens).x)
+        assertNull(WindowGeometry.restore(WindowSettings(800, 600, 10, -200), screens).x)
+        // x without y is no position
+        assertNull(WindowGeometry.restore(WindowSettings(800, 600, 10, null), screens).x)
+        // zero size falls back to the default but never exceeds a small screen
+        assertEquals(Placement(1000, 700, null, null, false), WindowGeometry.restore(WindowSettings(0, 0), screens))
+        // tiny screens still allow the minimum size
+        assertEquals(600, WindowGeometry.restore(WindowSettings(100, 100), listOf(Bounds(0, 0, 300, 200))).width)
+    }
+
+    @Test fun `current screens are sane or empty when headless`() {
+        val screens = WindowGeometry.currentScreens()
+        assertTrue(screens.all { it.width > 0 && it.height > 0 })
+    }
+
+    @Test fun `window tracker keeps the normal size while maximized and ignores empty sizes`() {
+        val t = WindowTracker(Placement(1280, 800, null, null, false))
+        assertEquals(WindowSettings(1000, 600, 5, 6, false), t.observe(1000, 600, 5, 6, false))
+        assertEquals(WindowSettings(1000, 600, 5, 6, true), t.observe(1920, 1080, 0, 0, true))
+        assertEquals(WindowSettings(1000, 600, 5, 6, false), t.observe(0, 0, 0, 0, false))
+        assertEquals(WindowSettings(700, 500, null, null, false), t.observe(700, 500, null, null, false))
+    }
+
+    @Test fun `run within reports whether the action finished in time`() {
+        var ran = false
+        assertTrue(runWithin(5000) { ran = true })
+        assertTrue(ran)
+        val release = java.util.concurrent.CountDownLatch(1)
+        try {
+            assertTrue(!runWithin(20) { release.await() })
+        } finally { release.countDown() }
+    }
+
+    @Test fun `startup opens the argument over the remembered file and survives a failing store`() {
+        val a = http("a.http")
+        val b = http("b.http")
+        val store = JsonSettingsStore(cfg)
+        SettingsPersistence(store, debounceMillis = 20).use { it.update { s -> s.opened(canonical(a)) } }
+        createAppState(emptyArray()) { store }.use { assertEquals(canonical(a), canonical(it.file!!)) }
+        createAppState(arrayOf(b.toString())) { store }.use { assertEquals(canonical(b), canonical(it.file!!)) }
+        createAppState(emptyArray()) { throw IllegalStateException("no store") }.use { assertNull(it.file) }
+    }
 }
