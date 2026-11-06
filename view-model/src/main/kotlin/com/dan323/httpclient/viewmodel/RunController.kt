@@ -53,21 +53,29 @@ sealed interface RunResult {
  */
 class RunController(
     private val locator: EnvironmentLocator,
+    private val maxSessions: Int = 16,
     private val newSession: (Path) -> Result<RequestSession>,
 ) {
     private data class SessionKey(val file: Path, val environment: String?, val variables: Map<String, String>)
 
-    private val sessions = ConcurrentHashMap<SessionKey, RequestSession>()
+    // Least recently used first; guarded by [acquireLock]. Bounded by [maxSessions] (running sessions are never evicted).
+    private val sessions = LinkedHashMap<SessionKey, RequestSession>(16, 0.75f, true)
     private val running = ConcurrentHashMap<SessionKey, Int>()
     // Makes "evict obsolete, find or create, register as running" one step, so a concurrent run cannot evict a session
     // between another run's lookup and its registration.
     private val acquireLock = Any()
 
     /** Forgets remembered responses, so the next run sends the chained requests again. */
-    fun resetChain() = sessions.clear()
+    fun resetChain() = synchronized(acquireLock) { sessions.keys.removeAll { !running.containsKey(it) } }
+
+    /** Drops the remembered responses of [file] (it changed on disk or in the editor). Sessions that are running stay. */
+    fun forget(file: Path) {
+        val abs = file.toAbsolutePath()
+        synchronized(acquireLock) { sessions.keys.removeAll { it.file == abs && !running.containsKey(it) } }
+    }
 
     /** Number of cached sessions (for tests and diagnostics). */
-    val cachedSessions: Int get() = sessions.size
+    val cachedSessions: Int get() = synchronized(acquireLock) { sessions.size }
 
     fun run(
         file: Path,
@@ -100,13 +108,16 @@ class RunController(
         val key = SessionKey(file.toAbsolutePath(), env?.name, variables)
         val session = synchronized(acquireLock) {
             // Sessions for the same file+environment with other (older) variables are obsolete; drop them unless running.
-            sessions.keys.filter { it.file == key.file && it.environment == key.environment && it != key && !running.containsKey(it) }
-                .forEach { sessions.remove(it) }
+            sessions.keys.removeAll { it.file == key.file && it.environment == key.environment && it != key && !running.containsKey(it) }
             val found = sessions[key] ?: run {
                 val created = newSession(file).getOrElse {
                     return RunResult.Rejected(RunResult.Reason.FILE_ACCESS, "File access configuration error: ${it.message}", current ?: requests.firstOrNull())
                 }
-                sessions.putIfAbsent(key, created) ?: created
+                sessions[key] = created
+                // Bound the cache: drop the least recently used idle sessions beyond the limit.
+                val idle = sessions.keys.filter { it != key && !running.containsKey(it) }
+                idle.take((sessions.size - maxSessions).coerceAtLeast(0)).forEach { sessions.remove(it) }
+                created
             }
             running.merge(key, 1, Int::plus)
             found
