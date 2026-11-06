@@ -30,19 +30,38 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.WindowPlacement
+import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberWindowState
+import androidx.compose.runtime.snapshotFlow
 
 fun main(args: Array<String>) = application {
-    val state = remember { AppState().also { st -> args.firstOrNull()?.let { st.open(Path.of(it)) } } }
+    val state = remember { createAppState(args) }
+    val placement = remember { WindowGeometry.restore(state.savedWindow(), WindowGeometry.currentScreens()) }
+    val windowState = rememberWindowState(
+        size = DpSize(placement.width.dp, placement.height.dp),
+        position = if (placement.x != null && placement.y != null) WindowPosition(placement.x.dp, placement.y.dp) else WindowPosition.PlatformDefault,
+        placement = if (placement.maximized) WindowPlacement.Maximized else WindowPlacement.Floating,
+    )
+    LaunchedEffect(windowState) {
+        // Remember the normal (not maximized) geometry plus the maximized flag; the saver debounces bursts.
+        val tracker = WindowTracker(placement)
+        snapshotFlow { Triple(windowState.size, windowState.position, windowState.placement) }.collect { (size, pos, place) ->
+            val abs = pos as? WindowPosition.Absolute
+            state.rememberWindow(tracker.observe(
+                size.width.value.toInt(), size.height.value.toInt(),
+                abs?.x?.value?.toInt(), abs?.y?.value?.toInt(), place != WindowPlacement.Floating,
+            ))
+        }
+    }
     Window(
         onCloseRequest = {
-            // Closing waits for in-flight exchanges; do not let a stalled request keep the window open.
-            val closer = Thread { state.close() }.apply { isDaemon = true; start() }
-            closer.join(2000)
+            // Closing flushes the settings and waits for in-flight exchanges; do not let a stall keep the window open.
+            runWithin(2000) { state.close() }
             exitApplication()
         },
         title = "HTTP Client",
-        state = rememberWindowState(size = DpSize(1280.dp, 800.dp)),
+        state = windowState,
     ) {
         MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
             AppRoot(state, window)
