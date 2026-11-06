@@ -178,7 +178,8 @@ and files are written atomically (temp file + move), each report independently. 
 (`rw-------`, POSIX) because they may contain secrets; replacing an existing report keeps that file's permissions.
 Exit codes, by precedence: 2 usage; 1 the run failed (request error, failed assertion, or the run could not start),
 even if a report could not be written (the write error is still printed); 3 the run passed but a report could not
-be written; 0 otherwise. The pass/fail decision is `RunReport.passed`. If the run cannot start (missing file, unknown environment or request, unexpected exception) a report with a
+be written; 0 otherwise. The pass/fail decision is `RunReport.passed`. If the run cannot start (missing file,
+unknown environment or request, unexpected exception) a report with a
 single failed `httpc` entry is still written so CI finds a file. Console output is unchanged.
 
 JUnit XML: one `testcase` per request, so `tests`/`failures`/`errors` match the elements. All failed assertions of a
