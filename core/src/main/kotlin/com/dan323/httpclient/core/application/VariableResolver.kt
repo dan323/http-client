@@ -38,13 +38,15 @@ object VariableResolver {
         extra: (String) -> String? = { null },
         dynamic: DynamicVariables = DynamicVariables.DEFAULT,
         fileVariables: Map<String, String> = emptyMap(),
-    ): String = Expansion(variables, fileVariables, extra, dynamic).expand(text, null)
+        onSubstitute: (name: String, value: String) -> Unit = { _, _ -> },
+    ): String = Expansion(variables, fileVariables, extra, dynamic, onSubstitute).expand(text, null)
 
     private class Expansion(
         private val variables: Map<String, String>,
         private val fileVariables: Map<String, String>,
         private val extra: (String) -> String?,
         private val dynamic: DynamicVariables,
+        private val onSubstitute: (String, String) -> Unit,
     ) {
         private val position = fileVariables.keys.withIndex().associate { it.value to it.index }
         private val stack = ArrayList<String>()
@@ -54,7 +56,10 @@ object VariableResolver {
         private val cache = HashMap<String, String>()
         private var impure = 0
 
-        fun expand(text: String, owner: String?): String = pattern.replace(text) { m -> lookup(nameOf(m), owner) }
+        fun expand(text: String, owner: String?): String = pattern.replace(text) { m ->
+            val name = nameOf(m)
+            lookup(name, owner).also { onSubstitute(name, it) }
+        }
 
         private fun lookup(name: String, owner: String?): String {
             val file = fileVariables[name]
