@@ -11,6 +11,39 @@ concurrency:
 
 jobs:
   test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      # JDK 21 matches the Gradle toolchain (jvmToolchain(21)), so the JdkHttpExecutor redirect tests
+      # run on the same JDK everywhere.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      # The IntelliJ plugin module needs an IDE, so only its build (not its tests) runs in the plugin job below.
+      # The desktop UI tests are headless but still want an X display on Linux (Windows and macOS have one).
+      - name: Test (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a ./gradlew :core:test :adapters:test :cli:test :mock-server:test :desktop:test :view-model:test --console=plain
+      - name: Test (Windows, macOS)
+        if: runner.os != 'Linux'
+        run: ./gradlew :core:test :adapters:test :cli:test :mock-server:test :desktop:test :view-model:test --console=plain
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ runner.os }}
+          path: "**/build/reports/tests"
+
+  # Catches a plugin build break. There is no local IDE on the runner, so the build downloads
+  # IntelliJ IDEA (ideaVersion in gradle.properties); ideaPath is ignored when it does not exist.
+  plugin:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,13 +52,5 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
-      # The IntelliJ plugin module needs a local IDE (ideaPath), so its tests are not run here yet.
-      # The desktop UI tests are headless but still want an X display on Linux.
-      - name: Test
-        run: xvfb-run -a ./gradlew :core:test :adapters:test :cli:test :mock-server:test :desktop:test :view-model:test --console=plain
-      - name: Upload test reports
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-reports
-          path: "**/build/reports/tests"
+      - name: Build plugin
+        run: ./gradlew :intellij-plugin:buildPlugin --console=plain
