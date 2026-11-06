@@ -36,12 +36,15 @@ class RequestRunner(
         extra: (String) -> String? = { null },
         onSubstitute: (name: String, value: String) -> Unit = { _, _ -> },
     ): HttpRequest =
-        build(t) { VariableResolver.resolve(it, env, extra, dynamic, t.fileVariables, onSubstitute) }
+        build(t, { onSubstitute("Authorization", it) }) { VariableResolver.resolve(it, env, extra, dynamic, t.fileVariables, onSubstitute) }
 
-    private fun build(t: RequestTemplate, text: (String) -> String): HttpRequest = HttpRequest(
+    private fun build(t: RequestTemplate, secret: (String) -> Unit, text: (String) -> String): HttpRequest = HttpRequest(
         method = t.method,
         url = text(t.url),
-        headers = t.headers.map { Header(it.name, text(it.value)) },
+        headers = t.headers.map {
+            val value = text(it.value)
+            Header(it.name, if (it.name.trim().equals("Authorization", ignoreCase = true)) BasicAuth.encode(value, secret) else value)
+        },
         body = when (val b = t.body) {
             null -> null
             is Body.Text -> text(b.content).toByteArray()

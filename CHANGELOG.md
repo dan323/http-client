@@ -5,6 +5,9 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Auth shortcut (T7, F3): `Authorization: Basic user password` and `Basic user:password` are Base64-encoded (UTF-8) at send time, after variable resolution; an already-encoded single token and other schemes are unchanged. The encoded value, the plain credentials and the password are scrubbed from failure messages. `Digest` and OAuth helpers are not implemented.
+
 ### Changed
 - Docs refresh (R12b): `docs/features.md` describes the final state (CLI synopsis and exit codes, environment resolution, session behaviour in desktop and plugin); `docs/PLAN.md` lists only open work with statuses; `docs/REMEDIATION.md` records R1-R13 as done with their leftovers; module READMEs and `CLAUDE.md` updated.
 - CLI and reports (R8): `JUnitXmlReport` moved from `core` to `adapters` (package `com.dan323.httpclient.adapters`); new `ReportWriter` port in `core` with `AtomicReportWriter` in `adapters` (the CLI no longer does report file I/O). New report files are owner-only (0600) on POSIX, replaced ones keep their permissions. `--report-*` equal to the input `.http` file and `--report-*` with `--list` are usage errors (exit 2). A failed run whose report cannot be written now exits 1 (was 3); 3 is only for a passed run. The CLI uses `RunReport.passed` instead of recomputing.
