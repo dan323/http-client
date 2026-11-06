@@ -34,17 +34,9 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.runtime.snapshotFlow
-import com.dan323.httpclient.adapters.JsonSettingsStore
-import com.dan323.httpclient.core.port.out.WindowSettings
 
 fun main(args: Array<String>) = application {
-    val state = remember {
-        val persistence = try { SettingsPersistence(JsonSettingsStore()) } catch (_: Throwable) { null }   // never fail to start over settings
-        AppState(settings = persistence).also { st ->
-            val arg = args.firstOrNull()
-            if (arg != null) st.open(Path.of(arg)) else st.restoreLastFile()
-        }
-    }
+    val state = remember { createAppState(args) }
     val placement = remember { WindowGeometry.restore(state.savedWindow(), WindowGeometry.currentScreens()) }
     val windowState = rememberWindowState(
         size = DpSize(placement.width.dp, placement.height.dp),
@@ -53,21 +45,19 @@ fun main(args: Array<String>) = application {
     )
     LaunchedEffect(windowState) {
         // Remember the normal (not maximized) geometry plus the maximized flag; the saver debounces bursts.
-        var normal = placement
+        val tracker = WindowTracker(placement)
         snapshotFlow { Triple(windowState.size, windowState.position, windowState.placement) }.collect { (size, pos, place) ->
-            val maximized = place == WindowPlacement.Maximized
             val abs = pos as? WindowPosition.Absolute
-            if (!maximized && size.width.value > 0 && size.height.value > 0) {
-                normal = Placement(size.width.value.toInt(), size.height.value.toInt(), abs?.x?.value?.toInt(), abs?.y?.value?.toInt(), false)
-            }
-            state.rememberWindow(WindowSettings(normal.width, normal.height, normal.x, normal.y, maximized))
+            state.rememberWindow(tracker.observe(
+                size.width.value.toInt(), size.height.value.toInt(),
+                abs?.x?.value?.toInt(), abs?.y?.value?.toInt(), place == WindowPlacement.Maximized,
+            ))
         }
     }
     Window(
         onCloseRequest = {
             // Closing flushes the settings and waits for in-flight exchanges; do not let a stall keep the window open.
-            val closer = Thread { state.close() }.apply { isDaemon = true; start() }
-            closer.join(2000)
+            runWithin(2000) { state.close() }
             exitApplication()
         },
         title = "HTTP Client",

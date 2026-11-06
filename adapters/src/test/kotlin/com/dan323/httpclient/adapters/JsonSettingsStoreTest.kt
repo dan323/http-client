@@ -111,6 +111,34 @@ class JsonSettingsStoreTest {
         assertEquals(DesktopSettings(), JsonSettingsStore(blocker.resolve("http-client")).load().settings)
     }
 
+    @Test fun `an unreadable file gives defaults with a warning and is backed up on save`() {
+        Files.createDirectories(dir)
+        val bytes = byteArrayOf(0xC3.toByte(), 0x28, 0xFF.toByte())   // not valid UTF-8
+        Files.write(dir.resolve("settings.json"), bytes)
+        val st = store()
+        val l = st.load()
+        assertEquals(DesktopSettings(), l.settings)
+        assertNotNull(l.warning)
+        assertNull(st.save(DesktopSettings()))
+        assertTrue(bytes.contentEquals(Files.readAllBytes(dir.resolve("settings.json.corrupt"))))
+    }
+
+    @Test fun `a failing backup is reported by save and the broken file is left alone`() {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("settings.json"), "{broken")
+        Files.createDirectories(dir.resolve("settings.json.corrupt").resolve("sub"))   // backup name taken by a non empty folder
+        val st = store()
+        st.load()
+        assertNull(st.save(DesktopSettings()))   // an existing backup is never overwritten, the save still goes ahead
+        assertTrue(Files.readString(dir.resolve("settings.json")).contains("\"version\""))
+    }
+
+    @Test fun `a writer that fails is reported as a message`() {
+        val failing = AtomicReportWriter({ _, _ -> throw java.io.IOException() }, { a, b, o -> Files.move(a, b, *o) })
+        val msg = JsonSettingsStore(dir, failing).save(DesktopSettings())
+        assertEquals("Could not save settings: IOException", msg)
+    }
+
     @Test fun `settings never contain more than paths names and geometry`() {
         val a = realFile("a.http")
         store().save(DesktopSettings(a, mapOf(a to "dev"), WindowSettings(1, 2), listOf(a)))
@@ -145,5 +173,20 @@ class ConfigDirLocatorTest {
         val appData = Path.of("appdata-dir")
         assertEquals(appData.resolve("http-client"), locate("Windows 11", mapOf("APPDATA" to appData.toString())))
         assertEquals(home.resolve("AppData").resolve("Roaming").resolve("http-client"), locate("Windows 11"))
+    }
+}
+
+class ConfigDirLocatorDefaultsTest {
+    @Test fun `the default locator gives an absolute app folder`() {
+        val dir = ConfigDirLocator().locate()
+        assertTrue(dir.isAbsolute || dir.startsWith("."))
+        assertEquals(ConfigDirLocator.APP_DIR, dir.fileName.toString())
+    }
+
+    @Test fun `an unparsable APPDATA or XDG value falls back to the home folder`() {
+        val home = Path.of("home-dir")
+        val bad = mapOf("APPDATA" to "bad\u0000path", "XDG_CONFIG_HOME" to "bad\u0000path")
+        assertEquals(home.resolve("AppData").resolve("Roaming").resolve("http-client"), ConfigDirLocator("Windows 10", bad::get, home).locate())
+        assertEquals(home.resolve(".config").resolve("http-client"), ConfigDirLocator("Linux", bad::get, home).locate())
     }
 }
