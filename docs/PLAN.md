@@ -20,7 +20,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F8 | Executor settings: redirects, timeouts, proxy | core | done |
 | F9 | Response history and saved responses | core, UIs | open |
 | F10 | CLI: `--json`, `--junit`, `--quiet`, `--output`, `--var`, meaningful exit codes | CLI | done (T10): reports, exit codes 0/1/2/3, `--quiet`, `--output`, `--var`, summary line |
-| F11 | Desktop: remember last file, environment, window, recent files | desktop | open |
+| F11 | Desktop: remember last file, environment, window, recent files | desktop | done (T14): last file, environment, window, recent files |
 | F12 | Desktop: several files at once, folder view | desktop | open |
 | F13 | Desktop: history browser and response comparison | desktop | open |
 | F14 | Editor intelligence: variable completion, undefined-variable and bad-reference diagnostics, find | desktop, plugin | open |
@@ -48,13 +48,12 @@ Each remaining task is listed once even when it serves several features. Size: S
 |---|---|---|---|---|
 | T8 | **Multipart and form bodies** in parser and executor, with file parts (file reads go through the confined `FileReader`) | F4 | M | – |
 | T13 | **Variable analysis in `core`:** list known variables (env, file, names) and find undefined variables and bad `{{name.response...}}` references | F14, F18 | M | – |
-| T14 | **Desktop persistence:** settings port + JSON adapter in the user config dir; last file, environment, window, recents | F11 | M | – |
-| T15 | **Desktop workspace:** several open files (tabs) and a folder view | F12 | L | T14 |
+| T15 | **Desktop workspace:** several open files (tabs) and a folder view | F12 | L | – |
 | T16 | **Desktop editor intelligence:** variable completion, diagnostics from T13, find/replace | F14 | L | T13 |
 | T17 | **Desktop response extras:** body search, save to file, image/HTML preview; also show assertion results (F1) | F15, F1 | M | – |
 | T18 | **Desktop history and compare:** browse stored responses, diff two | F13 | M | – (T11 done: `HistoryStore` / `FileHistoryStore`) |
 | T19 | **Cancel button:** desktop (and plugin) cancel of the running request; core and the executor already cancel on interrupt | F16 | S | – |
-| T20 | **Environment editor:** write support on the environment port and a UI to edit variables | F17 | M | T14 |
+| T20 | **Environment editor:** write support on the environment port and a UI to edit variables | F17 | M | – |
 | T21 | **Plugin GUI verification:** the sandbox IDE loads without errors; still to check by hand: highlighting, gutter icons, tool window, actions, in a Community IDE | F20, F19, F18 | S | – |
 | T22 | **Plugin intelligence:** completion, go-to-request, inspections from T13; show assertion results | F18, F14, F1 | L | T13, T21 |
 | T23 | **Plugin response panel:** remember the environment across restarts, run all | F19 | M | T21 |
