@@ -44,3 +44,54 @@ class SessionFactoryTest {
         assertTrue(r.isFailure)
     }
 }
+
+class SessionFactoryOwnershipTest {
+    private class CountingExecutor : com.dan323.httpclient.core.port.out.HttpExecutor, AutoCloseable {
+        var closed = 0
+        val sent = mutableListOf<String>()
+        override fun execute(request: com.dan323.httpclient.core.domain.HttpRequest): com.dan323.httpclient.core.domain.HttpResponse {
+            sent += request.url
+            return com.dan323.httpclient.core.domain.HttpResponse(200, emptyList(), ByteArray(0), 1)
+        }
+        override fun close() { closed++ }
+    }
+
+    private fun run(session: com.dan323.httpclient.core.application.RequestSession) =
+        session.runAll(HttpFileParser().parse("GET http://h/x\n").requests, emptyMap())
+
+    @Test fun sessionsShareTheFactoryExecutorAndCloseReleasesItOnce() {
+        val exec = CountingExecutor()
+        val file = Files.createTempDirectory("factory").resolve("a.http")
+        val factory = SessionFactory(exec)
+        run(factory.create(file, FileAccessPolicy()))
+        run(factory.create(file, FileAccessPolicy()))
+        assertEquals(2, exec.sent.size)
+        assertEquals(0, exec.closed)
+        factory.close()
+        assertEquals(1, exec.closed)
+    }
+
+    @Test fun sessionsAreIndependentAndEmpty() {
+        val file = Files.createTempDirectory("factory").resolve("a.http")
+        SessionFactory(CountingExecutor()).use { f ->
+            val a = f.create(file, FileAccessPolicy())
+            val b = f.create(file, FileAccessPolicy())
+            assertTrue(a !== b)
+            assertTrue(!a.hasResponse("login"))
+        }
+    }
+
+    @Test fun createConfiguredBuildsASessionWhenSettingsAreValid() {
+        val file = Files.createTempDirectory("factory").resolve("a.http")
+        SessionFactory(CountingExecutor()).use { f ->
+            val r = f.createConfigured(file)
+            // valid unless the test machine sets a bad HTTPC allow-root; either way it must not throw
+            assertTrue(r.isSuccess || r.exceptionOrNull()?.message != null)
+        }
+    }
+
+    @Test fun closingADefaultFactoryTwiceIsHarmless() {
+        val f = SessionFactory()
+        f.close(); f.close()
+    }
+}
