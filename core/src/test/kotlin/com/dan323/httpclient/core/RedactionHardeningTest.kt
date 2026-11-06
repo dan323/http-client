@@ -1,6 +1,5 @@
 package com.dan323.httpclient.core
 
-import com.dan323.httpclient.core.application.JUnitXmlReport
 import com.dan323.httpclient.core.application.RequestRunner
 import com.dan323.httpclient.core.application.RequestSession
 import com.dan323.httpclient.core.application.ResponseExtractor
@@ -50,7 +49,7 @@ class RedactionHardeningTest {
 
     @Test fun reportsDoNotContainSecret() {
         val outcome = failureOf(RequestTemplate("r", "GET", "http://h/?t={{tok}}"), HttpExecutor { req -> error("failed ${req.url}") })
-        val xml = JUnitXmlReport.render(RunReport.from(listOf(outcome)))
+        val xml = RunReport.from(listOf(outcome)).entries.single().error!!
         assertFalse(secret in xml)
         assertFalse("s3cr3t" in xml)
         assertTrue("{{tok}}" in xml)

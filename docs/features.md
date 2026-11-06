@@ -165,15 +165,20 @@ GET {{base}}/items/1
 
 `RunReport.from(outcomes)` (in `core`) builds a pure summary of a run: one entry per request (name, method, URL as
 written in the file, status, duration, assertion results, assertions not run, error) plus totals and an overall
-pass/fail. A request passes when it completed and all its assertions passed. Exporters: `JUnitXmlReport` (`core`,
-plain string building with XML escaping; illegal XML characters are dropped) and `JsonRunReport` (`adapters`,
-kotlinx-serialization, also parses a report back).
+pass/fail. A request passes when it completed and all its assertions passed. Exporters, both in `adapters`:
+`JUnitXmlReport` (plain string building with XML escaping; illegal XML characters are dropped) and `JsonRunReport`
+(kotlinx-serialization, also parses a report back). Files are written through the `ReportWriter` port (`core`),
+implemented by `AtomicReportWriter` (`adapters`).
 
 The CLI writes them with `--report-json FILE` and `--report-junit FILE`. Option values must be non-empty and not
-start with `--`; repeating an option or giving both reports the same path is a usage error (exit 2). Parent
-directories are created and files are written atomically (temp file + move), each report independently. Exit codes:
-0 ok, 1 request/assertion failure, 2 usage, 3 a report could not be written (stderr says whether the run itself
-passed). If the run cannot start (missing file, unknown environment or request, unexpected exception) a report with a
+start with `--`. These are usage errors (exit 2, nothing is run or written): repeating an option, giving both reports
+the same path, a report path that is the input `.http` file (also through `..` or a symlink; it would overwrite it),
+and combining a report option with `--list` (nothing runs, so there is no report). Parent directories are created
+and files are written atomically (temp file + move), each report independently. New report files are owner-only
+(`rw-------`, POSIX) because they may contain secrets; replacing an existing report keeps that file's permissions.
+Exit codes, by precedence: 2 usage; 1 the run failed (request error, failed assertion, or the run could not start),
+even if a report could not be written (the write error is still printed); 3 the run passed but a report could not
+be written; 0 otherwise. The pass/fail decision is `RunReport.passed`. If the run cannot start (missing file, unknown environment or request, unexpected exception) a report with a
 single failed `httpc` entry is still written so CI finds a file. Console output is unchanged.
 
 JUnit XML: one `testcase` per request, so `tests`/`failures`/`errors` match the elements. All failed assertions of a
@@ -291,19 +296,23 @@ Referencing a request that has not run, or a path that does not exist, is an err
 ## Command line
 
 ```
-httpc <file.http> [--env NAME] [--request NAME|INDEX] [--list]
+httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] [--allow-file-root DIR] [--list]
+                  [--report-json FILE] [--report-junit FILE]
 ```
 
 | Option        | Effect                                               |
 |---------------|------------------------------------------------------|
 | `--env NAME`  | use variables from `NAME` in `http-client.env.json`  |
 | `--request X` | run the request named `X`, or the Nth (1-based), plus the requests it chains on |
-| `--list`      | list requests and exit                               |
+| `--allow-env N` | let `{{$env.N}}` read these OS environment variables (repeatable) |
+| `--allow-file-root DIR` | also let `< path` bodies be read from `DIR` (repeatable) |
+| `--list`      | list requests and exit (cannot be combined with `--report-*`) |
+| `--report-json FILE` / `--report-junit FILE` | write a run report (see Run reports) |
 
 For each request the output is the status line with timing, the response headers, then the body.
 After a response, each assertion is printed as `PASS ...` or `FAIL ... -- message`; for a request that failed its assertions are listed as `NOT RUN ...`.
 A total line `Assertions: N passed, M failed, K not run` follows the run. With `--request`, only the selected request's assertions run, not its prerequisites.
-Exit codes: `0` success, `1` a request or setup failed or an assertion failed, `2` bad arguments.
+Exit codes: `0` success, `1` a request or setup failed or an assertion failed, `2` bad arguments, `3` the run passed but a requested report could not be written.
 
 Run with `./gradlew :cli:run --args="requests.http --env dev"`, or build a launcher with
 `./gradlew :cli:installDist` (output in `cli/build/install/httpc/bin`).
