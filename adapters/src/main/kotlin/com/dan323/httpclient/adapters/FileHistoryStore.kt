@@ -60,7 +60,28 @@ class FileHistoryStore(
 
     private val random = SecureRandom()
 
-    override fun record(httpFile: Path, report: RunReport, responses: List<HttpResponse?>): HistoryRun {
+    override fun record(httpFile: Path, report: RunReport, responses: List<HttpResponse?>): HistoryRun =
+        store(httpFile, report, responses, null)
+
+    override fun recordLinked(httpFile: Path, key: String, report: RunReport, response: HttpResponse): HistoryRun =
+        store(httpFile, report, listOf(response), key)
+
+    override fun latestLinked(httpFile: Path, key: String): StoredResponse? {
+        if (key.isBlank()) return null
+        val fileDir = fileDir(httpFile)
+        for (id in runIds(fileDir)) {
+            val run = loadRun(fileDir, id) ?: continue
+            val entries = run.report().entries
+            // a keyed response matches its key; responses of ordinary runs carry no key and match by request name
+            for (resp in run.dto.responses.sortedByDescending { it.index }) {
+                val matches = if (resp.key != null) resp.key == key else entries.getOrNull(resp.index)?.name == key
+                if (matches) toStored(fileDir.resolve(id), run, resp.index)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun store(httpFile: Path, report: RunReport, responses: List<HttpResponse?>, key: String?): HistoryRun {
         require(responses.size == report.entries.size) { "responses (${responses.size}) must match the report entries (${report.entries.size})" }
         val fileDir = fileDir(httpFile)
         createPrivateDirectories(fileDir)
@@ -71,7 +92,7 @@ class FileHistoryStore(
                 if (r == null) return@mapIndexedNotNull null
                 val kept = if (r.body.size > maxBodyBytes) r.body.copyOf(maxBodyBytes) else r.body
                 writeAtomically(runDir.resolve("$i.body"), kept)
-                ResponseDto(i, r.statusCode, r.headers.map { HeaderDto(it.name, it.value) }, r.durationMillis, r.body.size.toLong(), r.body.size > maxBodyBytes)
+                ResponseDto(i, r.statusCode, r.headers.map { HeaderDto(it.name, it.value) }, r.durationMillis, r.body.size.toLong(), r.body.size > maxBodyBytes, key)
             }
             val dto = RunDto(FORMAT_VERSION, id, now.toString(), JSON.parseToJsonElement(JsonRunReport.render(report)), stored)
             writeAtomically(runDir.resolve(RUN_FILE), JSON.encodeToString(dto).toByteArray(Charsets.UTF_8))
@@ -233,6 +254,8 @@ class FileHistoryStore(
         val durationMillis: Long,
         val bodySize: Long,
         val bodyTruncated: Boolean,
+        /** Set for responses recorded for a `<>` link (see [recordLinked]); absent in older entries. */
+        val key: String? = null,
     )
 
     @Serializable private data class RunDto(

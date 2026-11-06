@@ -23,7 +23,14 @@ data class RequestTemplate(
     val fileVariables: Map<String, String> = emptyMap(),
     /** `# @assert <expr>` lines, in order, unparsed (see `AssertionEvaluator`). Kept apart from [settings]. */
     val assertions: List<String> = emptyList(),
+    /** `>> path` / `>>! path` after the request: where to save the response body (path may hold `{{variables}}`). */
+    val saveResponse: ResponseSave? = null,
+    /** `<> path` lines after the request: the request keeps a link to its latest stored response (see `ResponseLinks`). */
+    val responseLinks: List<String> = emptyList(),
 )
+
+/** A `>> path` (never overwrites an existing file) or `>>! path` ([overwrite]) directive; [path] is relative to the .http file. */
+data class ResponseSave(val path: String, val overwrite: Boolean)
 
 /** A request with all variables substituted, ready to send. */
 data class HttpRequest(

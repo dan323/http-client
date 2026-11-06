@@ -5,6 +5,8 @@ import com.dan323.httpclient.core.domain.HttpResponse
 import com.dan323.httpclient.core.domain.RequestTemplate
 import com.dan323.httpclient.core.port.out.HttpExecutor
 import com.dan323.httpclient.core.port.out.JsonExtractor
+import com.dan323.httpclient.core.port.out.ResponseLinkRecorder
+import com.dan323.httpclient.core.port.out.ResponseSaver
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
 
@@ -26,6 +28,18 @@ class RequestSession(
     private val executor: HttpExecutor,
     json: JsonExtractor,
 ) {
+    /** Saves bodies for `>>` / `>>!`; null means saving is unavailable (a request with such a directive reports an error). */
+    @Volatile private var saver: ResponseSaver? = null
+
+    /** Records the latest response of requests with a `<>` link; null means links are not kept. */
+    @Volatile private var links: ResponseLinkRecorder? = null
+
+    /** Sets how `>>` / `>>!` and `<>` are carried out (call before running); returns this session. */
+    fun withPersistence(saver: ResponseSaver?, links: ResponseLinkRecorder?): RequestSession = apply {
+        this.saver = saver
+        this.links = links
+    }
+
     private val extractor = ResponseExtractor(json)
     private val assertionEvaluator = AssertionEvaluator(extractor)
     private val responses = ConcurrentHashMap<String, HttpResponse>()
@@ -75,7 +89,9 @@ class RequestSession(
         val withAssertions = assertFor(r)
         val outcome = try {
             run(r, variables).let {
-                RunOutcome.Success(r, it, if (withAssertions) evaluateAssertions(r, it, variables) else emptyList())
+                val assertions = if (withAssertions) evaluateAssertions(r, it, variables) else emptyList()
+                // After the assertions, and also when they failed: the response exists either way.
+                persist(RunOutcome.Success(r, it, assertions), variables)
             }
         } catch (e: java.util.concurrent.CancellationException) {
             // cancelled (interrupted): stop the session, do not send the queued requests
@@ -109,6 +125,41 @@ class RequestSession(
         onReused(reused)
         runAll(toSend, variables, assertFor = { it === current }, onOutcome = onOutcome)
     }
+
+    /**
+     * Applies the `>>` / `>>!` save and the `<>` link of the request. A failure here is recorded on the outcome and
+     * never fails the request; messages hide substituted values and never contain the body.
+     */
+    private fun persist(outcome: RunOutcome.Success, variables: Map<String, String>): RunOutcome.Success {
+        val r = outcome.request
+        var result = outcome
+        r.saveResponse?.let { save ->
+            result = try {
+                val target = saver ?: throw java.io.IOException("saving responses is not available here")
+                val path = runner.resolveText(save.path, variables, ::reference, r.fileVariables, ::record)
+                try {
+                    result.copy(savedTo = target.save(path, outcome.response.body, save.overwrite))
+                } catch (e: java.io.IOException) {
+                    result.copy(saveError = scrubbed("Cannot save response to '$path': ${e.message ?: e::class.simpleName}"))
+                }
+            } catch (e: java.io.IOException) {
+                result.copy(saveError = scrubbed("Cannot save response to '${save.path}': ${e.message}"))
+            } catch (e: RuntimeException) {
+                result.copy(saveError = scrubbed("Cannot save response to '${save.path}': ${e.message ?: e::class.simpleName}"))
+            }
+        }
+        if (r.responseLinks.isNotEmpty()) {
+            result = try {
+                (links ?: throw java.io.IOException("keeping response links is not available here")).record(ResponseLinks.key(r), outcome)
+                result
+            } catch (e: java.io.IOException) {
+                result.copy(linkError = scrubbed("Cannot keep the response link: ${e.message ?: e::class.simpleName}"))
+            }
+        }
+        return result
+    }
+
+    private fun scrubbed(message: String) = FailureScrubber.scrub(message, substituted)
 
     /** Substitutes `{{variables}}` and `{{name.response...}}` in each assertion, like request text, then evaluates it. */
     private fun evaluateAssertions(r: RequestTemplate, response: HttpResponse, variables: Map<String, String>): List<AssertionResult> {
