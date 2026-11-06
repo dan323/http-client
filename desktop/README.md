@@ -62,3 +62,5 @@ Request history, saving responses, and persisting the window,
 last file and selected environment between sessions.
 
 `{{$env.NAME}}` reads nothing by default: allow names with `-Dhttpclient.allowEnv=NAME,NAME` (JVM option) or the environment variable `HTTPC_ALLOW_ENV=NAME,NAME`; see [docs/features.md](../docs/features.md).
+
+`< path` bodies are confined to the `.http` file's folder; allow more with `-Dhttpclient.allowFileRoots=/abs/dir` or `HTTPC_ALLOW_FILE_ROOTS=/abs/dir` (absolute paths, `~` expanded). See [docs/features.md](../docs/features.md).
