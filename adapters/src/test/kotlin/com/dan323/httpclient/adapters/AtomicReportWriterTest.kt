@@ -6,8 +6,10 @@ import java.nio.file.StandardCopyOption
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import java.nio.file.attribute.PosixFilePermissions
 import java.nio.file.attribute.PosixFilePermission
@@ -48,7 +50,7 @@ class AtomicReportWriterTest {
     }
 
     @Test fun newReportIsOwnerOnly() {
-        if (!posix) return
+        assumeTrue(posix)
         val dir = createTempDirectory("writer")
         val target = dir.resolve("report.json")
         AtomicReportWriter().write(target, "x")
@@ -56,7 +58,7 @@ class AtomicReportWriterTest {
     }
 
     @Test fun replacingKeepsExistingPermissions() {
-        if (!posix) return
+        assumeTrue(posix)
         val dir = createTempDirectory("writer")
         val target = dir.resolve("report.json").also { it.writeText("old") }
         Files.setPosixFilePermissions(target, PosixFilePermissions.fromString("rw-r-----"))
@@ -71,5 +73,39 @@ class AtomicReportWriterTest {
         var thrown = false
         try { AtomicReportWriter().write(blocker.resolve("r.json"), "x") } catch (_: java.io.IOException) { thrown = true }
         assertTrue(thrown)
+    }
+
+    private fun leftovers(dir: java.nio.file.Path) =
+        Files.list(dir).use { it.map { p -> p.fileName.toString() }.toList() }
+
+    @Test fun replacingReadOnlyReportWorksAndKeepsPermissions() {
+        assumeTrue(posix)
+        val dir = createTempDirectory("writer")
+        for (mode in listOf("r--r--r--", "r--------")) {
+            val target = dir.resolve("ro-$mode.json").also { it.writeText("old") }
+            Files.setPosixFilePermissions(target, PosixFilePermissions.fromString(mode))
+            AtomicReportWriter().write(target, "new")
+            assertEquals("new", target.readText())
+            assertEquals(mode, PosixFilePermissions.toString(Files.getPosixFilePermissions(target)))
+        }
+        assertTrue(leftovers(dir).none { it.endsWith(".tmp") })
+    }
+
+    @Test fun tempFileIsRemovedWhenWritingFails() {
+        val dir = createTempDirectory("writer")
+        val target = dir.resolve("report.json").also { it.writeText("old") }
+        val w = AtomicReportWriter({ _, _ -> throw java.io.IOException("disk full") }, { a, b, o -> Files.move(a, b, *o) })
+        assertFailsWith<java.io.IOException> { w.write(target, "new") }
+        assertEquals("old", target.readText())
+        assertEquals(listOf("report.json"), leftovers(dir))
+    }
+
+    @Test fun tempFileIsRemovedWhenMovingFails() {
+        val dir = createTempDirectory("writer")
+        val target = dir.resolve("report.json").also { it.writeText("old") }
+        val w = AtomicReportWriter({ p, c -> Files.writeString(p, c) }, { _, _, _ -> throw java.io.IOException("no move") })
+        assertFailsWith<java.io.IOException> { w.write(target, "new") }
+        assertEquals("old", target.readText())
+        assertEquals(listOf("report.json"), leftovers(dir))
     }
 }

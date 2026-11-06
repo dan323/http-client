@@ -106,10 +106,35 @@ private fun parseArgsUnchecked(args: List<String>, err: PrintStream): Options? {
 /** True when both paths name the same file: equal after normalisation, or the same existing file (symlinks, hard links). */
 internal fun samePath(a: Path, b: Path): Boolean {
     if (a.toAbsolutePath().normalize() == b.toAbsolutePath().normalize()) return true
+    if (sameFolderCaseInsensitiveName(a, b)) return true
     return try {
         Files.exists(a) && Files.exists(b) && Files.isSameFile(a, b)
     } catch (_: java.io.IOException) {
         false
+    }
+}
+
+/**
+ * Same real parent folder and file names equal ignoring case. On a case-insensitive file system such paths are one
+ * file even when it does not exist yet (so `isSameFile` cannot tell); on a case-sensitive one this is conservative:
+ * two reports differing only by case are rejected as well.
+ */
+private fun sameFolderCaseInsensitiveName(a: Path, b: Path): Boolean {
+    val na = a.fileName?.toString() ?: return false
+    val nb = b.fileName?.toString() ?: return false
+    if (!na.equals(nb, ignoreCase = true)) return false
+    return realParent(a) == realParent(b)
+}
+
+/** Real path of the parent: the nearest existing ancestor resolved through symlinks, plus the not-yet-existing rest. */
+private fun realParent(p: Path): Path? {
+    val parent = p.toAbsolutePath().normalize().parent ?: return null
+    var existing: Path = parent
+    while (!Files.exists(existing)) existing = existing.parent ?: return parent
+    return try {
+        existing.toRealPath().resolve(existing.relativize(parent)).normalize()
+    } catch (_: java.io.IOException) {
+        parent
     }
 }
 

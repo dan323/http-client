@@ -16,15 +16,22 @@ import java.nio.file.attribute.PosixFilePermissions
  * (`rw-------`) because reports may contain URLs and error texts with secrets; replacing an existing report keeps
  * that file's permissions, so a CI job that shares reports with a group keeps working.
  */
-class AtomicReportWriter : ReportWriter {
+class AtomicReportWriter internal constructor(
+    private val writeFile: (Path, String) -> Unit,
+    private val move: (Path, Path, Array<StandardCopyOption>) -> Unit,
+) : ReportWriter {
+    constructor() : this({ p, c -> Files.writeString(p, c) }, { a, b, o -> Files.move(a, b, *o) })
+
     override fun write(path: Path, content: String) {
         val target = path.toAbsolutePath()
         target.parent?.let { Files.createDirectories(it) }
         val tmp = Files.createTempFile(target.parent, ".httpc-report-", ".tmp")
         try {
+            // content first (the temp file is owner-only), then the final permissions: a read-only existing report
+            // must not make the temp file unwritable
+            writeFile(tmp, content)
             applyPermissions(tmp, target)
-            Files.writeString(tmp, content)
-            moveIntoPlace(tmp, target)
+            moveIntoPlace(tmp, target, move)
         } finally {
             Files.deleteIfExists(tmp)
         }

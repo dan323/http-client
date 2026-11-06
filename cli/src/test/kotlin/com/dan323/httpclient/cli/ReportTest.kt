@@ -6,6 +6,7 @@ import java.io.ByteArrayOutputStream
 import java.io.PrintStream
 import java.nio.file.Files
 import javax.xml.parsers.DocumentBuilderFactory
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -158,8 +159,15 @@ class ReportTest {
     @Test fun reportOptionPointingAtTheInputThroughASymlinkIsBadUsage() {
         val f = file("GET http://x/\n")
         val link = dir.resolve("link.xml")
-        try { Files.createSymbolicLink(link, dir.resolve("r.http")) } catch (_: Exception) { return } // no symlink support/permission
+        val created = try { Files.createSymbolicLink(link, dir.resolve("r.http")); true } catch (_: Exception) { false }
+        assumeTrue(created, "no symlink support/permission")
         assertNull(parseArgs(listOf(f, "--report-junit", link.toString())))
+    }
+
+    @Test fun reportPathsDifferingOnlyByCaseAreBadUsage() {
+        assertNull(parseArgs(listOf("f.http", "--report-json", dir.resolve("R.xml").toString(), "--report-junit", dir.resolve("r.xml").toString())))
+        assertNull(parseArgs(listOf("f.http", "--report-json", dir.resolve("new/R.xml").toString(), "--report-junit", dir.resolve("new/../new/r.XML").toString())))
+        assertNotNull(parseArgs(listOf("f.http", "--report-json", dir.resolve("a.json").toString(), "--report-junit", dir.resolve("b.xml").toString())))
     }
 
     @Test fun reportWithListIsBadUsage() {
@@ -185,7 +193,7 @@ class ReportTest {
     }
 
     @Test fun reportFileIsOwnerOnlyOnPosix() {
-        if (!java.nio.file.FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) return
+        assumeTrue(java.nio.file.FileSystems.getDefault().supportedFileAttributeViews().contains("posix"))
         val f = file("GET http://127.0.0.1:${server.port}/get\n")
         val json = dir.resolve("perm.json")
         assertEquals(0, cli(f, "--report-json", json.toString()).first)
