@@ -27,6 +27,7 @@ import kotlin.system.exitProcess
 
 private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] [--list]
                   [--report-json FILE] [--report-junit FILE] [--allow-file-root DIR]
+                  [--quiet] [--output FILE] [--var NAME=VALUE]
 
   --env NAME       use variables from NAME in http-client.env.json (nearest http-client.env.json, searching
                    upward from the file; http-client.private.env.json beside it is merged)
@@ -38,7 +39,14 @@ private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NA
   --list           list the requests in the file and exit (cannot be combined with --report-*)
   --report-json F  write a JSON run report (results, assertions, timings, totals) to F
   --report-junit F write a JUnit XML run report to F
-                   (a report path must differ from the .http file; exit 1 = failed run, 3 = passed but report unwritable)"""
+  --quiet          print no per-request output on stdout (failed assertions and errors still go to stderr)
+  --output F       write the response body of the single selected request to F (needs --request unless the
+                   file holds one request; owner-only file; cannot be combined with --list)
+  --var N=V        set variable N to V, overriding file and environment variables (repeatable; V may be
+                   empty or contain '=')
+                   A summary line ("3 requests, 2 passed, 1 failed in 1.2s") always goes to stderr after a run.
+                   (report/output paths must differ from the .http file and each other;
+                   exit 1 = failed run, 3 = passed but a report/output file is unwritable)"""
 
 data class Options(
     val file: Path,
@@ -49,7 +57,22 @@ data class Options(
     val reportJson: Path? = null,
     val reportJunit: Path? = null,
     val allowFileRoots: List<Path> = emptyList(),
+    val quiet: Boolean = false,
+    val output: Path? = null,
+    val vars: Map<String, String> = emptyMap(),
 )
+
+/**
+ * Parses `name=value` for `--var`: the name is everything before the first `=` and must not be blank or contain
+ * whitespace or braces; the value is the rest (may be empty or contain `=`). Null when malformed.
+ */
+internal fun parseVar(text: String): Pair<String, String>? {
+    val eq = text.indexOf('=')
+    if (eq <= 0) return null
+    val name = text.substring(0, eq)
+    if (name.any { it.isWhitespace() || it == '{' || it == '}' }) return null
+    return name to text.substring(eq + 1)
+}
 
 /**
  * Returns null (after the caller prints usage) when the arguments are invalid: unknown or repeated options, a missing,
@@ -70,6 +93,9 @@ private fun parseArgsUnchecked(args: List<String>, err: PrintStream): Options? {
     var reportJson: Path? = null
     var reportJunit: Path? = null
     val allowFileRoots = mutableListOf<Path>()
+    var quiet = false
+    var output: Path? = null
+    val vars = LinkedHashMap<String, String>()
     var i = 0
     fun value(): String? = args.getOrNull(++i)?.takeIf { it.isNotEmpty() && !it.startsWith("--") }
     while (i < args.size) {
@@ -83,6 +109,15 @@ private fun parseArgsUnchecked(args: List<String>, err: PrintStream): Options? {
                 },
             )
             "--list" -> list = true
+            "--quiet" -> quiet = true
+            "--output" -> { if (output != null) return null; output = Path.of(value() ?: return null) }
+            "--var" -> {
+                // the value is never echoed: it may be a secret
+                val (name, v) = parseVar(value() ?: return null)
+                    ?: run { err.println("httpc: --var: expected NAME=VALUE with a non-empty name (no spaces or braces)"); return null }
+                if (name in vars) { err.println("httpc: --var: '$name' given more than once"); return null }
+                vars[name] = v
+            }
             "--report-json" -> { if (reportJson != null) return null; reportJson = Path.of(value() ?: return null) }
             "--report-junit" -> { if (reportJunit != null) return null; reportJunit = Path.of(value() ?: return null) }
             else -> if (a.startsWith("--") || file != null || a.isEmpty()) return null else file = Path.of(a)
@@ -91,16 +126,23 @@ private fun parseArgsUnchecked(args: List<String>, err: PrintStream): Options? {
     }
     val input = file ?: return null
     if (reportJson != null && reportJunit != null && samePath(reportJson, reportJunit)) return null
-    for ((flag, report) in listOf("--report-json" to reportJson, "--report-junit" to reportJunit)) {
-        if (report == null) continue
-        if (samePath(report, input)) {
+    val targets = listOf("--report-json" to reportJson, "--report-junit" to reportJunit, "--output" to output)
+    for ((flag, target) in targets) {
+        if (target == null) continue
+        if (samePath(target, input)) {
             err.println("httpc: $flag: would overwrite the input file $input"); return null
         }
         if (list) {
-            err.println("httpc: $flag cannot be combined with --list (nothing is run, so there is no report)"); return null
+            err.println("httpc: $flag cannot be combined with --list (nothing is run, so there is nothing to write)"); return null
         }
     }
-    return Options(input, env, request, list, allowEnv, reportJson, reportJunit, allowFileRoots)
+    if (output != null && ((reportJson != null && samePath(output, reportJson)) || (reportJunit != null && samePath(output, reportJunit)))) {
+        err.println("httpc: --output: same file as a report option"); return null
+    }
+    if (list && (quiet || vars.isNotEmpty())) {
+        err.println("httpc: --quiet and --var cannot be combined with --list (nothing is run)"); return null
+    }
+    return Options(input, env, request, list, allowEnv, reportJson, reportJunit, allowFileRoots, quiet, output, vars)
 }
 
 /** True when both paths name the same file: equal after normalisation, or the same existing file (symlinks, hard links). */
@@ -152,8 +194,8 @@ fun main(args: Array<String>) {
 
 /**
  * Runs the CLI and returns the process exit code: 0 ok, 1 request/assertion failure (or any other error before
- * running), 2 bad usage, 3 a requested report could not be written (the message says whether the run itself passed;
- * both reports are always attempted). When a report is requested and the run cannot start (missing file, unknown
+ * running), 2 bad usage (also `--output` when the run selects several requests; nothing is sent), 3 a requested
+ * report or output file could not be written (the message says whether the run itself passed; all are always attempted). When a report is requested and the run cannot start (missing file, unknown
  * environment or request, unexpected exception) an error report with a single failed entry is still written.
  */
 fun run(args: List<String>, out: PrintStream, err: PrintStream, writer: ReportWriter = AtomicReportWriter()): Int {
@@ -170,7 +212,11 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream, writer: R
 
     val parsed = HttpFileParser().parse(Files.readString(opts.file))
     parsed.warnings.forEach { err.println("warning: ${opts.file}: $it") }
-    val requests = parsed.requests
+    // `--var` wins over everything: the resolver prefers file variables to the variable map, so the overridden
+    // names are dropped from the file variables (other file variables referring to them then see the --var value).
+    val requests = if (opts.vars.isEmpty()) parsed.requests else parsed.requests.map {
+        if (it.fileVariables.keys.any { k -> k in opts.vars }) it.copy(fileVariables = it.fileVariables - opts.vars.keys) else it
+    }
 
     if (opts.list) {
         requests.forEachIndexed { i, r -> out.println("${i + 1}. ${r.name ?: "-"}  ${r.method} ${r.url}") }
@@ -178,7 +224,7 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream, writer: R
     }
 
     val variables = try {
-        EnvironmentChoice.of(opts.env).resolve(UpwardEnvironmentLocator(), opts.file)?.variables ?: emptyMap()
+        (EnvironmentChoice.of(opts.env).resolve(UpwardEnvironmentLocator(), opts.file)?.variables ?: emptyMap()) + opts.vars
     } catch (e: UnknownEnvironmentException) {
         return failWithReport(opts, err, writer, e.message ?: "Unknown environment: ${opts.env}")
     } catch (e: EnvironmentFileException) {
@@ -186,59 +232,80 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream, writer: R
     }
     val selected = select(requests, opts.request)
         ?: return failWithReport(opts, err, writer, "No such request: ${opts.request}")
+    if (opts.output != null && selected.size != 1) {
+        err.println("httpc: --output needs exactly one selected request (${selected.size} would run); pick one with --request")
+        return 2
+    }
     val chosen = withDependencies(requests, selected)
+    val started = System.nanoTime()
     // Prerequisites run for their responses only: assertions are evaluated for the selected requests.
     val outcomes = SessionFactory().use { factory ->
     val session = factory.create(opts.file, FileAccessPolicy(opts.allowFileRoots, FileAccessPolicy.CLI_HINT), opts.allowEnv, "pass --allow-env NAME")
     session.runAll(chosen, variables, assertFor = { r -> selected.any { it === r } }) { outcome ->
         val r = outcome.request
-        out.println("### ${r.name ?: "${r.method} ${r.url}"}")
+        if (!opts.quiet) out.println("### ${r.name ?: "${r.method} ${r.url}"}")
         when (outcome) {
             is RunOutcome.Success -> {
                 val resp = outcome.response
-                out.println("HTTP ${resp.statusCode} (${resp.durationMillis} ms)")
-                resp.headers.forEach { out.println("${it.name}: ${it.value}") }
-                out.println()
-                out.println(resp.bodyAsString())
+                if (!opts.quiet) {
+                    out.println("HTTP ${resp.statusCode} (${resp.durationMillis} ms)")
+                    resp.headers.forEach { out.println("${it.name}: ${it.value}") }
+                    out.println()
+                    out.println(resp.bodyAsString())
+                }
                 outcome.assertions.forEach {
-                    out.println(if (it.passed) "PASS ${it.assertion}" else "FAIL ${it.assertion} -- ${it.message}")
+                    if (!it.passed) (if (opts.quiet) err else out).println("FAIL ${it.assertion} -- ${it.message}")
+                    else if (!opts.quiet) out.println("PASS ${it.assertion}")
                 }
             }
             is RunOutcome.Failure -> {
                 err.println("Error: ${outcome.message}")
-                outcome.request.assertions.takeIf { outcome.assertionsNotRun > 0 }?.forEach { out.println("NOT RUN $it") }
+                if (!opts.quiet) outcome.request.assertions.takeIf { outcome.assertionsNotRun > 0 }?.forEach { out.println("NOT RUN $it") }
             }
         }
     }
     }
     val results = outcomes.filterIsInstance<RunOutcome.Success>().flatMap { it.assertions }
     val notRun = outcomes.filterIsInstance<RunOutcome.Failure>().sumOf { it.assertionsNotRun }
-    if (results.isNotEmpty() || notRun > 0) {
+    if (!opts.quiet && (results.isNotEmpty() || notRun > 0)) {
         out.println("Assertions: ${results.count { it.passed }} passed, ${results.count { !it.passed }} failed, $notRun not run")
     }
     val report = RunReport.from(outcomes) { o -> selected.none { it === o.request } }
-    val written = writeReports(opts, report, err, writer)
+    val elapsed = (System.nanoTime() - started) / 1_000_000
+    err.println(summary(report, elapsed))
+    var written = writeReports(opts, report, err, writer)
+    opts.output?.let { path ->
+        val body = (outcomes.firstOrNull { it.request === selected[0] } as? RunOutcome.Success)?.response?.bodyAsString()
+        if (body != null && !writeFile(writer, path, "output", err) { body }) written = false
+    }
     if (!report.passed) {
-        if (!written) err.println("Run failed; the report could not be written either.")
+        if (!written) err.println("Run failed; the report/output file could not be written either.")
         return 1
     }
-    if (!written) err.println("Run passed; only the report could not be written.")
+    if (!written) err.println("Run passed; only the report/output file could not be written.")
     return if (written) 0 else 3
+}
+
+/** `3 requests, 2 passed, 1 failed in 1.2s`: prerequisites count, as in the report; a request passes when it completed and its assertions held. */
+internal fun summary(report: RunReport, elapsedMillis: Long): String {
+    val n = report.requests
+    return "$n ${if (n == 1) "request" else "requests"}, ${report.passedRequests} passed, ${report.failedRequests} failed in " +
+        String.format(java.util.Locale.ROOT, "%.1fs", elapsedMillis / 1000.0)
 }
 
 /** Writes the requested reports independently; returns false when any of them failed (each failure is printed). */
 private fun writeReports(opts: Options, report: RunReport, err: PrintStream, writer: ReportWriter): Boolean {
     val suite = opts.file.fileName?.toString() ?: "httpc"
-    val json = opts.reportJson?.let { writeReport(writer, it, err) { JsonRunReport.render(report) } } ?: true
-    val junit = opts.reportJunit?.let { writeReport(writer, it, err) { JUnitXmlReport.render(report, suite) } } ?: true
+    val json = opts.reportJson?.let { writeFile(writer, it, "report", err) { JsonRunReport.render(report) } } ?: true
+    val junit = opts.reportJunit?.let { writeFile(writer, it, "report", err) { JUnitXmlReport.render(report, suite) } } ?: true
     return json && junit
 }
 
-private fun writeReport(writer: ReportWriter, path: Path, err: PrintStream, content: () -> String): Boolean = try {
+private fun writeFile(writer: ReportWriter, path: Path, what: String, err: PrintStream, content: () -> String): Boolean = try {
     writer.write(path, content())
     true
 } catch (e: Exception) {
-    err.println("Error: Cannot write report $path: ${e.message ?: e}")
+    err.println("Error: Cannot write $what $path: ${e.message ?: e}")
     false
 }
 

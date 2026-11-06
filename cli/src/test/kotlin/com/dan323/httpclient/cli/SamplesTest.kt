@@ -82,7 +82,7 @@ class SamplesTest {
         // Only the env request fails, and because the variable is not allowed (not for any other reason).
         assertEquals(
             "Error: Invalid dynamic variable {{\$env.HTTPC_SURELY_UNSET}}: environment variable 'HTTPC_SURELY_UNSET' is not allowed; pass --allow-env NAME",
-            r.err.trim(),
+            r.err.lines().filter { it.startsWith("Error:") }.joinToString("\n").trim(),
         )
         assertEquals(2, Regex("""(?m)^HTTP 200 """).findAll(r.out).count(), r.out)
         val nl = System.lineSeparator()
@@ -97,7 +97,7 @@ class SamplesTest {
         if (System.getenv("HTTPC_SURELY_UNSET") != null) return
         val r = sample("dynamic.http", "--allow-env", "HTTPC_SURELY_UNSET")
         assertEquals(1, r.code)
-        assertEquals("Error: Undefined variable: \$env.HTTPC_SURELY_UNSET", r.err.trim())
+        assertEquals("Error: Undefined variable: \$env.HTTPC_SURELY_UNSET", r.err.lines().filter { it.startsWith("Error:") }.joinToString("\n").trim())
     }
 
     @Test fun fileBody() {
