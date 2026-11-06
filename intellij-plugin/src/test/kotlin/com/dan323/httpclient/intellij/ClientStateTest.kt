@@ -116,4 +116,12 @@ class ClientStateTest {
         s.run(file, "GET http://x/y\n", 0)
         assertEquals(n, got.size)
     }
+
+    @Test fun rememberedTextsAreBoundedAndEvictionDropsTheSession() {
+        val s = state(2)
+        val files = (1..5).map { Path.of("f$it.http").toAbsolutePath() }
+        files.forEach { s.run(it, text, 5) }
+        assertEquals(2, s.rememberedTexts)
+        assertTrue(s.cachedSessions <= 2)
+    }
 }

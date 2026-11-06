@@ -19,8 +19,12 @@ import java.nio.file.Path
 private fun AnActionEvent.isHttpFile() = getData(CommonDataKeys.VIRTUAL_FILE)?.extension == "http"
 
 /** Saves open files, shows the response window and runs the request at [line] off the UI thread. Call on the EDT. */
-fun runRequest(project: Project, vfile: VirtualFile, text: String, line: Int) {
-    FileDocumentManager.getInstance().saveAllDocuments()
+fun runRequest(project: Project, vfile: VirtualFile, line: Int) {
+    // The run uses the same text for the gutter icon and the action: the document as just saved (never PSI text).
+    val documents = FileDocumentManager.getInstance()
+    val document = documents.getDocument(vfile)
+    documents.saveAllDocuments()
+    val text = document?.text ?: String(vfile.contentsToByteArray(), vfile.charset)
     val toolWindows = ToolWindowManager.getInstance(project)
     toolWindows.getToolWindow("HTTP Response")?.show()
     ApplicationManager.getApplication().executeOnPooledThread {
@@ -42,7 +46,7 @@ class RunRequestAction : AnAction(), DumbAware {
         val project = e.project ?: return
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
         val vfile = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
-        runRequest(project, vfile, editor.document.text, editor.document.getLineNumber(editor.caretModel.offset))
+        runRequest(project, vfile, editor.document.getLineNumber(editor.caretModel.offset))
     }
 }
 

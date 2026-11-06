@@ -6,6 +6,12 @@ import com.dan323.httpclient.core.application.EnvironmentChoice
 import com.dan323.httpclient.core.application.environments
 import com.dan323.httpclient.core.domain.Environment
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.openapi.vfs.newvfs.BulkFileListener
+import com.intellij.openapi.vfs.newvfs.events.VFileDeleteEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
@@ -25,6 +31,17 @@ class HttpClientService(@Suppress("unused") private val project: Project) : Disp
         get() = state.environmentChoice
         set(value) { state.environmentChoice = value }
     val lastReport: Report get() = state.lastReport
+
+    init {
+        // Drop what is remembered about a file when it is deleted or moved/renamed (closing an editor keeps it: a
+        // reopened file is still the same text, and the cache is bounded anyway).
+        ApplicationManager.getApplication().messageBus.connect(this).subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
+            override fun before(events: List<VFileEvent>) {
+                events.filter { it is VFileDeleteEvent || it is VFileMoveEvent }
+                    .forEach { e -> e.file?.let { f -> if (f.extension == "http") state.forget(Path.of(f.path)) } }
+            }
+        })
+    }
 
     override fun dispose() = factory.close()
 
