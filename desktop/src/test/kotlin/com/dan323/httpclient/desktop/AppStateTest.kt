@@ -154,7 +154,9 @@ class AppStateTest {
                 Thread {
                     barrier.await()
                     state.run(all = true)
-                    if (state.running) finished.countDown()   // only losers return while the winner is still blocked
+                    // The winner stays blocked in the server until release, so only the n - 1 losers can get here.
+                    // Do not test state.running: a loser can return before the winner has set it.
+                    finished.countDown()
                 }.also { it.start() }
             }
             assertTrue(entered.await(10, java.util.concurrent.TimeUnit.SECONDS))
