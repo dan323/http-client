@@ -56,6 +56,14 @@ class EnvironmentResolutionTest {
         assertTrue(all.contains("Invalid environment file") && !all.contains("SuperSecret123"), all)
     }
 
+    @Test fun noEnvOptionUsesFileVariablesButNotEnvironmentOnes() {
+        Files.writeString(root.resolve("http-client.env.json"), """{"dev":{"envOnly":"zzz"}}""")
+        val f = root.resolve("x.http").also { Files.writeString(it, "@h = http://127.0.0.1:1\nGET {{h}}/{{envOnly}}\n") }
+        val (code, _, err) = cli(f.toString())
+        assertEquals(1, code)
+        assertTrue(err.contains("envOnly") && !err.contains("zzz"), err)
+    }
+
     @Test fun noEnvOptionUsesFileVariablesOnly() {
         Files.writeString(root.resolve("http-client.env.json"), """{"dev":{"h":"http://127.0.0.1:1"}}""")
         val f = root.resolve("x.http").also { Files.writeString(it, "GET {{h}}/x\n") }

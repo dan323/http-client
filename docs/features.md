@@ -39,7 +39,7 @@ wins (searching upward); the `http-client.private.env.json` beside it is merged.
 counts. The `.http` file's own folder is always checked; the search then continues through parent folders but stops after
 the first folder containing a `.git` entry, and never enters the user's home directory (or the system temp directory) or
 anything above it, so a stray `~/http-client.env.json` cannot leak into unrelated projects (put the file in the project).
-Env files are only read when an environment is chosen. The choice is explicit: no
+Running a request reads the env files only when a named environment is chosen (the CLI and the run path never read them otherwise); the desktop app also reads them when opening or saving a request, and the IDE plugin to fill its environment picker, so a malformed file can be reported even with no environment chosen. The choice is explicit: no
 environment (variables from the file only; the CLI default) or a named one. A name that does not exist is an error,
 never another environment. A JSON `null` value is treated as undefined; a malformed env file fails with an error
 naming the file (and the position).
