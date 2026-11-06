@@ -1,7 +1,7 @@
 # Features
 
 A Postman-style HTTP client compatible with the JetBrains `.http` file format.
-Currently available through the `httpc` command-line front end.
+Front ends: the `httpc` command line, a desktop app and an IntelliJ plugin, all built on the same `core` and `adapters`.
 
 ## `.http` files
 
@@ -281,11 +281,11 @@ Requests run in file order. Once a **named** request has run, later requests can
 | `{{page.response.body.//a/@href}}` | XPath over an XML body (also `body.xpath:count(//a)`) |
 | `{{page.response.body.regex:id=(\d+)}}` | regex over the body: group 1 if present, else the whole match |
 
-The same expressions (via `ResponseExtractor` in `core`) are what assertions will use.
+The same expressions (via `ResponseExtractor` in `core`) are what assertions use (see Assertions).
 
 The body is decoded with the `charset` of the response's `Content-Type` (UTF-8 when absent or unknown). XPath is
 evaluated with secure processing (no DOCTYPE, no external access, no extension functions) and stops after 2 seconds,
-finding nothing.
+finding nothing (the evaluation itself cannot be interrupted, so it keeps running on an abandoned daemon thread until it ends).
 
 Failure messages (also in `--report-json` / `--report-junit` and on stderr) never contain substituted variable
 values: a value that appears in an error text (for example the resolved URL in an invalid-URI error) is shown as
@@ -303,7 +303,7 @@ httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] 
 
 | Option        | Effect                                               |
 |---------------|------------------------------------------------------|
-| `--env NAME`  | use variables from `NAME` in `http-client.env.json`  |
+| `--env NAME`  | use variables from `NAME` in the nearest `http-client.env.json` (see Environments); without it no environment is used |
 | `--request X` | run the request named `X`, or the Nth (1-based), plus the requests it chains on |
 | `--allow-env N` | let `{{$env.N}}` read these OS environment variables (repeatable) |
 | `--allow-file-root DIR` | also let `< path` bodies be read from `DIR` (repeatable) |
@@ -313,7 +313,7 @@ httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] 
 For each request the output is the status line with timing, the response headers, then the body.
 After a response, each assertion is printed as `PASS ...` or `FAIL ... -- message`; for a request that failed its assertions are listed as `NOT RUN ...`.
 A total line `Assertions: N passed, M failed, K not run` follows the run. With `--request`, only the selected request's assertions run, not its prerequisites.
-Exit codes: `0` success, `1` a request or setup failed or an assertion failed, `2` bad arguments, `3` the run passed but a requested report could not be written.
+Exit codes, by precedence: `2` bad arguments (usage is printed, nothing runs); `1` a request or setup failed (missing file, unknown environment or request), an assertion failed, or any other error; `3` the run passed but a requested report could not be written; `0` otherwise. Parser warnings (ignored response handlers, see above) go to stderr as `warning: FILE: ...`; request failures go to stderr as `Error: ...`.
 
 Run with `./gradlew :cli:run --args="requests.http --env dev"`, or build a launcher with
 `./gradlew :cli:installDist` (output in `cli/build/install/httpc/bin`).
@@ -324,6 +324,10 @@ Run with `./gradlew :cli:run --args="requests.http --env dev"`, or build a launc
 
 A standalone window for Windows, macOS and Linux: file editor, request list, environment picker, and a response viewer. See [desktop/README.md](../desktop/README.md).
 
+- The environment choice is explicit: "none" (default; variables from the file only) or a name from the nearest `http-client.env.json`. A name that vanished is reported as an error, never replaced.
+- One session is kept per file, environment and loaded variables, so **Send** on a chained request does not resend a login that already ran (reused prerequisites are not listed). Editing the text does not drop it; changing the environment file does. **Forget responses** drops all sessions so the next Send reruns the chain. **Send all** and the selected request always run again.
+- Only one run at a time: while it runs, editing, saving, opening and creating files are refused. A run first saves the file; a save error stops the run and stays visible.
+
 ## IntelliJ plugin
 
 Works in any IntelliJ-based IDE, including Community (it depends only on the platform module).
@@ -332,14 +336,15 @@ Works in any IntelliJ-based IDE, including Community (it depends only on the pla
 - *Select HTTP Environment* in the context menu picks the environment from `http-client.env.json`.
 - Results appear in the **HTTP Response** tool window. Chained prerequisites run first, as in the CLI.
 
+- The environment choice is explicit and starts as "(none)" (variables from the file only); pick `dev` etc. in the *Select HTTP Environment* popup or the picker in the tool window. A name that no longer exists is an error, never another environment. The choice is kept per project until the IDE restarts.
 - `.http` files get syntax highlighting (methods, URLs, header names, `{{variables}}`, comments, `###` separators, `< file` bodies).
 - A green run icon in the gutter on each request line runs that request.
 - JSON response bodies are pretty-printed.
-- Remembered responses (so a chained request such as a login is not re-sent) are kept per file, environment and loaded variables. Any edit to a file changes its text and drops its session, so the chained requests run again on the next run; the same happens when the file is deleted or moved. At most 16 files are remembered (least recently used are dropped).
-
-The response is shown as plain text for now.
+- Remembered responses (so a chained request such as a login is not re-sent) are kept per file, environment and loaded variables. Any edit to a file changes its text and drops its session, so the chained requests run again on the next run; the same happens when the file is deleted or moved. At most 16 files are remembered (least recently used are dropped). The tool window's **Reset chain** button forgets all of them.
+- Only one request runs at a time: starting another while one runs shows a balloon and does nothing. Saving happens first (also from the gutter icon).
+- Failures (including parse and environment errors) are shown in the tool window.
 Do not install it next to the bundled HTTP Client plugin of IntelliJ Ultimate, since both claim `.http` files.
 
 ## Not yet implemented
 
-Response handlers, assertion display in the desktop app and plugin, and authentication helpers.
+Response handlers, saved responses (`>>`, `>>!`, `<>`, planned as F21), assertion results in the desktop app and plugin (assertions are evaluated and shown by the CLI and reports only), authentication helpers, multipart/form bodies and cancel buttons in the UIs.
