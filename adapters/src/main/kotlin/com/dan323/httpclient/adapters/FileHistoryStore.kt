@@ -304,11 +304,10 @@ internal object HistoryNames {
     }
 }
 
-private fun dirAttrs() = try {
-    arrayOf(PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")))
-} catch (_: UnsupportedOperationException) {
-    emptyArray()
-}
+// Owner-only directories where the file system has POSIX permissions; elsewhere (Windows) the default ACLs apply.
+// The attribute itself can be built anywhere, it is createDirectory that rejects it, so test the file system, not the call.
+private fun dirAttrs(): Array<java.nio.file.attribute.FileAttribute<*>> =
+    if (POSIX) arrayOf(PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------"))) else emptyArray()
 
 private val POSIX = java.nio.file.FileSystems.getDefault().supportedFileAttributeViews().contains("posix")
 
