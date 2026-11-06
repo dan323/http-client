@@ -3,8 +3,8 @@ import java.util.zip.ZipFile
 // IntelliJ front end. Compiles against a locally installed IDE (-PideaPath=...) and only depends on
 // the platform module, so the built plugin also loads in Community editions.
 plugins {
-    kotlin("jvm")
-    id("org.jetbrains.intellij.platform") version "2.19.0"
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.intellij.platform)
 }
 
 repositories {
@@ -16,7 +16,10 @@ dependencies {
     implementation(project(":view-model"))
     testImplementation(kotlin("test"))
     intellijPlatform {
-        local(providers.gradleProperty("ideaPath"))
+        // A local IDE install when ideaPath points at one (developer machines); otherwise download
+        // ideaVersion (CI has no IDE installed).
+        val localIde = providers.gradleProperty("ideaPath").orNull?.takeIf { file(it).exists() }
+        if (localIde != null) local(localIde) else intellijIdea(providers.gradleProperty("ideaVersion"))
     }
 }
 

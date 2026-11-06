@@ -11,6 +11,8 @@ A Postman-style HTTP client compatible with the JetBrains `.http` file format. K
 - Run all tests: `./gradlew test`
 - One module: `./gradlew :core:test`, `:adapters:test`, `:cli:test`, `:desktop:test`, `:intellij-plugin:test`
 - Single test class/method: `./gradlew :core:test --tests "com.dan323.httpclient.core.HttpFileParserTest"` (append `.methodName` for one method)
+- Build the IntelliJ plugin: `./gradlew :intellij-plugin:buildPlugin` (uses `ideaPath` if it exists, else downloads `ideaVersion`)
+- Dependency and plugin versions live in `gradle/libs.versions.toml`
 
 Tests use `kotlin("test")` on JUnit Platform. There is no linter configured.
 
