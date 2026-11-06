@@ -34,7 +34,17 @@ class ClientState(locator: EnvironmentLocator, maxSessions: Int = 16, newSession
     private val listeners = mutableListOf<(Report) -> Unit>()
     private val controller = RunController(locator, maxSessions, newSession)
     private val running = AtomicBoolean(false)
-    private val lastTexts = HashMap<Path, String>()
+    // Text last run per file, least recently used first, bounded like the sessions; the file evicted here also loses its
+    // sessions (see [rememberText]), so the two caches never disagree about a file.
+    private val lastTexts = object : LinkedHashMap<Path, String>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Path, String>): Boolean {
+            val evict = size > maxSessions
+            if (evict) evicted.add(eldest.key)
+            return evict
+        }
+    }
+    private val evicted = mutableListOf<Path>() // guarded by lastTexts
+    internal val rememberedTexts: Int get() = synchronized(lastTexts) { lastTexts.size }
 
     val isRunning: Boolean get() = running.get()
     val cachedSessions: Int get() = controller.cachedSessions
@@ -80,8 +90,12 @@ class ClientState(locator: EnvironmentLocator, maxSessions: Int = 16, newSession
         if (!running.compareAndSet(false, true)) return false
         try {
             val abs = file.toAbsolutePath()
-            val changed = synchronized(lastTexts) { lastTexts.put(abs, text) }.let { it != null && it != text }
-            if (changed) controller.forget(abs)
+            val (previous, dropped) = synchronized(lastTexts) {
+                val old = lastTexts.put(abs, text)
+                old to evicted.toList().also { evicted.clear() }
+            }
+            dropped.forEach { controller.forget(it) }
+            if (previous != null && previous != text) controller.forget(abs)
             val sections = mutableListOf<Section>()
             var envName: String? = null
             val report = { Report(environment = envName ?: "none", sections = sections.toList()) }
