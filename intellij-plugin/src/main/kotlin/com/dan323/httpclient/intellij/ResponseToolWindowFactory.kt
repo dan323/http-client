@@ -58,7 +58,7 @@ class ResponseToolWindowFactory : ToolWindowFactory, DumbAware {
             pane.caretPosition = 0
         }
         render(service.lastReport)
-        service.onReport { r -> SwingUtilities.invokeLater { render(r) } }
+        service.onReport(toolWindow.disposable) { r -> SwingUtilities.invokeLater { render(r) } }
 
         // Environment picker: always visible, lists the env file next to the open .http file.
         val combo = JComboBox<String>()   // entries are matched by index into [items], never by label
@@ -106,7 +106,7 @@ class ResponseToolWindowFactory : ToolWindowFactory, DumbAware {
             object : FileEditorManagerListener {
                 override fun selectionChanged(event: FileEditorManagerEvent) { SwingUtilities.invokeLater { reload() } }
             })
-        service.onEnvironmentChoice {
+        service.onEnvironmentChoice(toolWindow.disposable) {
             SwingUtilities.invokeLater { if (items.getOrNull(combo.selectedIndex)?.choice != service.environmentChoice) reload() }
         }
 

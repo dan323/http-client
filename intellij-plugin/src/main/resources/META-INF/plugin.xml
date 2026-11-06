@@ -15,9 +15,8 @@
                                        implementationClass="com.dan323.httpclient.intellij.HttpSyntaxHighlighterFactory"/>
         <runLineMarkerContributor language="HttpClientFile"
                                   implementationClass="com.dan323.httpclient.intellij.RunLineMarker"/>
-        <toolWindow id="HTTP Response" anchor="bottom" secondary="true"
+        <toolWindow id="HTTP Response" anchor="bottom"
                     factoryClass="com.dan323.httpclient.intellij.ResponseToolWindowFactory"/>
-        <projectService serviceImplementation="com.dan323.httpclient.intellij.HttpClientService"/>
     </extensions>
 
     <actions>
