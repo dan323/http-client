@@ -8,3 +8,6 @@ build/
 
 # Local secrets
 http-client.private.env.json
+
+# Stored responses (may contain secrets)
+.http-history/
