@@ -69,3 +69,5 @@ visible window or interaction):
 No completion or navigation for `{{variables}}` yet.
 
 `{{$env.NAME}}` reads nothing by default: allow names with `-Dhttpclient.allowEnv=NAME,NAME` (JVM option) or the environment variable `HTTPC_ALLOW_ENV=NAME,NAME`; see [docs/features.md](../docs/features.md).
+
+`< path` / `<@ path` bodies can only be read from the `.http` file's folder. To allow more directories, set the environment variable `HTTPC_ALLOW_FILE_ROOTS=/abs/dir` before starting the IDE (the practical way in an IDE; the alternative is the VM option `-Dhttpclient.allowFileRoots=/abs/dir`). Roots must be absolute (a leading `~` is expanded); a bad value is shown as a configuration error in the tool window. See [docs/features.md](../docs/features.md).

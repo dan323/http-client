@@ -5,6 +5,9 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+- File-read confinement (R5, deliberate deviation from JetBrains): `< path` / `<@ path` bodies can only be read from the `.http` file's folder, after `..` normalisation and symlink resolution; `../..`, absolute paths elsewhere and escaping symlinks fail the request with an error naming the path and how to allow it (no contents leaked). New `FileAccessPolicy` in `adapters` with extra allowed roots: CLI `--allow-file-root DIR` (repeatable), `-Dhttpclient.allowFileRoots=` / `HTTPC_ALLOW_FILE_ROOTS` (platform path separator) for the desktop app and plugin (use the env var in the IDE). Allowed roots are validated: empty, relative (property/env var), invalid and filesystem-root entries are rejected, `~` is expanded, the home directory only warns; dangling symlinks are judged by their target and the file is opened with `NOFOLLOW_LINKS` and re-verified.
+
 ### Fixed
 - Executor safety (R4): `# @timeout` now bounds the whole exchange, headers and body, and cancels the request (previously a server that sent headers and stalled hung forever); the default client has a 30 s connect timeout (no default total timeout). Interrupting the calling thread cancels the in-flight request, restores the interrupt flag and throws `CancellationException`. Documented that `Host`/`Content-Length`/`Connection`/`Expect`/`Upgrade` headers are dropped by the JDK client. Verified (tests) that `Authorization`, `Proxy-Authorization` and `Cookie` are not re-sent on cross-host redirects, so no change was needed there.
 
