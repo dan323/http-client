@@ -107,16 +107,21 @@ class LocalFileReaderTest {
         assertFailsWith<FileAccessDeniedException> { reader().read("..\\other\\secret.txt") }
     }
 
+    /** A path that is absolute on this platform ("/a" has no drive letter on Windows, so it is relative there). */
+    private fun absRoot(name: String): String = tmp.toAbsolutePath().root.resolve(name).toString()
+
     @Test fun parsesRootLists() {
-        assertEquals(listOf(Path.of("/a"), Path.of("/b")), FileAccessPolicy.parseRoots(" /a ,, /b", ","))
+        val a = absRoot("a"); val b = absRoot("b")
+        assertEquals(listOf(Path.of(a), Path.of(b)), FileAccessPolicy.parseRoots(" $a ,, $b", ","))
         if (File.separatorChar == '\\') {
             assertEquals(listOf("C:\\a", "D:\\b"), FileAccessPolicy.parseRoots("C:\\a;D:\\b", ";").map { it.toString() })
         }
         assertTrue(FileAccessPolicy.parseRoots(null).isEmpty())
-        val p = FileAccessPolicy.fromConfiguration({ "/x${File.pathSeparator}/y" }, { null })
+        val p = FileAccessPolicy.fromConfiguration({ "${absRoot("x")}${File.pathSeparator}${absRoot("y")}" }, { null })
         assertEquals(2, p.extraRoots.size)
-        val fromEnv = FileAccessPolicy.fromConfiguration({ null }, { if (it == FileAccessPolicy.ALLOW_ENV_VAR) "/z" else null })
-        assertEquals(listOf(Path.of("/z")), fromEnv.extraRoots)
+        val z = absRoot("z")
+        val fromEnv = FileAccessPolicy.fromConfiguration({ null }, { if (it == FileAccessPolicy.ALLOW_ENV_VAR) z else null })
+        assertEquals(listOf(Path.of(z)), fromEnv.extraRoots)
     }
 
     @Test fun endToEndRejectedReadIsAFailedRequestWithoutLeaking() {
@@ -142,8 +147,9 @@ class LocalFileReaderTest {
     }
 
     @Test fun expandsTildeToHome() {
-        assertEquals(listOf(Path.of("/home/u/shared")), FileAccessPolicy.parseRoots("~/shared", ":", "/home/u"))
-        assertFailsWith<FileAccessConfigException> { FileAccessPolicy.parseRoots("~user/x", ":", "/home/u") }
+        val home = absRoot("home${File.separator}u")
+        assertEquals(listOf(Path.of(home, "shared")), FileAccessPolicy.parseRoots("~/shared", ":", home))
+        assertFailsWith<FileAccessConfigException> { FileAccessPolicy.parseRoots("~user/x", ":", home) }
     }
 
     @Test fun malformedEntryIsAConfigErrorNotAnException() {
