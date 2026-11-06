@@ -4,6 +4,7 @@ import com.dan323.httpclient.core.domain.Body
 import com.dan323.httpclient.core.domain.Header
 import com.dan323.httpclient.core.domain.HttpFile
 import com.dan323.httpclient.core.domain.RequestTemplate
+import com.dan323.httpclient.core.domain.ResponseSave
 import com.dan323.httpclient.core.port.`in`.ParseHttpFile
 
 /** A malformed `.http` file; [line] is the 1-based line number and is part of the message. */
@@ -71,7 +72,7 @@ class HttpFileParser : ParseHttpFile {
         val headers = mutableListOf<Header>()
         while (i < lines.size && lines[i].isNotBlank()) {
             val l = lines[i].trim()
-            if (HttpLineSyntax.isResponseHandler(l) || HttpLineSyntax.isResponseRedirect(l)) break // handler without a blank line
+            if (HttpLineSyntax.isResponseHandler(l) || HttpLineSyntax.isResponseRedirect(l) || HttpLineSyntax.isResponseSave(l)) break // handler without a blank line
             if (!HttpLineSyntax.isComment(l)) {
                 val idx = l.indexOf(':')
                 if (idx < 0 && lines[i].first().isWhitespace() && headers.isNotEmpty()) {
@@ -86,10 +87,11 @@ class HttpFileParser : ParseHttpFile {
             i++
         }
 
-        // Response handlers (`> {% ... %}`, `> file`) and `<> file` redirects are not supported. They only count at the
-        // end of the block; earlier `> ` / `<> ` lines are body text. Warn about the ones that are ignored.
+        // `>> file` / `>>! file` (save the response) and `<> file` (link to the latest response) are request directives.
+        // Response handlers (`> {% ... %}`, `> file`) are not supported and are ignored with a warning. All of them only
+        // count at the end of the block; earlier lines starting like that are body text.
         val from = if (i < lines.size && lines[i].isNotBlank()) i else i + 1
-        class Handler(val first: Int, var last: Int, val message: String)
+        class Handler(val first: Int, var last: Int, val message: String, val save: HttpLineSyntax.ResponseSaveLine? = null, val link: String? = null)
         val handlers = mutableListOf<Handler>()
         var script: Handler? = null
         for (j in from until lines.size) {
@@ -103,8 +105,9 @@ class HttpFileParser : ParseHttpFile {
                     handlers += h
                     if (!HttpLineSyntax.endsScript(t.substring(t.indexOf("{%") + 2))) script = h
                 }
+                HttpLineSyntax.isResponseSave(t) -> handlers += Handler(j, j, "", save = HttpLineSyntax.responseSave(t))
                 HttpLineSyntax.isResponseHandler(t) -> handlers += Handler(j, j, "Line ${lineNo(j)}: response handler '$t' ignored (not supported)")
-                HttpLineSyntax.isResponseRedirect(t) -> handlers += Handler(j, j, "Line ${lineNo(j)}: response redirect '$t' ignored (not supported)")
+                HttpLineSyntax.isResponseRedirect(t) -> handlers += Handler(j, j, "", link = HttpLineSyntax.responseLink(t))
             }
         }
         script?.let { warnings += "Line ${lineNo(it.first)}: unterminated response handler script (missing '%}')" }
@@ -112,7 +115,22 @@ class HttpFileParser : ParseHttpFile {
         val lastBody = (from until lines.size).lastOrNull { it !in handlerLines && lines[it].isNotBlank() } ?: -1
         val bodyLines = mutableListOf<String>()
         for (j in from until lines.size) if (j !in handlerLines || j < lastBody) bodyLines += lines[j]
-        handlers.filter { it.first > lastBody }.forEach { warnings += it.message }
+        var saveResponse: ResponseSave? = null
+        val links = mutableListOf<String>()
+        for (h in handlers.filter { it.first > lastBody }) {
+            when {
+                h.save != null -> {
+                    if (h.save.path.isEmpty()) throw HttpParseException(lineNo(h.first), "'${if (h.save.overwrite) ">>!" else ">>"}' needs a file path")
+                    if (saveResponse != null) throw HttpParseException(lineNo(h.first), "only one '>>' / '>>!' response save is allowed per request")
+                    saveResponse = ResponseSave(h.save.path, h.save.overwrite)
+                }
+                h.link != null -> {
+                    if (h.link.isEmpty()) throw HttpParseException(lineNo(h.first), "'<>' needs a file path")
+                    links += h.link
+                }
+                else -> warnings += h.message
+            }
+        }
         while (bodyLines.isNotEmpty() && bodyLines.last().isBlank()) bodyLines.removeLast()
         val body = when {
             bodyLines.isEmpty() -> null
@@ -123,7 +141,7 @@ class HttpFileParser : ParseHttpFile {
                 }
             else -> Body.Text(bodyLines.joinToString("\n"))
         }
-        return RequestTemplate(name, method, fullUrl, headers, body, startLine, settings, fileVariables.toMap(), assertions)
+        return RequestTemplate(name, method, fullUrl, headers, body, startLine, settings, fileVariables.toMap(), assertions, saveResponse, links)
     }
 
     /**

@@ -142,14 +142,14 @@ class HttpFileParserTest {
     }
 
     @Test
-    fun `response handlers and redirects are not sent as body and produce warnings`() {
+    fun `response handlers are not sent as body and produce warnings, links are kept`() {
         val text = "POST http://x\n\n{\"a\":1}\n\n> {%\n  client.global.set(\"t\", 1);\n%}\n<> out.json\n> handler.js\n"
         val file = parser.parse(text)
         assertEquals(Body.Text("{\"a\":1}"), file.requests.single().body)
-        assertEquals(3, file.warnings.size)
+        assertEquals(listOf("out.json"), file.requests.single().responseLinks)
+        assertEquals(2, file.warnings.size)
         assertEquals(true, file.warnings[0].startsWith("Line 5:"))
-        assertEquals(true, file.warnings[1].startsWith("Line 8:"))
-        assertEquals(true, file.warnings[2].startsWith("Line 9:"))
+        assertEquals(true, file.warnings[1].startsWith("Line 9:"))
     }
 
     @Test

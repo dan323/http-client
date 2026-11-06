@@ -11,6 +11,12 @@ sealed interface RunOutcome {
         override val request: RequestTemplate,
         val response: HttpResponse,
         val assertions: List<AssertionResult> = emptyList(),
+        /** Where the `>>` / `>>!` directive saved the body (relative to the .http file, `/` separators); null when none or it failed. */
+        val savedTo: String? = null,
+        /** Why the `>>` / `>>!` save failed (the response itself is fine); never contains the body. */
+        val saveError: String? = null,
+        /** Why recording the `<>` link failed; the response itself is fine. */
+        val linkError: String? = null,
     ) : RunOutcome {
         val assertionsPassed: Boolean get() = assertions.all { it.passed }
     }

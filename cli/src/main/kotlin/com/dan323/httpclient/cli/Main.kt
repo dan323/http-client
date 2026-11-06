@@ -12,6 +12,7 @@ import com.dan323.httpclient.core.application.resolve
 import com.dan323.httpclient.core.port.out.EnvironmentFileException
 import com.dan323.httpclient.adapters.FileAccessConfigException
 import com.dan323.httpclient.adapters.FileAccessPolicy
+import com.dan323.httpclient.adapters.FileHistoryStore
 import com.dan323.httpclient.adapters.SessionFactory
 import com.dan323.httpclient.adapters.SystemEnvironmentVariables
 import com.dan323.httpclient.core.application.HttpFileParser
@@ -239,7 +240,8 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream, writer: R
     val chosen = withDependencies(requests, selected)
     val started = System.nanoTime()
     // Prerequisites run for their responses only: assertions are evaluated for the selected requests.
-    val outcomes = SessionFactory().use { factory ->
+    var saveFailed = false
+    val outcomes = SessionFactory(history = FileHistoryStore()).use { factory ->
     val session = factory.create(opts.file, FileAccessPolicy(opts.allowFileRoots, FileAccessPolicy.CLI_HINT), opts.allowEnv, "pass --allow-env NAME")
     session.runAll(chosen, variables, assertFor = { r -> selected.any { it === r } }) { outcome ->
         val r = outcome.request
@@ -253,6 +255,9 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream, writer: R
                     out.println()
                     out.println(resp.bodyAsString())
                 }
+                outcome.savedTo?.let { err.println("Saved response: $it") }
+                outcome.saveError?.let { err.println("Error: $it"); saveFailed = true }
+                outcome.linkError?.let { err.println("warning: $it") }
                 outcome.assertions.forEach {
                     if (!it.passed) (if (opts.quiet) err else out).println("FAIL ${it.assertion} -- ${it.message}")
                     else if (!opts.quiet) out.println("PASS ${it.assertion}")
@@ -278,7 +283,7 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream, writer: R
         val body = (outcomes.firstOrNull { it.request === selected[0] } as? RunOutcome.Success)?.response?.bodyAsString()
         if (body != null && !writeFile(writer, path, "output", err) { body }) written = false
     }
-    if (!report.passed) {
+    if (!report.passed || saveFailed) {
         if (!written) err.println("Run failed; the report/output file could not be written either.")
         return 1
     }
