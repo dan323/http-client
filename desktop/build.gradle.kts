@@ -3,9 +3,9 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
-    kotlin("jvm")
-    kotlin("plugin.compose") version "2.2.20"
-    id("org.jetbrains.compose") version "1.12.2"
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.compose.multiplatform)
 }
 
 repositories {
@@ -15,7 +15,7 @@ repositories {
 dependencies {
     implementation(project(":adapters"))
     implementation(project(":view-model"))
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+    implementation(libs.kotlinx.serialization.json)
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
     testImplementation(kotlin("test"))

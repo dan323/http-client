@@ -5,6 +5,9 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Build and CI (R12a): Gradle version catalog `gradle/libs.versions.toml` (Kotlin, kotlinx-serialization, Compose, IntelliJ platform plugin versions in one place; the repeated `1.9.0` and `2.2.20` literals are gone). CI now runs the tests on Ubuntu (under xvfb), Windows and macOS, and has a `plugin` job running `:intellij-plugin:buildPlugin`. The plugin build uses the IDE at `ideaPath` when it exists, otherwise downloads IntelliJ IDEA `ideaVersion` (new in `gradle.properties`), which is what CI does. Tests run on the JDK 21 toolchain on every OS. Mock-server cleanups from R12 were not done (low priority).
+
 ### Security
 - File-read confinement (R5, deliberate deviation from JetBrains): `< path` / `<@ path` bodies can only be read from the `.http` file's folder, after `..` normalisation and symlink resolution; `../..`, absolute paths elsewhere and escaping symlinks fail the request with an error naming the path and how to allow it (no contents leaked). New `FileAccessPolicy` in `adapters` with extra allowed roots: CLI `--allow-file-root DIR` (repeatable), `-Dhttpclient.allowFileRoots=` / `HTTPC_ALLOW_FILE_ROOTS` (platform path separator) for the desktop app and plugin (use the env var in the IDE). Allowed roots are validated: empty, relative (property/env var), invalid and filesystem-root entries are rejected, `~` is expanded, the home directory only warns; dangling symlinks are judged by their target and the file is opened with `NOFOLLOW_LINKS` and re-verified.
 
