@@ -1,7 +1,9 @@
 package com.dan323.httpclient.cli
 
 import com.dan323.httpclient.adapters.JsonRunReport
-import com.dan323.httpclient.core.application.JUnitXmlReport
+import com.dan323.httpclient.adapters.AtomicReportWriter
+import com.dan323.httpclient.adapters.JUnitXmlReport
+import com.dan323.httpclient.core.port.out.ReportWriter
 import com.dan323.httpclient.core.application.RunReport
 import com.dan323.httpclient.adapters.UpwardEnvironmentLocator
 import com.dan323.httpclient.core.application.EnvironmentChoice
@@ -20,7 +22,6 @@ import java.nio.file.Files
 import java.io.PrintStream
 import java.nio.file.InvalidPathException
 import java.nio.file.Path
-import java.nio.file.StandardCopyOption
 import com.dan323.httpclient.core.application.ReportEntry
 import kotlin.system.exitProcess
 
@@ -34,9 +35,10 @@ private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NA
                    none are readable by default; -Dhttpclient.allowEnv and HTTPC_ALLOW_ENV are merged in
   --allow-file-root DIR  also let `< path` bodies be read from DIR (repeatable); by default only the
                    .http file's folder is readable (symlinks resolved)
-  --list           list the requests in the file and exit
+  --list           list the requests in the file and exit (cannot be combined with --report-*)
   --report-json F  write a JSON run report (results, assertions, timings, totals) to F
-  --report-junit F write a JUnit XML run report to F"""
+  --report-junit F write a JUnit XML run report to F
+                   (a report path must differ from the .http file; exit 1 = failed run, 3 = passed but report unwritable)"""
 
 data class Options(
     val file: Path,
@@ -53,13 +55,13 @@ data class Options(
  * Returns null (after the caller prints usage) when the arguments are invalid: unknown or repeated options, a missing,
  * empty or flag-like (`--...`) option value, an invalid path, or the same file for both reports.
  */
-fun parseArgs(args: List<String>): Options? = try {
-    parseArgsUnchecked(args)
+fun parseArgs(args: List<String>, err: PrintStream = System.err): Options? = try {
+    parseArgsUnchecked(args, err)
 } catch (_: InvalidPathException) {
     null
 }
 
-private fun parseArgsUnchecked(args: List<String>): Options? {
+private fun parseArgsUnchecked(args: List<String>, err: PrintStream): Options? {
     var file: Path? = null
     var env: String? = null
     var request: String? = null
@@ -77,7 +79,7 @@ private fun parseArgsUnchecked(args: List<String>): Options? {
             "--allow-env" -> allowEnv += SystemEnvironmentVariables.parseNames(value() ?: return null)
             "--allow-file-root" -> allowFileRoots.add(
                 try { FileAccessPolicy.validateRoot(value() ?: return null, requireAbsolute = false) } catch (e: FileAccessConfigException) {
-                    System.err.println("httpc: --allow-file-root: ${e.message}"); return null
+                    err.println("httpc: --allow-file-root: ${e.message}"); return null
                 },
             )
             "--list" -> list = true
@@ -87,8 +89,28 @@ private fun parseArgsUnchecked(args: List<String>): Options? {
         }
         i++
     }
-    if (reportJson != null && reportJunit != null && reportJson.toAbsolutePath().normalize() == reportJunit.toAbsolutePath().normalize()) return null
-    return Options(file ?: return null, env, request, list, allowEnv, reportJson, reportJunit, allowFileRoots)
+    val input = file ?: return null
+    if (reportJson != null && reportJunit != null && samePath(reportJson, reportJunit)) return null
+    for ((flag, report) in listOf("--report-json" to reportJson, "--report-junit" to reportJunit)) {
+        if (report == null) continue
+        if (samePath(report, input)) {
+            err.println("httpc: $flag: would overwrite the input file $input"); return null
+        }
+        if (list) {
+            err.println("httpc: $flag cannot be combined with --list (nothing is run, so there is no report)"); return null
+        }
+    }
+    return Options(input, env, request, list, allowEnv, reportJson, reportJunit, allowFileRoots)
+}
+
+/** True when both paths name the same file: equal after normalisation, or the same existing file (symlinks, hard links). */
+internal fun samePath(a: Path, b: Path): Boolean {
+    if (a.toAbsolutePath().normalize() == b.toAbsolutePath().normalize()) return true
+    return try {
+        Files.exists(a) && Files.exists(b) && Files.isSameFile(a, b)
+    } catch (_: java.io.IOException) {
+        false
+    }
 }
 
 /** Picks the request selected by name or 1-based index; all requests when no selector is given. */
@@ -109,17 +131,17 @@ fun main(args: Array<String>) {
  * both reports are always attempted). When a report is requested and the run cannot start (missing file, unknown
  * environment or request, unexpected exception) an error report with a single failed entry is still written.
  */
-fun run(args: List<String>, out: PrintStream, err: PrintStream): Int {
-    val opts = parseArgs(args) ?: run { err.println(USAGE); return 2 }
+fun run(args: List<String>, out: PrintStream, err: PrintStream, writer: ReportWriter = AtomicReportWriter()): Int {
+    val opts = parseArgs(args, err) ?: run { err.println(USAGE); return 2 }
     return try {
-        execute(opts, out, err)
+        execute(opts, out, err, writer)
     } catch (e: Exception) {
-        failWithReport(opts, err, "Unexpected error: ${e.message ?: e}")
+        failWithReport(opts, err, writer, "Unexpected error: ${e.message ?: e}")
     }
 }
 
-private fun execute(opts: Options, out: PrintStream, err: PrintStream): Int {
-    if (!Files.isRegularFile(opts.file)) return failWithReport(opts, err, "No such file: ${opts.file}")
+private fun execute(opts: Options, out: PrintStream, err: PrintStream, writer: ReportWriter): Int {
+    if (!Files.isRegularFile(opts.file)) return failWithReport(opts, err, writer, "No such file: ${opts.file}")
 
     val parsed = HttpFileParser().parse(Files.readString(opts.file))
     parsed.warnings.forEach { err.println("warning: ${opts.file}: $it") }
@@ -133,12 +155,12 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream): Int {
     val variables = try {
         EnvironmentChoice.of(opts.env).resolve(UpwardEnvironmentLocator(), opts.file)?.variables ?: emptyMap()
     } catch (e: UnknownEnvironmentException) {
-        return failWithReport(opts, err, e.message ?: "Unknown environment: ${opts.env}")
+        return failWithReport(opts, err, writer, e.message ?: "Unknown environment: ${opts.env}")
     } catch (e: EnvironmentFileException) {
-        return failWithReport(opts, err, e.message ?: "Invalid environment file")
+        return failWithReport(opts, err, writer, e.message ?: "Invalid environment file")
     }
     val selected = select(requests, opts.request)
-        ?: return failWithReport(opts, err, "No such request: ${opts.request}")
+        ?: return failWithReport(opts, err, writer, "No such request: ${opts.request}")
     val chosen = withDependencies(requests, selected)
     // Prerequisites run for their responses only: assertions are evaluated for the selected requests.
     val outcomes = SessionFactory().use { factory ->
@@ -170,56 +192,37 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream): Int {
         out.println("Assertions: ${results.count { it.passed }} passed, ${results.count { !it.passed }} failed, $notRun not run")
     }
     val report = RunReport.from(outcomes) { o -> selected.none { it === o.request } }
-    val failed = outcomes.any { it is RunOutcome.Failure || (it is RunOutcome.Success && !it.assertionsPassed) }
-    val exit = if (failed) 1 else 0
-    return if (writeReports(opts, report, err)) exit else {
-        err.println("Run ${if (failed) "failed" else "passed"}; only the report could not be written.")
-        3
+    val written = writeReports(opts, report, err, writer)
+    if (!report.passed) {
+        if (!written) err.println("Run failed; the report could not be written either.")
+        return 1
     }
+    if (!written) err.println("Run passed; only the report could not be written.")
+    return if (written) 0 else 3
 }
 
 /** Writes the requested reports independently; returns false when any of them failed (each failure is printed). */
-private fun writeReports(opts: Options, report: RunReport, err: PrintStream): Boolean {
+private fun writeReports(opts: Options, report: RunReport, err: PrintStream, writer: ReportWriter): Boolean {
     val suite = opts.file.fileName?.toString() ?: "httpc"
-    val json = opts.reportJson?.let { writeReport(it, err) { JsonRunReport.render(report) } } ?: true
-    val junit = opts.reportJunit?.let { writeReport(it, err) { JUnitXmlReport.render(report, suite) } } ?: true
+    val json = opts.reportJson?.let { writeReport(writer, it, err) { JsonRunReport.render(report) } } ?: true
+    val junit = opts.reportJunit?.let { writeReport(writer, it, err) { JUnitXmlReport.render(report, suite) } } ?: true
     return json && junit
 }
 
-private fun writeReport(path: Path, err: PrintStream, content: () -> String): Boolean = try {
-    val target = path.toAbsolutePath()
-    val parent = target.parent
-    parent?.let { Files.createDirectories(it) }
-    val tmp = Files.createTempFile(parent, ".httpc-report-", ".tmp")
-    try {
-        Files.writeString(tmp, content())
-        moveIntoPlace(tmp, target)
-    } finally {
-        Files.deleteIfExists(tmp)
-    }
+private fun writeReport(writer: ReportWriter, path: Path, err: PrintStream, content: () -> String): Boolean = try {
+    writer.write(path, content())
     true
 } catch (e: Exception) {
     err.println("Error: Cannot write report $path: ${e.message ?: e}")
     false
 }
 
-/**
- * Moves [tmp] over [target], atomically when the file system supports it (some, e.g. certain Windows and network
- * file systems, do not: then a plain replacing move is used). [move] is injectable so the fallback is testable.
- */
-internal fun moveIntoPlace(tmp: Path, target: Path, move: (Path, Path, Array<StandardCopyOption>) -> Unit = { a, b, o -> Files.move(a, b, *o) }) {
-    try {
-        move(tmp, target, arrayOf(StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING))
-    } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
-        move(tmp, target, arrayOf(StandardCopyOption.REPLACE_EXISTING))
-    }
-}
-
 /** Fails with exit 1 and, when reports were requested, writes a report holding the single error. */
-private fun failWithReport(opts: Options, err: PrintStream, message: String): Int {
+private fun failWithReport(opts: Options, err: PrintStream, writer: ReportWriter, message: String): Int {
     val entry = ReportEntry("httpc", "-", opts.file.toString(), null, null, emptyList(), 0, message)
     val code = fail(err, message)
-    return if (writeReports(opts, RunReport(listOf(entry)), err)) code else 3
+    writeReports(opts, RunReport(listOf(entry)), err, writer)
+    return code
 }
 
 private fun fail(err: PrintStream, message: String): Int {

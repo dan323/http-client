@@ -12,6 +12,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -120,8 +121,75 @@ class ReportTest {
         val f = file("# @assert status == 200\nGET http://127.0.0.1:${server.port}/status/500\n")
         val blocker = dir.resolve("blocker").also { Files.writeString(it, "x") }
         val (code, _, err) = cli(f, "--report-junit", blocker.resolve("r.xml").toString())
-        assertEquals(3, code)
+        assertEquals(1, code, err)
+        assertContains(err, "Cannot write report")
         assertContains(err, "Run failed")
+    }
+
+    @Test fun earlyFailureWithUnwritableReportStillExitsOne() {
+        val blocker = dir.resolve("blocker").also { Files.writeString(it, "x") }
+        val (code, _, err) = cli(file("GET http://x/\n"), "--request", "nope", "--report-json", blocker.resolve("r.json").toString())
+        assertEquals(1, code, err)
+        assertContains(err, "Cannot write report")
+    }
+
+    @Test fun reportsGoThroughTheReportWriterPort() {
+        val written = mutableMapOf<java.nio.file.Path, String>()
+        val f = file("GET http://127.0.0.1:${server.port}/get\n")
+        val o = ByteArrayOutputStream(); val e = ByteArrayOutputStream()
+        val json = dir.resolve("never-created.json")
+        val code = run(listOf(f, "--report-json", json.toString()), PrintStream(o), PrintStream(e)) { path, content -> written[path] = content }
+        assertEquals(0, code, e.toString())
+        assertTrue(JsonRunReport.parse(written.getValue(json)).passed)
+        assertFalse(Files.exists(json))
+    }
+
+    @Test fun reportOptionPointingAtTheInputFileIsBadUsage() {
+        val f = file("GET http://x/\n")
+        val before = Files.readString(dir.resolve("r.http"))
+        assertNull(parseArgs(listOf(f, "--report-json", f)))
+        assertNull(parseArgs(listOf(f, "--report-junit", "$f/../r.http")))
+        val (code, _, err) = cli(f, "--report-junit", f)
+        assertEquals(2, code)
+        assertContains(err, "would overwrite the input file")
+        assertEquals(before, Files.readString(dir.resolve("r.http")))
+    }
+
+    @Test fun reportOptionPointingAtTheInputThroughASymlinkIsBadUsage() {
+        val f = file("GET http://x/\n")
+        val link = dir.resolve("link.xml")
+        try { Files.createSymbolicLink(link, dir.resolve("r.http")) } catch (_: Exception) { return } // no symlink support/permission
+        assertNull(parseArgs(listOf(f, "--report-junit", link.toString())))
+    }
+
+    @Test fun reportWithListIsBadUsage() {
+        val f = file("GET http://x/\n")
+        val out = dir.resolve("l.json")
+        assertNull(parseArgs(listOf(f, "--list", "--report-json", out.toString())))
+        assertNull(parseArgs(listOf(f, "--report-junit", out.toString(), "--list")))
+        val (code, _, err) = cli(f, "--list", "--report-json", out.toString())
+        assertEquals(2, code)
+        assertContains(err, "cannot be combined with --list")
+        assertFalse(Files.exists(out))
+        assertNotNull(parseArgs(listOf(f, "--list")))
+    }
+
+    @Test fun reportOptionsAreParsedIntoPaths() {
+        val o = parseArgs(listOf("f.http", "--report-json", "a.json", "--report-junit", "b.xml"))!!
+        assertEquals(java.nio.file.Path.of("a.json"), o.reportJson)
+        assertEquals(java.nio.file.Path.of("b.xml"), o.reportJunit)
+        val none = parseArgs(listOf("f.http"))!!
+        assertNull(none.reportJson); assertNull(none.reportJunit)
+        assertNull(parseArgs(listOf("f.http", "--report-json", "a", "--report-json", "b")))
+        assertNull(parseArgs(listOf("f.http", "--report-junit", "a", "--report-junit", "b")))
+    }
+
+    @Test fun reportFileIsOwnerOnlyOnPosix() {
+        if (!java.nio.file.FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) return
+        val f = file("GET http://127.0.0.1:${server.port}/get\n")
+        val json = dir.resolve("perm.json")
+        assertEquals(0, cli(f, "--report-json", json.toString()).first)
+        assertEquals("rw-------", java.nio.file.attribute.PosixFilePermissions.toString(Files.getPosixFilePermissions(json)))
     }
 
     @Test fun earlyExitsStillWriteAnErrorReport() {

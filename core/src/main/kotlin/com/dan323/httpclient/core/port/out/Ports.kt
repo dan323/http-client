@@ -47,3 +47,11 @@ fun interface EnvironmentVariables {
         }
     }
 }
+
+/**
+ * Persists a rendered run report (JSON, JUnit XML, ...) at [path]. Implementations create missing parent folders,
+ * replace an existing file and throw [java.io.IOException] when the report cannot be written.
+ */
+fun interface ReportWriter {
+    fun write(path: java.nio.file.Path, content: String)
+}
