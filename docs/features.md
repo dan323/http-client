@@ -335,6 +335,7 @@ Works in any IntelliJ-based IDE, including Community (it depends only on the pla
 - `.http` files get syntax highlighting (methods, URLs, header names, `{{variables}}`, comments, `###` separators, `< file` bodies).
 - A green run icon in the gutter on each request line runs that request.
 - JSON response bodies are pretty-printed.
+- Remembered responses (so a chained request such as a login is not re-sent) are kept per file, environment and loaded variables. Any edit to a file changes its text and drops its session, so the chained requests run again on the next run; the same happens when the file is deleted or moved. At most 16 files are remembered (least recently used are dropped).
 
 The response is shown as plain text for now.
 Do not install it next to the bundled HTTP Client plugin of IntelliJ Ultimate, since both claim `.http` files.

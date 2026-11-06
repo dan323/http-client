@@ -12,16 +12,26 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.dan323.httpclient.core.port.out.EnvironmentFileException
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.ui.SimpleListCellRenderer
+import com.intellij.openapi.ui.MessageType
 import com.intellij.openapi.wm.ToolWindowManager
 import java.nio.file.Path
 
 private fun AnActionEvent.isHttpFile() = getData(CommonDataKeys.VIRTUAL_FILE)?.extension == "http"
 
-/** Saves open files, shows the response window and runs the request at [line] off the UI thread. */
-fun runRequest(project: Project, vfile: VirtualFile, text: String, line: Int) {
-    ToolWindowManager.getInstance(project).getToolWindow("HTTP Response")?.show()
+/** Saves open files, shows the response window and runs the request at [line] off the UI thread. Call on the EDT. */
+fun runRequest(project: Project, vfile: VirtualFile, line: Int) {
+    // The run uses the same text for the gutter icon and the action: the document as just saved (never PSI text).
+    val documents = FileDocumentManager.getInstance()
+    val document = documents.getDocument(vfile)
+    documents.saveAllDocuments()
+    val text = document?.text ?: String(vfile.contentsToByteArray(), vfile.charset)
+    val toolWindows = ToolWindowManager.getInstance(project)
+    toolWindows.getToolWindow("HTTP Response")?.show()
     ApplicationManager.getApplication().executeOnPooledThread {
-        project.getService(HttpClientService::class.java).run(Path.of(vfile.path), text, line)
+        val started = project.getService(HttpClientService::class.java).run(Path.of(vfile.path), text, line)
+        if (!started) ApplicationManager.getApplication().invokeLater({
+            toolWindows.notifyByBalloon("HTTP Response", MessageType.INFO, "A request is already running; wait for it to finish.")
+        }, project.disposed)
     }
 }
 
@@ -36,8 +46,7 @@ class RunRequestAction : AnAction(), DumbAware {
         val project = e.project ?: return
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
         val vfile = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
-        FileDocumentManager.getInstance().saveAllDocuments()
-        runRequest(project, vfile, editor.document.text, editor.document.getLineNumber(editor.caretModel.offset))
+        runRequest(project, vfile, editor.document.getLineNumber(editor.caretModel.offset))
     }
 }
 
