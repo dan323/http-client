@@ -151,6 +151,11 @@ GET {{base}}/items/1
   ` # comment` is stripped (a `#` preceded by whitespace and outside quotes). `# @assert` lines must sit before
   the request line; in a block that has no request they are discarded. Failure messages show at most 200
   characters of the actual value.
+- When an assertion uses `{{variables}}` its resolved values are never shown: a failing comparison reports
+  "expected value contains substitutions, not shown", while an invalid one (bad regex, non-numeric `<`, unknown
+  operator) keeps its reason with the values left out.
+- `RequestSession` is safe for concurrent use: runs are serialised (one request at a time per session) and
+  interrupting the running thread stops `runAll` without sending the queued requests.
 - `RequestSession.runAll` evaluates them and attaches one `AssertionResult` (passed, expected, actual, message) each to
   `RunOutcome.Success.assertions`. A request that throws reports `RunOutcome.Failure.assertionsNotRun`.
   `runChained` (single-request runs) evaluates only the requested request; its prerequisites run for their responses
