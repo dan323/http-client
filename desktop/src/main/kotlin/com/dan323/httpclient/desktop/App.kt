@@ -40,7 +40,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.dan323.httpclient.adapters.prettyJson
 import com.dan323.httpclient.core.application.RunOutcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

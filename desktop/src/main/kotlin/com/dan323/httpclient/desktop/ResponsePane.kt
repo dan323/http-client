@@ -34,18 +34,14 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import com.dan323.httpclient.adapters.prettyJson
 import com.dan323.httpclient.core.application.RunOutcome
-import com.dan323.httpclient.core.domain.HttpResponse
 import com.dan323.httpclient.viewmodel.JsonKind
 import com.dan323.httpclient.viewmodel.JsonRow
 import com.dan323.httpclient.viewmodel.StatusClass
-import com.dan323.httpclient.viewmodel.durationLabel
+import com.dan323.httpclient.viewmodel.OutcomeDisplay
+import com.dan323.httpclient.viewmodel.display
 import com.dan323.httpclient.viewmodel.flattenJson
 import com.dan323.httpclient.viewmodel.parseJsonContainer
-import com.dan323.httpclient.viewmodel.sizeLabel
-import com.dan323.httpclient.viewmodel.statusClass
-import com.dan323.httpclient.viewmodel.statusText
 import kotlinx.serialization.json.JsonElement
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
@@ -71,26 +67,27 @@ private class JsonColors(val key: Color, val string: Color, val number: Color, v
 fun ResponsePane(outcomes: List<RunOutcome>, modifier: Modifier = Modifier) {
     val colors = if (isSystemInDarkTheme()) JsonColors.Dark else JsonColors.Light
     val uis = remember { HashMap<RunOutcome, OutcomeUi>() }
+    val displays = remember { HashMap<RunOutcome, OutcomeDisplay>() }
     // Read the collapsed sets here, in composition, so toggling a node recomposes the list.
     val sections = outcomes.map { o ->
-        val ui = (o as? RunOutcome.Success)?.let { s -> uis.getOrPut(o) { OutcomeUi(s.response.bodyAsString()) } }
+        val d = displays.getOrPut(o) { o.display() }
+        val ui = (d as? OutcomeDisplay.Response)?.let { r -> uis.getOrPut(o) { OutcomeUi(r.rawBody) } }
         val rows = if (ui?.json != null && ui.tab == Tab.BODY && !ui.raw) flattenJson(ui.json, ui.collapsed) else null
-        Triple(o, ui, rows)
+        Triple(d, ui, rows)
     }
 
     LazyColumn(modifier) {
         for ((outcome, ui, rows) in sections) {
             item { OutcomeHeader(outcome, ui) }
-            if (outcome is RunOutcome.Success && ui != null) {
-                val resp = outcome.response
+            if (outcome is OutcomeDisplay.Response && ui != null) {
                 when {
-                    ui.tab == Tab.HEADERS -> items(resp.headers) { h ->
+                    ui.tab == Tab.HEADERS -> items(outcome.headers) { (name, value) ->
                         SelectionContainer {
                             Text(
                                 buildAnnotatedString {
-                                    withStyle(SpanStyle(color = colors.key, fontWeight = FontWeight.SemiBold)) { append(h.name) }
+                                    withStyle(SpanStyle(color = colors.key, fontWeight = FontWeight.SemiBold)) { append(name) }
                                     append(": ")
-                                    append(h.value)
+                                    append(value)
                                 },
                                 style = mono, modifier = Modifier.padding(vertical = 1.dp),
                             )
@@ -98,9 +95,9 @@ fun ResponsePane(outcomes: List<RunOutcome>, modifier: Modifier = Modifier) {
                     }
                     rows != null -> items(rows) { row -> JsonRowView(row, colors) { ui.toggle(row.path) } }
                     else -> item {
-                        val text = resp.bodyAsString()
+                        val text = if (ui.raw) outcome.rawBody else outcome.prettyBody
                         SelectionContainer {
-                            Text(if (text.isEmpty()) "(empty body)" else if (ui.raw) text else prettyJson(text) ?: text, style = mono)
+                            Text(text.ifEmpty { "(empty body)" }, style = mono)
                         }
                     }
                 }
@@ -113,30 +110,29 @@ fun ResponsePane(outcomes: List<RunOutcome>, modifier: Modifier = Modifier) {
 private fun OutcomeUi.toggle(path: String) { if (!collapsed.remove(path)) collapsed.add(path) }
 
 @Composable
-private fun OutcomeHeader(outcome: RunOutcome, ui: OutcomeUi?) {
-    val r = outcome.request
+private fun OutcomeHeader(outcome: OutcomeDisplay, ui: OutcomeUi?) {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(r.name ?: "${r.method} ${r.url}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+        Text(outcome.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
         when (outcome) {
-            is RunOutcome.Failure -> Text("Error: ${outcome.message}", color = MaterialTheme.colorScheme.error)
-            is RunOutcome.Success -> {
-                val resp = outcome.response
+            is OutcomeDisplay.Error -> Text("Error: ${outcome.message}", color = MaterialTheme.colorScheme.error)
+            is OutcomeDisplay.Reused -> Text("Reused earlier response (not sent again)", style = MaterialTheme.typography.bodySmall)
+            is OutcomeDisplay.Response -> {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    StatusBadge(resp.statusCode)
-                    Text(durationLabel(resp.durationMillis), style = MaterialTheme.typography.bodySmall)
-                    Text(sizeLabel(resp.body.size), style = MaterialTheme.typography.bodySmall)
-                    resp.header("content-type")?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline) }
+                    StatusBadge(outcome)
+                    Text(outcome.durationLabel, style = MaterialTheme.typography.bodySmall)
+                    Text(outcome.sizeLabel, style = MaterialTheme.typography.bodySmall)
+                    outcome.contentType?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline) }
                 }
                 if (ui != null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         FilterChip(ui.tab == Tab.BODY, { ui.tab = Tab.BODY }, label = { Text("Body") })
-                        FilterChip(ui.tab == Tab.HEADERS, { ui.tab = Tab.HEADERS }, label = { Text("Headers (${resp.headers.size})") })
+                        FilterChip(ui.tab == Tab.HEADERS, { ui.tab = Tab.HEADERS }, label = { Text("Headers (${outcome.headers.size})") })
                         Box(Modifier.weight(1f))
                         if (ui.tab == Tab.BODY && ui.json != null) {
                             FilterChip(!ui.raw, { ui.raw = false }, label = { Text("Pretty") })
                             FilterChip(ui.raw, { ui.raw = true }, label = { Text("Raw") })
                         }
-                        OutlinedButton(onClick = { copy(copyText(resp, ui)) }) { Text("Copy") }
+                        OutlinedButton(onClick = { copy(copyText(outcome, ui)) }) { Text("Copy") }
                     }
                 }
             }
@@ -145,15 +141,15 @@ private fun OutcomeHeader(outcome: RunOutcome, ui: OutcomeUi?) {
 }
 
 @Composable
-private fun StatusBadge(status: Int) {
-    val color = when (statusClass(status)) {
+private fun StatusBadge(response: OutcomeDisplay.Response) {
+    val color = when (response.statusClass) {
         StatusClass.SUCCESS -> Color(0xFF2E7D32)
         StatusClass.REDIRECT -> Color(0xFFEF6C00)
         StatusClass.CLIENT_ERROR -> Color(0xFFC62828)
         else -> Color(0xFF6A1B9A)
     }
     Surface(color = color, shape = RoundedCornerShape(4.dp)) {
-        Text("$status ${statusText(status)}".trim(), color = Color.White, fontWeight = FontWeight.Bold,
+        Text(response.statusLabel, color = Color.White, fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
     }
 }
@@ -192,12 +188,9 @@ private fun rowText(row: JsonRow, c: JsonColors): AnnotatedString = buildAnnotat
     if (row.comma) withStyle(SpanStyle(color = c.punctuation)) { append(",") }
 }
 
-private fun copyText(resp: HttpResponse, ui: OutcomeUi): String {
-    val body = resp.bodyAsString()
-    return when (ui.tab) {
-        Tab.HEADERS -> resp.headers.joinToString("\n") { "${it.name}: ${it.value}" }
-        Tab.BODY -> if (ui.raw) body else prettyJson(body) ?: body
-    }
+private fun copyText(resp: OutcomeDisplay.Response, ui: OutcomeUi): String = when (ui.tab) {
+    Tab.HEADERS -> resp.headers.joinToString("\n") { (name, value) -> "$name: $value" }
+    Tab.BODY -> if (ui.raw) resp.rawBody else resp.prettyBody
 }
 
 private fun copy(text: String) =

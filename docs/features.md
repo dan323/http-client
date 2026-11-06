@@ -90,7 +90,7 @@ Setting names are case-insensitive and unknown ones are ignored. Invalid values 
 
 ### Cookie jar
 
-Each `RequestSession` (one CLI run, one desktop/plugin session) owns an in-memory `CookieJar` in `core`. `Set-Cookie` headers
+Each `RequestSession` (one CLI run; in the desktop app and plugin one per file, environment and loaded variables, kept by the shared `RunController` so a request that already ran, such as a login, is not sent again until the environment file changes or the chain is reset) owns an in-memory `CookieJar` in `core`. `Set-Cookie` headers
 of a response are stored, and later requests in the same session to a matching host and path get a `Cookie` header, so a login
 request followed by an authenticated one just works. Sessions never share cookies and nothing is persisted to disk.
 Supported: `Domain` (host-only when absent; a host cannot set cookies for an unrelated domain), `Path` (matched on the raw,

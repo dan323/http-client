@@ -13,11 +13,13 @@ import kotlin.test.assertTrue
 
 class AppStateTest {
     private lateinit var server: HttpServer
+    private val logins = java.util.concurrent.atomic.AtomicInteger()
     private val dir = Files.createTempDirectory("httpc-desktop")
 
     @BeforeTest fun start() {
         server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/login") { ex ->
+            logins.incrementAndGet()
             val b = """{"token":"zzz"}""".toByteArray(); ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) }
         }
         server.createContext("/echo") { ex ->
@@ -99,9 +101,27 @@ class AppStateTest {
 
     @Test fun badFileAccessConfigurationIsReportedAsFailure() {
         val file = dir.resolve("a.http")
-        val outcomes = Workspace.execute(file, "GET http://127.0.0.1:${server.address.port}/echo\n", null, null,
-            policy = { com.dan323.httpclient.adapters.FileAccessPolicy.load({ "relative" }, { null }) })
+        val outcomes = DesktopRunner(policy = { com.dan323.httpclient.adapters.FileAccessPolicy.load({ "relative" }, { null }) }).use {
+            it.execute(file, "GET http://127.0.0.1:${server.address.port}/echo\n", null, null)
+        }
         val f = outcomes.single() as RunOutcome.Failure
         assertTrue("relative" in f.message)
+    }
+
+    @Test fun secondSendReusesTheLoginResponse() {
+        val file = dir.resolve("cache.http").also { Files.writeString(it, chained) }
+        AppState().use { state ->
+            state.open(file)
+            state.environment = "dev"
+            state.selected = 1
+            state.run(all = false)
+            state.run(all = false)
+            assertEquals(1, logins.get())
+            assertEquals(listOf("me"), state.outcomes.map { it.request.name })
+            assertEquals("zzz", bodyOf(state.outcomes.single()))
+            state.resetChain()
+            state.run(all = false)
+            assertEquals(2, logins.get())
+        }
     }
 }
