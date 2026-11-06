@@ -222,6 +222,19 @@ cannot lose each other's runs; all files are written atomically.
   `rw-------` from creation (Windows uses the default ACLs). Add `.http-history/` to your `.gitignore` (this repository
   does) and never share the folder.
 
+### Authorization shortcuts
+
+As in the JetBrains HTTP Client, `Authorization: Basic` accepts plain credentials, which are Base64-encoded (UTF-8) when the request is sent:
+
+```
+Authorization: Basic {{user}} {{pass}}
+Authorization: Basic {{user}}:{{pass}}
+```
+
+Variables resolve first. Rule: after `Basic`, a value that contains `:` or has two or more whitespace-separated tokens is plain credentials (user is the text before the first `:`, or the first token; everything after is the password, so passwords may contain `:` and spaces; an empty password `user:` is fine). A single token without `:` is taken as already encoded and sent unchanged, as is every other scheme (`Bearer {{token}}` needs no shortcut: it is just a header). The header name and the `Basic` keyword are case-insensitive, and every `Authorization` header of a request is handled on its own. Limitation: a username without a password written as `Basic user` is read as an already-encoded token; write `Basic user:`.
+
+The encoded value, the `user:password` text and the password are kept out of failure messages like variable values (shown as `{{Authorization}}` or the variable name). Not implemented: `Digest` credentials and `{{$auth.token(...)}}` / OAuth helpers.
+
 ### Dynamic variables
 
 Each occurrence is evaluated separately. A variable you define with the same name wins.
@@ -372,4 +385,4 @@ Do not install it next to the bundled HTTP Client plugin of IntelliJ Ultimate, s
 
 ## Not yet implemented
 
-Response handlers, saved responses (`>>`, `>>!`, `<>`, planned as F21), assertion results in the desktop app and plugin (assertions are evaluated and shown by the CLI and reports only), authentication helpers, multipart/form bodies and cancel buttons in the UIs.
+Response handlers, saved responses (`>>`, `>>!`, `<>`, planned as F21), assertion results in the desktop app and plugin (assertions are evaluated and shown by the CLI and reports only), multipart/form bodies and cancel buttons in the UIs.

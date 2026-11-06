@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 - History store (T11): `HistoryStore` port in `core` (`HistoryRun`, `StoredResponse`) and `FileHistoryStore` in `adapters` (`.http-history/` next to the `.http` file, injectable root, newest 50 runs kept, bodies cut at 5 MB with a marker, owner-only files on POSIX, atomic writes, one folder per run so concurrent writers cannot corrupt it, corrupt entries skipped). Not wired into the front ends yet. `.http-history/` added to `.gitignore`; stored responses are raw and may contain secrets. See `docs/features.md`.
+- Auth shortcut (T7, F3): `Authorization: Basic user password` and `Basic user:password` are Base64-encoded (UTF-8) at send time, after variable resolution; an already-encoded single token and other schemes are unchanged. The encoded value, the plain credentials and the password are scrubbed from failure messages. `Digest` and OAuth helpers are not implemented.
 
 ### Changed
 - Docs refresh (R12b): `docs/features.md` describes the final state (CLI synopsis and exit codes, environment resolution, session behaviour in desktop and plugin); `docs/PLAN.md` lists only open work with statuses; `docs/REMEDIATION.md` records R1-R13 as done with their leftovers; module READMEs and `CLAUDE.md` updated.
