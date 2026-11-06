@@ -52,6 +52,7 @@ class ResponseExtractor(private val json: JsonExtractor) {
 
     private fun header(response: HttpResponse, spec: String): String? {
         val m = INDEXED_HEADER.matchEntire(spec) ?: return response.header(spec)
+        response.header(spec)?.let { return it } // a header literally named like `X[1]` wins
         val values = response.headerValues(m.groupValues[1])
         val index = m.groupValues[2]
         return if (index == "*") values.takeIf { it.isNotEmpty() }?.joinToString("\n") else values.getOrNull(index.toInt())
