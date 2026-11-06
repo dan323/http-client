@@ -40,7 +40,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.dan323.httpclient.adapters.prettyJson
 import com.dan323.httpclient.core.application.RunOutcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -84,6 +83,10 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             }
             OutlinedButton(enabled = state.file != null && !state.running, onClick = { scope.launch(Dispatchers.IO) { state.run(all = true) } }) {
                 Text("Send all")
+            }
+            // Responses of earlier requests (e.g. a login token) are remembered between runs; this forgets them.
+            OutlinedButton(enabled = state.file != null && !state.running, onClick = { state.resetChain() }) {
+                Text("Forget responses")
             }
         }
     }

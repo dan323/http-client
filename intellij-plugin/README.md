@@ -37,6 +37,7 @@ Install the zip via *Settings → Plugins → ⚙ → Install Plugin from Disk�
 - `RunLineMarker.kt` — gutter run icons.
 - `Actions.kt` — run and environment actions.
 - `HttpClientService.kt` — project service that runs requests and publishes the output.
+- `HttpClientService.kt` — per-project state; runs requests through the shared `RunController` and closes the `SessionFactory` when the project is disposed.
 - `ResponseToolWindowFactory.kt` — the response panel; JSON colouring and status/duration formatting come from the shared `view-model` module (its kotlinx-serialization is excluded from the plugin zip, the IDE provides it).
 - `src/main/resources/META-INF/plugin.xml` — registrations.
 
