@@ -9,7 +9,10 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 
-class AppState(private val runner: DesktopRunner = DesktopRunner()) : AutoCloseable {
+class AppState(
+    private val runner: DesktopRunner = DesktopRunner(),
+    private val settings: SettingsPersistence? = null,
+) : AutoCloseable {
     var file by mutableStateOf<Path?>(null)
         private set
     var text by mutableStateOf("")
@@ -18,7 +21,13 @@ class AppState(private val runner: DesktopRunner = DesktopRunner()) : AutoClosea
         private set
     var environments by mutableStateOf<List<String>>(emptyList())
         private set
-    var environment by mutableStateOf<String?>(null)
+    private var chosenEnvironment by mutableStateOf<String?>(null)
+    var environment: String?
+        get() = chosenEnvironment
+        set(value) {
+            chosenEnvironment = value
+            file?.let { f -> settings?.update { it.withEnvironment(canonical(f), value) } }
+        }
     var selected by mutableStateOf(0)
     var outcomes by mutableStateOf<List<RunOutcome>>(emptyList())
         private set
@@ -26,6 +35,17 @@ class AppState(private val runner: DesktopRunner = DesktopRunner()) : AutoClosea
         private set
     var message by mutableStateOf<String?>(null)
         private set
+
+    /** Recently opened files, most recent first; only files that existed when last checked. */
+    var recentFiles by mutableStateOf<List<Path>>(emptyList())
+        private set
+
+    init {
+        settings?.let { s ->
+            recentFiles = s.current.recentFiles.map { Path.of(it) }
+            message = s.loadWarning
+        }
+    }
 
     /** Request list for [text], parsed when the text changes rather than on every recomposition. */
     var requests by mutableStateOf<List<RequestTemplate>>(emptyList())
@@ -58,8 +78,36 @@ class AppState(private val runner: DesktopRunner = DesktopRunner()) : AutoClosea
         selected = 0
         outcomes = emptyList()
         environments = emptyList()
-        environment = null   // the choice belongs to the previous file's environments
+        chosenEnvironment = null   // the choice belongs to the previous file's environments
+        val key = canonical(path)
+        settings?.update { it.opened(key) }
+        recentFiles = settings?.current?.recentFiles?.map { Path.of(it) } ?: recentFiles
         refreshEnvironments()
+        // Restore the remembered environment only if it still exists; never an error for a vanished name.
+        settings?.current?.environments?.get(key)?.takeIf { it in environments }?.let { chosenEnvironment = it }
+    }
+
+    /** Opens the last file of the previous session. A file that is gone is skipped without a message: the app starts empty. */
+    fun restoreLastFile() {
+        val last = settings?.current?.lastFile?.let { Path.of(it) } ?: return
+        if (!Files.isRegularFile(last)) return
+        exclusive("open a file") { openLocked(last) }
+    }
+
+    /** Opens an entry of the recent list; a file that has vanished is dropped from the list with a short message. */
+    fun openRecent(path: Path) {
+        if (Files.isRegularFile(path)) { open(path); return }
+        settings?.update { it.withoutRecent(canonical(path)).withoutRecent(path.toString()) }
+        recentFiles = recentFiles.filter { it != path }
+        message = "${path.fileName} no longer exists and was removed from the recent files."
+    }
+
+    /** The window geometry of the previous session, if any. */
+    fun savedWindow(): com.dan323.httpclient.core.port.out.WindowSettings? = settings?.current?.window
+
+    /** Remembers the window geometry for the next start. */
+    fun rememberWindow(window: com.dan323.httpclient.core.port.out.WindowSettings) {
+        settings?.update { it.withWindow(window) }
     }
 
     /** Ignored while a run or file switch is in progress, so the buffer cannot diverge from what is being sent. */
@@ -129,7 +177,9 @@ class AppState(private val runner: DesktopRunner = DesktopRunner()) : AutoClosea
     /** Forgets remembered responses, so the next run sends the chained requests again. */
     fun resetChain() = runner.resetChain()
 
-    override fun close() = runner.close()
+    override fun close() {
+        try { settings?.close() } finally { runner.close() }
+    }
 
     /** Runs a file chooser, turning any failure (no display, dialog error) into a visible message. */
     fun pick(chooser: () -> Path?): Path? = try {
@@ -163,4 +213,11 @@ class AppState(private val runner: DesktopRunner = DesktopRunner()) : AutoClosea
     } catch (e: Exception) {
         message = e.message ?: e::class.simpleName; false
     }
+}
+
+/** The key under which a file is remembered: its real path when it exists, else its normalized absolute path. */
+internal fun canonical(path: Path): String = try {
+    path.toRealPath().toString()
+} catch (_: Exception) {
+    path.toAbsolutePath().normalize().toString()
 }
