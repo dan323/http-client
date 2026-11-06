@@ -23,13 +23,20 @@ class RequestRunner(
         variables: Map<String, String>,
         extra: (String) -> String? = { null },
         fileVariables: Map<String, String> = emptyMap(),
-    ): String = VariableResolver.resolve(text, variables, extra, dynamic, fileVariables)
+        onSubstitute: (name: String, value: String) -> Unit = { _, _ -> },
+    ): String = VariableResolver.resolve(text, variables, extra, dynamic, fileVariables, onSubstitute)
 
     override fun run(template: RequestTemplate, variables: Map<String, String>): HttpResponse =
         executor.execute(resolve(template, variables))
 
-    fun resolve(t: RequestTemplate, env: Map<String, String>, extra: (String) -> String? = { null }): HttpRequest =
-        build(t) { VariableResolver.resolve(it, env, extra, dynamic, t.fileVariables) }
+    /** [onSubstitute] is told each substituted `{{name}}` and its value (used to keep values out of failure messages). */
+    fun resolve(
+        t: RequestTemplate,
+        env: Map<String, String>,
+        extra: (String) -> String? = { null },
+        onSubstitute: (name: String, value: String) -> Unit = { _, _ -> },
+    ): HttpRequest =
+        build(t) { VariableResolver.resolve(it, env, extra, dynamic, t.fileVariables, onSubstitute) }
 
     private fun build(t: RequestTemplate, text: (String) -> String): HttpRequest = HttpRequest(
         method = t.method,

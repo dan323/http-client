@@ -1,6 +1,5 @@
 package com.dan323.httpclient.cli
 
-import com.dan323.httpclient.adapters.JdkHttpExecutor
 import com.dan323.httpclient.adapters.JsonRunReport
 import com.dan323.httpclient.core.application.JUnitXmlReport
 import com.dan323.httpclient.core.application.RunReport
@@ -11,13 +10,9 @@ import com.dan323.httpclient.core.application.resolve
 import com.dan323.httpclient.core.port.out.EnvironmentFileException
 import com.dan323.httpclient.adapters.FileAccessConfigException
 import com.dan323.httpclient.adapters.FileAccessPolicy
-import com.dan323.httpclient.adapters.KotlinxJsonExtractor
-import com.dan323.httpclient.adapters.LocalFileReader
+import com.dan323.httpclient.adapters.SessionFactory
 import com.dan323.httpclient.adapters.SystemEnvironmentVariables
-import com.dan323.httpclient.core.application.DynamicVariables
 import com.dan323.httpclient.core.application.HttpFileParser
-import com.dan323.httpclient.core.application.RequestRunner
-import com.dan323.httpclient.core.application.RequestSession
 import com.dan323.httpclient.core.application.RunOutcome
 import com.dan323.httpclient.core.application.withDependencies
 import com.dan323.httpclient.core.domain.RequestTemplate
@@ -126,7 +121,6 @@ fun run(args: List<String>, out: PrintStream, err: PrintStream): Int {
 private fun execute(opts: Options, out: PrintStream, err: PrintStream): Int {
     if (!Files.isRegularFile(opts.file)) return failWithReport(opts, err, "No such file: ${opts.file}")
 
-    val dir = opts.file.toAbsolutePath().parent
     val parsed = HttpFileParser().parse(Files.readString(opts.file))
     parsed.warnings.forEach { err.println("warning: ${opts.file}: $it") }
     val requests = parsed.requests
@@ -146,11 +140,10 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream): Int {
     val selected = select(requests, opts.request)
         ?: return failWithReport(opts, err, "No such request: ${opts.request}")
     val chosen = withDependencies(requests, selected)
-    val executor = JdkHttpExecutor()
-    val session = RequestSession(RequestRunner(executor, LocalFileReader(dir, FileAccessPolicy(opts.allowFileRoots, FileAccessPolicy.CLI_HINT)), DynamicVariables(env = SystemEnvironmentVariables.fromConfiguration(extra = opts.allowEnv, hint = "pass --allow-env NAME"))), executor, KotlinxJsonExtractor())
-
     // Prerequisites run for their responses only: assertions are evaluated for the selected requests.
-    val outcomes = session.runAll(chosen, variables, assertFor = { r -> selected.any { it === r } }) { outcome ->
+    val outcomes = SessionFactory().use { factory ->
+    val session = factory.create(opts.file, FileAccessPolicy(opts.allowFileRoots, FileAccessPolicy.CLI_HINT), opts.allowEnv, "pass --allow-env NAME")
+    session.runAll(chosen, variables, assertFor = { r -> selected.any { it === r } }) { outcome ->
         val r = outcome.request
         out.println("### ${r.name ?: "${r.method} ${r.url}"}")
         when (outcome) {
@@ -169,6 +162,7 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream): Int {
                 outcome.request.assertions.takeIf { outcome.assertionsNotRun > 0 }?.forEach { out.println("NOT RUN $it") }
             }
         }
+    }
     }
     val results = outcomes.filterIsInstance<RunOutcome.Success>().flatMap { it.assertions }
     val notRun = outcomes.filterIsInstance<RunOutcome.Failure>().sumOf { it.assertionsNotRun }
