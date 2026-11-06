@@ -33,13 +33,19 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 
 fun main(args: Array<String>) = application {
+    val state = remember { AppState().also { st -> args.firstOrNull()?.let { st.open(Path.of(it)) } } }
     Window(
-        onCloseRequest = ::exitApplication,
+        onCloseRequest = {
+            // Closing waits for in-flight exchanges; do not let a stalled request keep the window open.
+            val closer = Thread { state.close() }.apply { isDaemon = true; start() }
+            closer.join(2000)
+            exitApplication()
+        },
         title = "HTTP Client",
         state = rememberWindowState(size = DpSize(1280.dp, 800.dp)),
     ) {
         MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
-            AppRoot(remember { AppState().also { st -> args.firstOrNull()?.let { st.open(Path.of(it)) } } }, window)
+            AppRoot(state, window)
         }
     }
 }

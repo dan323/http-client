@@ -1,21 +1,16 @@
 package com.dan323.httpclient.desktop
 
-import com.dan323.httpclient.adapters.JdkHttpExecutor
 import com.dan323.httpclient.adapters.UpwardEnvironmentLocator
 import com.dan323.httpclient.core.application.EnvironmentChoice
 import com.dan323.httpclient.core.application.environments
-import com.dan323.httpclient.core.application.resolve
 import com.dan323.httpclient.adapters.FileAccessPolicy
-import com.dan323.httpclient.adapters.KotlinxJsonExtractor
-import com.dan323.httpclient.adapters.LocalFileReader
-import com.dan323.httpclient.adapters.SystemEnvironmentVariables
-import com.dan323.httpclient.core.application.DynamicVariables
+import com.dan323.httpclient.adapters.SessionFactory
 import com.dan323.httpclient.core.application.HttpFileParser
 import com.dan323.httpclient.core.application.HttpParseException
-import com.dan323.httpclient.core.application.RequestRunner
-import com.dan323.httpclient.core.application.RequestSession
 import com.dan323.httpclient.core.application.RunOutcome
-import com.dan323.httpclient.core.application.withDependencies
+import com.dan323.httpclient.viewmodel.RunController
+import com.dan323.httpclient.viewmodel.RunResult
+import com.dan323.httpclient.viewmodel.RunTarget
 import com.dan323.httpclient.core.domain.RequestTemplate
 import java.nio.file.Path
 
@@ -32,31 +27,48 @@ object Workspace {
     /** Environment names from the nearest enclosing `http-client.env.json` (same rule as the CLI and the plugin). */
     fun environmentNames(file: Path): List<String> =
         UpwardEnvironmentLocator().environments(file).map { it.name }
+}
+
+/**
+ * Runs requests for the desktop app. Owns the HTTP executor (released by [close]) and keeps one session per
+ * (file, environment, variables) in a [RunController], so a login request runs once and later sends reuse it.
+ */
+class DesktopRunner(
+    private val policy: () -> Result<FileAccessPolicy> = { FileAccessPolicy.load() },
+) : AutoCloseable {
+    private val factory = SessionFactory()
+    private val controller = RunController(UpwardEnvironmentLocator()) { file -> policy().map { factory.create(file, it) } }
+
+    /** Forgets remembered responses, so the next run sends the chained requests again. */
+    fun resetChain() = controller.resetChain()
 
     /**
-     * Runs the request at [index] in [text] (with the requests it chains on), or every request when
-     * [index] is null. Blocking; [onOutcome] is called as each request completes.
+     * Runs the request at [index] in [text] (with the requests it chains on, unless they already ran for this file
+     * and environment), or every request when [index] is null. Blocking; [onOutcome] is called as each request
+     * completes. A parse or environment error is thrown as [IllegalStateException]; a bad file-access setting is
+     * returned as a failed outcome.
      */
     fun execute(
         file: Path,
         text: String,
         index: Int?,
         environment: String?,
-        policy: () -> Result<FileAccessPolicy> = { FileAccessPolicy.load() },
         onOutcome: (RunOutcome) -> Unit = {},
     ): List<RunOutcome> {
-        val dir = file.toAbsolutePath().parent
-        val requests = HttpFileParser().parse(text).requests
-        val selected = if (index == null) requests else withDependencies(requests, listOfNotNull(requests.getOrNull(index)))
-        // A name that no longer exists throws UnknownEnvironmentException, never runs another environment.
-        val variables = EnvironmentChoice.of(environment).resolve(UpwardEnvironmentLocator(), file)?.variables ?: emptyMap()
-        val accessPolicy = policy().getOrElse { e ->
-            val failure = RunOutcome.Failure(selected.firstOrNull() ?: return emptyList(), "File access configuration error: ${e.message}")
-            onOutcome(failure)
-            return listOf(failure)
+        // A name that no longer exists is rejected as an environment error, never runs another environment.
+        val target = if (index == null) RunTarget.All else RunTarget.AtIndex(index)
+        return when (val result = controller.run(file, text, target, EnvironmentChoice.of(environment), onOutcome = onOutcome)) {
+            is RunResult.Completed -> result.outcomes
+            is RunResult.Rejected -> when (result.reason) {
+                RunResult.Reason.FILE_ACCESS -> {
+                    val failure = RunOutcome.Failure(result.request ?: return emptyList(), result.message)
+                    onOutcome(failure)
+                    listOf(failure)
+                }
+                else -> throw IllegalStateException(result.message)
+            }
         }
-        val executor = JdkHttpExecutor()
-        val session = RequestSession(RequestRunner(executor, LocalFileReader(dir, accessPolicy), DynamicVariables(env = SystemEnvironmentVariables.fromConfiguration())), executor, KotlinxJsonExtractor())
-        return session.runAll(selected, variables, onOutcome = onOutcome)
     }
+
+    override fun close() = factory.close()
 }

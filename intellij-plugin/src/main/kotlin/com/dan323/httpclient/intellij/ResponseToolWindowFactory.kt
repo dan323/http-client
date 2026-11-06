@@ -2,10 +2,8 @@ package com.dan323.httpclient.intellij
 
 import com.dan323.httpclient.viewmodel.JsonPart
 import com.dan323.httpclient.viewmodel.StatusClass
-import com.dan323.httpclient.viewmodel.durationLabel
+import com.dan323.httpclient.viewmodel.OutcomeDisplay
 import com.dan323.httpclient.viewmodel.jsonSpans
-import com.dan323.httpclient.viewmodel.statusClass
-import com.dan323.httpclient.viewmodel.statusText
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.editor.colors.EditorFontType
 import com.dan323.httpclient.core.application.EnvironmentChoice
@@ -139,18 +137,23 @@ private fun StyledDocument.add(text: String, color: Color? = null, bold: Boolean
     insertString(length, text, attrs(color, bold))
 
 private fun StyledDocument.addSection(s: Section) {
-    add(s.title + "\n", bold = true)
-    when {
-        s.reused -> add("  reused earlier response (not sent again)\n\n", muted)
-        s.error != null -> add("  Error: ${s.error}\n\n", bad, bold = true)
-        else -> {
-            val status = s.status ?: 0
-            val color = when (statusClass(status)) { StatusClass.SUCCESS -> ok; StatusClass.REDIRECT -> redirect; else -> bad }
-            add("  $status ${statusText(status)}".trimEnd(), color, bold = true)
-            add("   ${durationLabel(s.millis)}\n", muted)
-            s.headers.forEach { (k, v) -> add("  $k", keyColor); add(": ", muted); add("$v\n") }
+    when (val d = s.display) {
+        is OutcomeDisplay.Reused -> {
+            add(d.summary + "\n", bold = true)
+            add("  reused earlier response (not sent again)\n\n", muted)
+        }
+        is OutcomeDisplay.Error -> {
+            add(d.summary + "\n", bold = true)
+            add("  Error: ${d.message}\n\n", bad, bold = true)
+        }
+        is OutcomeDisplay.Response -> {
+            add(d.summary + "\n", bold = true)
+            val color = when (d.statusClass) { StatusClass.SUCCESS -> ok; StatusClass.REDIRECT -> redirect; else -> bad }
+            add("  ${d.statusLabel}", color, bold = true)
+            add("   ${d.durationLabel}\n", muted)
+            d.headers.forEach { (k, v) -> add("  $k", keyColor); add(": ", muted); add("$v\n") }
             add("\n")
-            addJson(s.body)
+            addJson(d.prettyBody)
             add("\n\n")
         }
     }

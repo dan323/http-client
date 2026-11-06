@@ -7,7 +7,7 @@ import com.dan323.httpclient.core.application.RunOutcome
 import java.nio.file.Files
 import java.nio.file.Path
 
-class AppState {
+class AppState(private val runner: DesktopRunner = DesktopRunner()) : AutoCloseable {
     var file by mutableStateOf<Path?>(null)
         private set
     var text by mutableStateOf("")
@@ -61,13 +61,18 @@ class AppState {
         outcomes = emptyList()
         message = null
         try {
-            Workspace.execute(path, text, if (all) null else selected, environment) { outcomes = outcomes + it }
+            runner.execute(path, text, if (all) null else selected, environment) { outcomes = outcomes + it }
         } catch (e: Exception) {
             message = e.message ?: e::class.simpleName
         } finally {
             running = false
         }
     }
+
+    /** Forgets remembered responses, so the next run sends the chained requests again. */
+    fun resetChain() = runner.resetChain()
+
+    override fun close() = runner.close()
 
     /** Runs a file chooser, turning any failure (no display, dialog error) into a visible message. */
     fun pick(chooser: () -> Path?): Path? = try {
