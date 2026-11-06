@@ -30,7 +30,8 @@ class RunControllerMoreTest {
     private val entered = CountDownLatch(1)
     private val executor = HttpExecutor { r ->
         sent += r.url
-        if (gate != null) { entered.countDown(); gate!!.await(5, TimeUnit.SECONDS) }
+        val g = gate
+        if (g != null) { entered.countDown(); g.await(5, TimeUnit.SECONDS) }
         HttpResponse(200, listOf(Header("Content-Type", "application/json")), """{"token":"t"}""".toByteArray(), 1)
     }
     private val json = JsonExtractor { _, _ -> "t" }

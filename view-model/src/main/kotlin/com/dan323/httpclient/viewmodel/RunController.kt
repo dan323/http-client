@@ -59,6 +59,9 @@ class RunController(
 
     private val sessions = ConcurrentHashMap<SessionKey, RequestSession>()
     private val running = ConcurrentHashMap<SessionKey, Int>()
+    // Makes "evict obsolete, find or create, register as running" one step, so a concurrent run cannot evict a session
+    // between another run's lookup and its registration.
+    private val acquireLock = Any()
 
     /** Forgets remembered responses, so the next run sends the chained requests again. */
     fun resetChain() = sessions.clear()
@@ -95,22 +98,25 @@ class RunController(
         onEnvironment(env?.name)
         val variables = env?.variables ?: emptyMap()
         val key = SessionKey(file.toAbsolutePath(), env?.name, variables)
-        // Sessions for the same file+environment with other (older) variables are obsolete; drop them unless running.
-        sessions.keys.filter { it.file == key.file && it.environment == key.environment && it != key && !running.containsKey(it) }
-            .forEach { sessions.remove(it) }
-        val session = sessions[key] ?: run {
-            val created = newSession(file).getOrElse {
-                return RunResult.Rejected(RunResult.Reason.FILE_ACCESS, "File access configuration error: ${it.message}", current ?: requests.firstOrNull())
+        val session = synchronized(acquireLock) {
+            // Sessions for the same file+environment with other (older) variables are obsolete; drop them unless running.
+            sessions.keys.filter { it.file == key.file && it.environment == key.environment && it != key && !running.containsKey(it) }
+                .forEach { sessions.remove(it) }
+            val found = sessions[key] ?: run {
+                val created = newSession(file).getOrElse {
+                    return RunResult.Rejected(RunResult.Reason.FILE_ACCESS, "File access configuration error: ${it.message}", current ?: requests.firstOrNull())
+                }
+                sessions.putIfAbsent(key, created) ?: created
             }
-            sessions.putIfAbsent(key, created) ?: created
+            running.merge(key, 1, Int::plus)
+            found
         }
-        running.merge(key, 1, Int::plus)
         try {
             val outcomes = if (current == null) session.runAll(requests, variables, onOutcome = onOutcome)
             else session.runChained(requests, current, variables, onReused, onOutcome)
             return RunResult.Completed(env?.name, outcomes)
         } finally {
-            running.compute(key) { _, n -> if (n == null || n <= 1) null else n - 1 }
+            synchronized(acquireLock) { running.compute(key) { _, n -> if (n == null || n <= 1) null else n - 1 } }
         }
     }
 }

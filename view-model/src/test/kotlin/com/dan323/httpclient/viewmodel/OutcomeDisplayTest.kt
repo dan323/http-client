@@ -31,7 +31,7 @@ class OutcomeDisplayTest {
         assertEquals("GET http://h/x", d.summary)
         assertEquals("text/plain", d.contentType)
         assertEquals(listOf("Content-Type" to "text/plain", "X-A" to "1"), d.headers)
-        assertEquals("12 ms", d.durationLabel.takeIf { it.isNotEmpty() }?.let { durationLabel(12) })
+        assertEquals("12 ms", d.durationLabel)
         assertEquals(sizeLabel(0), d.sizeLabel)
     }
 
