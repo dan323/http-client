@@ -33,9 +33,16 @@ class SessionFactoryTest {
         val dir = Files.createTempDirectory("factory")
         val outside = Files.createTempFile("outside", ".txt")
         val file = dir.resolve("a.http").also { Files.writeString(it, "POST http://127.0.0.1:1/\n\n< $outside\n") }
-        SessionFactory().use { factory ->
+        var sent = false
+        val executor = com.dan323.httpclient.core.port.out.HttpExecutor {
+            sent = true
+            com.dan323.httpclient.core.domain.HttpResponse(200, emptyList(), ByteArray(0), 0)
+        }
+        SessionFactory(executor).use { factory ->
             val out = factory.create(file, FileAccessPolicy()).runAll(HttpFileParser().parse(Files.readString(file)).requests, emptyMap())
-            assertIs<RunOutcome.Failure>(out.single())
+            val failure = assertIs<RunOutcome.Failure>(out.single())
+            assertTrue("is outside the allowed folders" in failure.message)
+            assertTrue(!sent)
         }
     }
 
@@ -83,10 +90,13 @@ class SessionFactoryOwnershipTest {
 
     @Test fun createConfiguredBuildsASessionWhenSettingsAreValid() {
         val file = Files.createTempDirectory("factory").resolve("a.http")
-        SessionFactory(CountingExecutor()).use { f ->
-            val r = f.createConfigured(file)
-            // valid unless the test machine sets a bad HTTPC allow-root; either way it must not throw
-            assertTrue(r.isSuccess || r.exceptionOrNull()?.message != null)
+        val property = FileAccessPolicy.ALLOW_PROPERTY
+        val previous = System.getProperty(property)
+        try {
+            System.setProperty(property, "")
+            SessionFactory(CountingExecutor()).use { f -> assertTrue(f.createConfigured(file).isSuccess) }
+        } finally {
+            if (previous == null) System.clearProperty(property) else System.setProperty(property, previous)
         }
     }
 

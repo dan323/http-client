@@ -84,6 +84,10 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             OutlinedButton(enabled = state.file != null && !state.running, onClick = { scope.launch(Dispatchers.IO) { state.run(all = true) } }) {
                 Text("Send all")
             }
+            // Responses of earlier requests (e.g. a login token) are remembered between runs; this forgets them.
+            OutlinedButton(enabled = state.file != null && !state.running, onClick = { state.resetChain() }) {
+                Text("Forget responses")
+            }
         }
     }
 
