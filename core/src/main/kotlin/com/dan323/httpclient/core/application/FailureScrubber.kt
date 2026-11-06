@@ -21,11 +21,10 @@ internal object FailureScrubber {
             forms.putIfAbsent(enc, name)
             forms.putIfAbsent(enc.replace("+", "%20"), name)
         }
-        var out = message
-        // longest first so a value containing another one is hidden as a whole
-        for ((text, name) in forms.entries.sortedByDescending { it.key.length }) {
-            out = out.replace(text, "{{${name.trim()}}}")
-        }
-        return out
+        if (forms.isEmpty()) return message
+        // one pass, longest alternative first: a value containing another one is hidden as a whole and the
+        // inserted `{{name}}` placeholders are never scrubbed again
+        val regex = Regex(forms.keys.sortedByDescending { it.length }.joinToString("|") { Regex.escape(it) })
+        return regex.replace(message) { "{{${forms.getValue(it.value).trim()}}}" }
     }
 }
