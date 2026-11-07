@@ -44,4 +44,28 @@ class RunReportTest {
         assertTrue(RunReport.from(listOf(ok("a", 1, pass("s")))).passed)
         assertTrue(RunReport.from(emptyList()).passed)
     }
+
+    private fun status(name: String, code: Int) = RunOutcome.Success(req(name), HttpResponse(code, emptyList(), ByteArray(0), 5))
+
+    @Test fun httpErrorsAreIgnoredByDefault() {
+        val r = RunReport.from(listOf(status("a", 500), status("b", 404)))
+        assertTrue(r.passed)
+        assertNull(r.entries[0].httpError)
+    }
+
+    @Test fun failOnHttpErrorFailsStatusesFrom400() {
+        val r = RunReport.from(listOf(status("a", 200), status("b", 399), status("c", 400), status("d", 503)), failOnHttpError = true)
+        assertEquals(listOf(null, null, "HTTP 400", "HTTP 503"), r.entries.map { it.httpError })
+        assertEquals(listOf(true, true, false, false), r.entries.map { it.passed })
+        assertFalse(r.passed)
+    }
+
+    @Test fun failOnHttpErrorSkipsPrerequisitesAndKeepsAssertionVerdicts() {
+        val outcomes = listOf(status("pre", 404), status("main", 200))
+        val r = RunReport.from(outcomes, failOnHttpError = true) { it.request.name == "pre" }
+        assertTrue(r.passed)
+        assertNull(r.entries[0].httpError)
+        assertTrue(RunOutcome.Success(req("x"), HttpResponse(404, emptyList(), ByteArray(0), 1)).httpError)
+        assertFalse(RunOutcome.Success(req("x"), HttpResponse(302, emptyList(), ByteArray(0), 1)).httpError)
+    }
 }

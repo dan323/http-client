@@ -32,6 +32,7 @@ import kotlin.system.exitProcess
 private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] [--list]
                   [--report-json FILE] [--report-junit FILE] [--allow-file-root DIR]
                   [--quiet] [--output FILE] [--var NAME=VALUE] [--timeout DURATION]
+                  [--fail-on-http-error]
 
   --env NAME       use variables from NAME in http-client.env.json (nearest http-client.env.json, searching
                    upward from the file; http-client.private.env.json beside it is merged)
@@ -51,6 +52,9 @@ private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NA
   --timeout D      total time limit for requests without `# @timeout` (headers and body), such as 30, 500ms,
                    45s or 2m (plain numbers are seconds); default 60s; -Dhttpclient.timeout and HTTPC_TIMEOUT
                    set it when the option is absent
+  --fail-on-http-error  exit 1 when a selected request gets a 4xx/5xx response (status >= 400), also if its
+                   assertions pass; printed to stderr even with --quiet; requests run only to feed chaining
+                   are not judged; by default an HTTP error status is not a failure; not with --list
 
 A summary line ("3 requests, 2 passed, 1 failed in 1.2s") always goes to stderr after a run.
 (report/output paths must differ from the .http file and each other;
@@ -70,6 +74,8 @@ data class Options(
     val vars: Map<String, String> = emptyMap(),
     /** Default total timeout in milliseconds, or null to use `-Dhttpclient.timeout` / `HTTPC_TIMEOUT` / the built-in default. */
     val timeoutMillis: Long? = null,
+    /** `--fail-on-http-error`: a selected request answering status >= 400 fails the run. */
+    val failOnHttpError: Boolean = false,
 )
 
 /**
@@ -107,6 +113,7 @@ private fun parseArgsUnchecked(args: List<String>, err: PrintStream): Options? {
     var output: Path? = null
     val vars = LinkedHashMap<String, String>()
     var timeoutMillis: Long? = null
+    var failOnHttpError = false
     var i = 0
     fun value(): String? = args.getOrNull(++i)?.takeIf { it.isNotEmpty() && !it.startsWith("--") }
     while (i < args.size) {
@@ -135,6 +142,7 @@ private fun parseArgsUnchecked(args: List<String>, err: PrintStream): Options? {
                     err.println("httpc: ${e.message}"); return null
                 }
             }
+            "--fail-on-http-error" -> failOnHttpError = true
             "--report-json" -> { if (reportJson != null) return null; reportJson = Path.of(value() ?: return null) }
             "--report-junit" -> { if (reportJunit != null) return null; reportJunit = Path.of(value() ?: return null) }
             else -> if (a.startsWith("--") || file != null || a.isEmpty()) return null else file = Path.of(a)
@@ -156,10 +164,10 @@ private fun parseArgsUnchecked(args: List<String>, err: PrintStream): Options? {
     if (output != null && ((reportJson != null && samePath(output, reportJson)) || (reportJunit != null && samePath(output, reportJunit)))) {
         err.println("httpc: --output: same file as a report option"); return null
     }
-    if (list && (quiet || vars.isNotEmpty() || timeoutMillis != null)) {
-        err.println("httpc: --quiet, --var and --timeout cannot be combined with --list (nothing is run)"); return null
+    if (list && (quiet || vars.isNotEmpty() || timeoutMillis != null || failOnHttpError)) {
+        err.println("httpc: --quiet, --var, --timeout and --fail-on-http-error cannot be combined with --list (nothing is run)"); return null
     }
-    return Options(input, env, request, list, allowEnv, reportJson, reportJunit, allowFileRoots, quiet, output, vars, timeoutMillis)
+    return Options(input, env, request, list, allowEnv, reportJson, reportJunit, allowFileRoots, quiet, output, vars, timeoutMillis, failOnHttpError)
 }
 
 /** True when both paths name the same file: equal after normalisation, or the same existing file (symlinks, hard links). */
@@ -277,6 +285,9 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream, writer: R
                 outcome.savedTo?.let { err.println("Saved response: $it") }
                 outcome.saveError?.let { err.println("Error: $it"); saveFailed = true }
                 outcome.linkError?.let { err.println("warning: $it") }
+                if (opts.failOnHttpError && outcome.httpError && selected.any { it === r }) {
+                    err.println("FAIL HTTP ${resp.statusCode} from ${r.name ?: "${r.method} ${r.url}"} (--fail-on-http-error)")
+                }
                 outcome.assertions.forEach {
                     if (!it.passed) (if (opts.quiet) err else out).println("FAIL ${it.assertion} -- ${it.message}")
                     else if (!opts.quiet) out.println("PASS ${it.assertion}")
@@ -294,7 +305,7 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream, writer: R
     if (!opts.quiet && (results.isNotEmpty() || notRun > 0)) {
         out.println("Assertions: ${results.count { it.passed }} passed, ${results.count { !it.passed }} failed, $notRun not run")
     }
-    val report = RunReport.from(outcomes) { o -> selected.none { it === o.request } }
+    val report = RunReport.from(outcomes, opts.failOnHttpError) { o -> selected.none { it === o.request } }
     val elapsed = (System.nanoTime() - started) / 1_000_000
     err.println(summary(report, elapsed))
     // Responses saved by `>>` / `>>!` are not replaced by a report or --output that names the same file (symlinks, case aliases too).
