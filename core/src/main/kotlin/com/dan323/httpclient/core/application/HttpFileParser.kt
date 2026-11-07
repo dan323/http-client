@@ -159,7 +159,7 @@ class HttpFileParser : ParseHttpFile {
      * Drops a trailing ` # comment` from an assertion (a `#` preceded by whitespace and outside quotes).
      * A bare `# @assert` yields an empty string, which the evaluator reports as "missing expression".
      */
-    private fun stripTrailingComment(text: String): String {
+    internal fun stripTrailingComment(text: String): String {
         var quote: Char? = null
         for ((i, c) in text.withIndex()) {
             when {
