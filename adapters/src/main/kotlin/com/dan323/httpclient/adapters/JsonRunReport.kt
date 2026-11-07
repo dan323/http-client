@@ -13,6 +13,8 @@ import kotlinx.serialization.json.Json
  * Format contract: a top-level `version` (currently [VERSION]) is bumped on incompatible changes; [parse] rejects a
  * newer version and accepts a missing one as 1. `passed`, `totals` and each entry's `passed` are derived: they are
  * written for consumers and ignored by [parse], which recomputes them from `results`.
+ * An entry's optional `httpError` (for example `"HTTP 503"`, null otherwise) is data, not derived: it is set when the run
+ * failed on HTTP error statuses (`--fail-on-http-error`), makes the entry `passed: false`, and is absent in older reports.
  * Entries may contain resolved-looking data from the run (URLs and error messages can include secrets such as tokens
  * in query strings); treat report files as sensitive CI artifacts.
  */

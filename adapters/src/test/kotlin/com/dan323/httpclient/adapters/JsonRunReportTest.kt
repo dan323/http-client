@@ -63,4 +63,11 @@ class JsonRunReportTest {
         val old = JsonRunReport.render(report).replace(Regex(""",\s*"httpError": null"""), "")
         assertEquals(report, JsonRunReport.parse(old))
     }
+
+    @Test fun httpErrorWithFailedAssertionKeepsBoth() {
+        val bad = AssertionResult("status == 200", false, "200", "500", "expected 200 but was 500")
+        val e = RunReport(listOf(ReportEntry("a", "GET", "http://x", 500, 3, listOf(bad), 0, null, httpError = "HTTP 500")))
+        assertEquals(e, JsonRunReport.parse(JsonRunReport.render(e)))
+        assertEquals(1, e.failedRequests)
+    }
 }

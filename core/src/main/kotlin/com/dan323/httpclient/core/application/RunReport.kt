@@ -20,7 +20,9 @@ data class ReportEntry(
     val passed: Boolean get() = error == null && httpError == null && assertions.all { it.passed }
 }
 
-/** Pure summary of a run built from its [RunOutcome]s; exporters (JSON, JUnit XML) live in the adapters. */
+/**
+ * Pure summary of a run built from its [RunOutcome]s. An entry passes when it completed, all its assertions passed and
+ * (only for runs built with `failOnHttpError`) its response status was not an HTTP error ([ReportEntry.httpError]); exporters (JSON, JUnit XML) live in the adapters. */
 data class RunReport(val entries: List<ReportEntry>) {
     val requests: Int get() = entries.size
     val passedRequests: Int get() = entries.count { it.passed }
