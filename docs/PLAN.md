@@ -18,7 +18,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F6 | More dynamic variables (`$random.*`, `$env.X`, timestamp offsets, `$randomInt` range) | core | done |
 | F7 | More extraction: XPath, regex, headers (for chaining and assertions) | core | done |
 | F8 | Executor settings: redirects, timeouts, proxy | core | done |
-| F9 | Response history and saved responses | core, UIs | partial: `>>` / `>>!` / `<>` and link recording done (T26); history browser (T18) and opening a `<>`-linked response in desktop and plugin open |
+| F9 | Response history and saved responses | core, UIs | partial: `>>` / `>>!` / `<>` and link recording done (T26); history browser (T18, desktop) and opening a `<>`-linked response (T18 desktop, T27 plugin) open |
 | F10 | CLI: `--json`, `--junit`, `--quiet`, `--output`, `--var`, meaningful exit codes | CLI | done (T10): reports, exit codes 0/1/2/3, `--quiet`, `--output`, `--var`, summary line |
 | F11 | Desktop: remember last file, environment, window, recent files | desktop | done (T14): last file, environment, window, recent files |
 | F12 | Desktop: several files at once, folder view | desktop | open |
@@ -57,6 +57,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 | T22 | **Plugin intelligence:** completion, go-to-request, inspections from T13; show assertion results | F18, F14, F1 | L | T13, T21 |
 | T23 | **Plugin response panel:** remember the environment across restarts, run all | F19 | M | T21 |
 | T24 | **Packaging in CI** (rest of F20): build DMG/MSI/DEB and the plugin zip on the matching OS (tests on three OS already run) | F20 | S | – |
+| T27 | **Plugin: open the linked/stored response** of a request (`<>` link, `ResponseLinks.latest`) in the plugin | F9 | S | T21 |
 | T25 | **Final cross-platform QA and release notes:** manual pass of CLI, desktop (dialogs, MSI) and plugin; fix findings | F20 | M | all |
 
 ### Feature to task map
@@ -65,7 +66,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 |---|---|
 | F1 | T17, T22 |
 | F4 | T8 |
-| F9 | T18 |
+| F9 | T18, T27 |
 | F11 | T14 |
 | F12 | T15 |
 | F13 | T18 |
@@ -90,7 +91,7 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 | 2 | T13 (variable analysis), T14 (desktop persistence) | disjoint areas |
 | 3 | T8 (multipart), T19 (cancel button), T23 (plugin panel) | disjoint areas |
 | 4 | T22 (plugin intelligence), T16 (desktop editor), T15 (workspace) | need T13 / T14 |
-| 5 | T17 (desktop extras), T18 (history browser), T20 (environment editor), T24 (packaging) | up to three at a time |
+| 5 | T17 (desktop extras), T18 (history browser), T20 (environment editor), T24 (packaging), T27 (plugin: open linked response) | up to three at a time |
 | 6 | T25 (QA and release notes) | needs everything |
 
 ### Rules for every task

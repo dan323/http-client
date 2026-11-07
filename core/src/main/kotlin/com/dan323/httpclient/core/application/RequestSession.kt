@@ -67,6 +67,10 @@ class RequestSession(
         try { return block() } finally { lock.unlock() }
     }
 
+    /**
+     * Sends one request and remembers its response when named. A bare `run` does NOT persist: the `>>` / `>>!` save and
+     * the `<>` link are applied only by [runAll] and [runChained] (which build on it), once per request, after its assertions.
+     */
     fun run(template: RequestTemplate, variables: Map<String, String>): HttpResponse = locked {
         substituted.clear()
         val request = runner.resolve(template, variables, ::reference, ::record)
@@ -145,6 +149,10 @@ class RequestSession(
                 }
             } catch (e: java.io.IOException) {
                 result.copy(saveError = scrubbed("Cannot save response to '${save.path}': ${e.message}"))
+            } catch (e: java.util.concurrent.CancellationException) {
+                rethrowCancellation(e)
+            } catch (e: InterruptedException) {
+                rethrowCancellation(e)
             } catch (e: RuntimeException) {
                 result.copy(saveError = scrubbed("Cannot save response to '${save.path}': ${e.message ?: e::class.simpleName}"))
             }
@@ -155,9 +163,22 @@ class RequestSession(
                 result
             } catch (e: java.io.IOException) {
                 result.copy(linkError = scrubbed("Cannot keep the response link: ${e.message ?: e::class.simpleName}"))
+            } catch (e: java.util.concurrent.CancellationException) {
+                rethrowCancellation(e)
+            } catch (e: InterruptedException) {
+                rethrowCancellation(e)
+            } catch (e: RuntimeException) {
+                // the response and its assertion results are kept; only the link failed
+                result.copy(linkError = scrubbed("Cannot keep the response link: ${e.message ?: e::class.simpleName}"))
             }
         }
         return result
+    }
+
+    /** Cancellation and interruption are never turned into a save/link error: restore the flag and let [runAll] stop the session. */
+    private fun rethrowCancellation(e: Exception): Nothing {
+        if (e is InterruptedException || e.cause is InterruptedException) Thread.currentThread().interrupt()
+        throw e
     }
 
     private fun scrubbed(message: String) = FailureScrubber.scrub(message, substituted)

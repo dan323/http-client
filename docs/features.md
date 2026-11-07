@@ -238,10 +238,24 @@ GET {{host}}/orders/1
   Paths are not part of reports. The path shown after a successful save (`savedTo`, the CLI line) follows the same rule
   as error messages: values substituted into `{{variables}}` (3 characters or more) come back as `{{name}}`, so
   `>> out/{{token}}.json` prints `out/{{token}}.json`, never the token. The file on disk has the real name.
-- After the write the final real path of the file is checked again; if a folder was swapped for a symlink in between
-  and the file landed outside the allowed folders, it is deleted and the save fails. As with `< path` reads, an attacker
-  who can write inside the allowed folders can still race the window between check and write (the JDK has no
-  openat-style API).
+- The temp file (random name, owner-only) is written in the final, already verified folder; `>>!` is one atomic rename
+  inside that folder, and `>>` hard-links the finished temp file to the first free name (a link fails if the name exists,
+  so nothing is clobbered and no empty or partial file is ever visible), then removes the temp name (without hard links a
+  plain move without replace is used). Right before publishing, the folder's real path must still be the verified one
+  and the temp file must be in it. If a folder was swapped for a symlink after validation, the source (named by its random
+  temp name) does not exist at the new location, so the rename/link fails and nothing outside is touched, also for `>>!`.
+  Residual race (same family as `< path` reads; the JDK has no openat): an attacker who can write inside the allowed
+  folders, can observe the random temp name and swaps the folder in the microseconds between the last check and the
+  syscall, while placing a file of that name at the new location, can still make one save land outside; that is detected
+  afterwards, a `>>` file is removed, a `>>!` replacement cannot be restored and the error says so.
+- The path is validated exactly as written: leading or trailing whitespace is refused (never trimmed into a different
+  path).
+- Bare `RequestSession.run` does not save or link; `>>`/`>>!`/`<>` are applied by `runAll`/`runChained`, once per request.
+  A `>> {{other.response...}}` path makes `other` a prerequisite that runs first (also through file variables).
+  Cancellation or interruption inside a save or link is not reported as a save error: it stops the session.
+- CLI: a `--report-*` / `--output` file that is the same file as a response saved in this run (symlinks and case aliases
+  included) is not written, an error is printed and the saved response is kept. Corrupt-history warnings go to stderr
+  of the run.
 - Prerequisites: a request that only runs to feed `{{name.response...}}` to the request you asked for (`@import`/chained
   dependencies) is sent like any other, so its own `>>` and `<>` directives fire too (it saved its `pre.json`). A
   prerequisite that is reused instead of re-sent does not save or link again.
@@ -260,7 +274,8 @@ link). Recording is opt-in: `SessionFactory(history = FileHistoryStore())` (or a
 root); the CLI and the plugin pass it, so the response of a linked request lands in `.http-history/`. The history keeps
 the newest 50 runs per file, and additionally the newest record of every `<>` key even when it is older than that, so a
 link keeps resolving however often other requests run (at most one extra run folder per distinct linked request; an
-entry whose request lost its `<>` line or was removed stays until you delete it from `.http-history/`). Entries written
+entry whose request lost its `<>` line or was removed stays until you delete it from `.http-history/`). Only a record whose body can still be read
+protects its key from pruning. Entries written
 before keys existed carry no key and are pruned as ordinary runs. Opening the linked response in
 the desktop app or the plugin is not implemented yet.
 
@@ -272,7 +287,7 @@ today (see "Saved responses"); the CLI, desktop app and plugin do not record ord
 keeps it in `.http-history/<file name>/` next to the `.http` file; the folder is injectable
 (`FileHistoryStore.underRoot(dir)` for a shared root, or any `(Path) -> Path`).
 
-Layout: one folder per run, named by its id (`20261106T101500123Z-a1b2c3d4`: UTC time + random), holding `run.json`
+Layout: one folder per run, named by its id (`20261106T101500123Z-n0000-a1b2c3d4`: UTC time, a sequence number within the millisecond so equal-time runs keep their recorded order, random suffix; ids from before the sequence existed stay readable and sort first), holding `run.json`
 (version, id, timestamp, the report in the `JsonRunReport` format, and per response: status, headers, duration,
 body size, `bodyTruncated`) and `<index>.body` (raw bytes). `run.json` is written last; a folder without it is
 incomplete and ignored (removed after an hour). There is no shared index file, so two processes recording at once

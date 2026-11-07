@@ -51,12 +51,11 @@ interface HistoryStore {
 
     /**
      * Records the single [response] of a request that has a `<> path` link, under [key] (see `ResponseLinks.key`).
-     * [report] has exactly one entry. The default stores a plain one-request run, which [latestLinked] finds again only
-     * for a named request (key = name); implementations should keep the key.
+     * [report] has exactly one entry. Every implementation must keep [key]: there is deliberately no default, because
+     * falling back to [record] would lose the key and break [latestLinked] for unnamed requests.
      */
-    fun recordLinked(httpFile: Path, key: String, report: RunReport, response: HttpResponse): HistoryRun =
-        record(httpFile, report, listOf(response))
+    fun recordLinked(httpFile: Path, key: String, report: RunReport, response: HttpResponse): HistoryRun
 
     /** The most recent stored response recorded for [key] (a request name, or the key of an unnamed request), or null. */
-    fun latestLinked(httpFile: Path, key: String): StoredResponse? = latestResponse(httpFile, key)
+    fun latestLinked(httpFile: Path, key: String): StoredResponse?
 }
