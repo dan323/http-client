@@ -63,7 +63,7 @@ These are what Bruno / Postman users will ask for. Each needs a decision, not a 
 ## 4. Suggested order
 
 1. T21 first: verify the plugin in a Community IDE (T13 and T26 are merged).
-2. Robustness quick-wins: G1, G2, G6 (all small), then G7.
+2. Robustness quick-wins: G6 (small); G1-G5 and G7 are done, G8 can follow.
 3. Planned feature-work from PLAN.md: T8, then the editor-intelligence and plugin tasks.
 4. Distribution (G9, T24, T25) and the import decision.
 
