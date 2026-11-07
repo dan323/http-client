@@ -108,4 +108,25 @@ class AtomicReportWriterTest {
         assertEquals("old", target.readText())
         assertEquals(listOf("report.json"), leftovers(dir))
     }
+
+    @Test fun bytesAreWrittenExactlyAtomicallyAndOwnerOnly() {
+        val dir = createTempDirectory("writer")
+        val target = dir.resolve("a/b/blob.bin")
+        val bytes = ByteArray(256) { it.toByte() }
+        AtomicReportWriter().write(target, bytes)
+        assertTrue(bytes.contentEquals(Files.readAllBytes(target)))
+        AtomicReportWriter().write(target, ByteArray(0))
+        assertEquals(0L, Files.size(target))
+        assertEquals(listOf("blob.bin"), leftovers(target.parent))
+        if (posix) assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(target)))
+    }
+
+    @Test fun failedByteWriteLeavesTargetAndNoTempFile() {
+        val dir = createTempDirectory("writer")
+        val target = dir.resolve("blob.bin").also { it.writeText("old") }
+        val w = AtomicReportWriter({ p, c -> Files.writeString(p, c) }, { _, _, _ -> throw java.io.IOException("no move") })
+        assertFailsWith<java.io.IOException> { w.write(target, byteArrayOf(1, 2)) }
+        assertEquals("old", target.readText())
+        assertEquals(listOf("blob.bin"), leftovers(dir))
+    }
 }

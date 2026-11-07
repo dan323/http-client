@@ -1,5 +1,6 @@
 package com.dan323.httpclient.adapters
 
+import com.dan323.httpclient.core.port.out.OutputWriter
 import com.dan323.httpclient.core.port.out.ReportWriter
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
@@ -15,21 +16,27 @@ import java.nio.file.attribute.PosixFilePermissions
  * Permissions are set deliberately (POSIX only; elsewhere the platform default applies): a new report is owner-only
  * (`rw-------`) because reports may contain URLs and error texts with secrets; replacing an existing report keeps
  * that file's permissions, so a CI job that shares reports with a group keeps working.
+ *
+ * Also an [OutputWriter]: the same atomic, permission-preserving write for raw bytes (byte-exact, no charset involved).
  */
 class AtomicReportWriter internal constructor(
     private val writeFile: (Path, String) -> Unit,
     private val move: (Path, Path, Array<StandardCopyOption>) -> Unit,
-) : ReportWriter {
+) : ReportWriter, OutputWriter {
     constructor() : this({ p, c -> Files.writeString(p, c) }, { a, b, o -> Files.move(a, b, *o) })
 
-    override fun write(path: Path, content: String) {
+    override fun write(path: Path, content: String) = writeAtomically(path) { writeFile(it, content) }
+
+    override fun write(path: Path, bytes: ByteArray) = writeAtomically(path) { Files.write(it, bytes) }
+
+    private fun writeAtomically(path: Path, fill: (Path) -> Unit) {
         val target = path.toAbsolutePath()
         target.parent?.let { Files.createDirectories(it) }
         val tmp = Files.createTempFile(target.parent, ".httpc-report-", ".tmp")
         try {
             // content first (the temp file is owner-only), then the final permissions: a read-only existing report
             // must not make the temp file unwritable
-            writeFile(tmp, content)
+            fill(tmp)
             applyPermissions(tmp, target)
             moveIntoPlace(tmp, target, move)
         } finally {
