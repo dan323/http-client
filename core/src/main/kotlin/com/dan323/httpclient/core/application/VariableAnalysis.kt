@@ -152,24 +152,47 @@ class VariableAnalysis private constructor(
             "\$env.NAME", "\$processEnv NAME",
         )
 
+        /** Most lines (or blocks) given up before the whole file is reported as one parse error. */
+        private const val MAX_REPAIRS = 50
+
         /**
          * Analyses [text]. [file] is the parsed form of [text] when the caller already has it; otherwise it is parsed
-         * here, and a malformed file yields a single [DiagnosticCodes.PARSE_ERROR] diagnostic on the offending line.
+         * here. A malformed file does not blank the analysis: each line the parser rejects is reported as a
+         * [DiagnosticCodes.PARSE_ERROR] (once per `###` block) and left out, and the rest of the file is analysed with
+         * the same offsets, so completion, find-usages and diagnostics keep working while a request is half typed.
+         * The request that failed to parse is not in the analysis (it has no `name.response.` prefix, and its
+         * references are not scanned). Only a file with more than [MAX_REPAIRS] bad lines is reported as parse errors alone.
          */
         fun analyze(text: String, environmentVariables: Collection<String> = emptySet(), file: HttpFile? = null): VariableAnalysis {
-            val table = LineTable(text)
-            val parsed = file ?: try {
-                HttpFileParser().parse(text)
-            } catch (e: HttpParseException) {
-                val line = (e.line - 1).coerceIn(0, table.count - 1)
-                val range = SourceRange(table.start(line), table.end(line) - table.start(line), line, 0)
-                val message = e.message ?: "parse error"
-                return VariableAnalysis(
-                    table, environmentVariables.toHashSet(), emptyList(), emptyList(), intArrayOf(0), intArrayOf(0),
-                    listOf(Diagnostic(DiagnosticCodes.PARSE_ERROR, Severity.ERROR, message, range)), emptyList(),
-                )
+            val environment = environmentVariables.toHashSet()
+            if (file != null) return Analyzer(text, LineTable(text), environment, file, emptyList()).run()
+            val original = LineTable(text)
+            val errors = ArrayList<Diagnostic>()
+            val reported = HashSet<Int>()
+            var source = text
+            var repairs = 0
+            while (true) {
+                val table = LineTable(source)
+                try {
+                    return Analyzer(source, table, environment, HttpFileParser().parse(source), errors).run()
+                } catch (e: HttpParseException) {
+                    val line = (e.line - 1).coerceIn(0, table.count - 1)
+                    val block = table.blockOf(line)
+                    if (reported.add(block)) {
+                        val range = SourceRange(original.start(line), original.end(line) - original.start(line), line, 0)
+                        errors += Diagnostic(DiagnosticCodes.PARSE_ERROR, Severity.ERROR, e.message ?: "parse error", range)
+                    }
+                    if (++repairs > MAX_REPAIRS) {
+                        return VariableAnalysis(
+                            original, environment, emptyList(), emptyList(), intArrayOf(0), intArrayOf(0),
+                            errors.sortedBy { it.range.offset }, emptyList(),
+                        )
+                    }
+                    // A blank line cannot be the cause on its own: drop the whole block instead.
+                    source = if (table.text(line).isBlank()) table.blank(source, table.blockStart(block), table.blockEnd(block))
+                    else table.blank(source, line, line + 1)
+                }
             }
-            return Analyzer(text, table, environmentVariables.toHashSet(), parsed).run()
         }
     }
 
@@ -202,6 +225,20 @@ class VariableAnalysis private constructor(
         fun end(line: Int) = ends[line]
         fun text(line: Int): String = text.substring(starts[line], ends[line])
 
+        private val separators: List<Int> by lazy { (0 until count).filter { text(it).startsWith("###") } }
+
+        /** The `###` block a line belongs to (the separator line itself belongs to the block above it). */
+        fun blockOf(line: Int): Int = separators.count { it < line }
+        fun blockStart(block: Int): Int = if (block == 0) 0 else separators[block - 1] + 1
+        fun blockEnd(block: Int): Int = if (block < separators.size) separators[block] else count
+
+        /** [source] with the text of lines [from] until [to] replaced by spaces; offsets and line breaks stay. */
+        fun blank(source: String, from: Int, to: Int): String {
+            val sb = StringBuilder(source)
+            for (l in from until to) for (i in starts[l] until ends[l]) sb.setCharAt(i, ' ')
+            return sb.toString()
+        }
+
         fun lineOf(offset: Int): Int {
             val i = starts.binarySearch(offset)
             return if (i >= 0) i else -i - 2
@@ -229,10 +266,11 @@ class VariableAnalysis private constructor(
         private val lines: LineTable,
         private val environment: Set<String>,
         private val file: HttpFile,
+        parseErrors: List<Diagnostic>,
     ) {
         private val requests = file.requests
         private val segments = ArrayList<Segment>()
-        private val diagnostics = ArrayList<Diagnostic>()
+        private val diagnostics = ArrayList<Diagnostic>(parseErrors)
         private val occurrences = ArrayList<Occurrence>()
         private val definitions = ArrayList<Definition>()
         private val edges = ArrayList<Edge>()
@@ -483,9 +521,9 @@ class VariableAnalysis private constructor(
             when {
                 first == null -> add(DiagnosticCodes.UNKNOWN_REQUEST, Severity.ERROR, "Unknown request '$request': no request in this file has that @name", prefix)
                 ctx is InRequest && first == ctx.index ->
-                    add(DiagnosticCodes.SELF_REFERENCE, Severity.ERROR, "Request '$request' cannot read its own response", prefix)
+                    add(DiagnosticCodes.SELF_REFERENCE, Severity.WARNING, "Request '$request' cannot read its own response the first time it runs (it can on a later run in the same session)", prefix)
                 ctx is InRequest && first > ctx.index ->
-                    add(DiagnosticCodes.REQUEST_NOT_RUN_YET, Severity.ERROR, "Request '$request' comes later in the file, so its response is not available here", prefix)
+                    add(DiagnosticCodes.REQUEST_NOT_RUN_YET, Severity.WARNING, "Request '$request' comes later in the file, so its response is only available here if it already ran in this session", prefix)
             }
             val problem = partProblem(part) ?: return
             add(DiagnosticCodes.MALFORMED_REFERENCE, Severity.ERROR, problem, lines.range(range.offset + split + 1, name.length - split - 1))

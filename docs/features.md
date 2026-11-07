@@ -90,8 +90,8 @@ all environments for a lenient editor, nothing for "no environment") and offers:
 |---|---|---|
 | `undefined-variable` | error | not a file variable, environment variable or known dynamic variable |
 | `unknown-request` | error | `{{x.response...}}` and no request is named `x` |
-| `request-not-run-yet` | error | the request `x` first appears later in the file |
-| `self-reference` | error | a request reads its own response |
+| `request-not-run-yet` | warning | the request `x` first appears later in the file (works at run time only if it already ran in the same session) |
+| `self-reference` | warning | a request reads its own response (works on a later run in the same session, e.g. a polling request) |
 | `malformed-reference` | error | `x.response` with nothing after it, an unknown part (not `status`, `headers.Name`, `body...`) or an empty `headers.`/`body.` |
 | `invalid-dynamic-variable` | error | bad arguments, e.g. `$random.integer(5, 1)` |
 | `circular-variable` | error | file variables that refer to each other (on the final value of each name) |
@@ -99,7 +99,12 @@ all environments for a lenient editor, nothing for "no environment") and offers:
 | `invalid-reference-text` | warning | `{{ a b }}`: not a reference, sent as written |
 | `duplicate-request-name` | warning | the later `# @name` repeats an earlier one |
 | `variable-defined-later` | warning | an `@a = {{b}}` value uses a file variable defined below it |
-| `parse-error` | error | the file does not parse (the parser's message, on its line) |
+| `parse-error` | error | the parser rejected a line (its message, on that line); one per `###` block |
+
+A file that does not parse is still analysed: each rejected line is reported as `parse-error` and left out (the offsets of the
+rest do not change), so completion, find-usages and the other diagnostics keep working while a request is half typed. The
+request that failed has no `name.response.` prefix and its references are not scanned. Only a file with more than 50 bad
+lines is reported as parse errors alone.
 
 It follows the run-time rules: the same reference pattern and lookup order as `VariableResolver` (a file variable
 beats the environment in request text, and in a value only when defined above it; a variable naming itself reads the
