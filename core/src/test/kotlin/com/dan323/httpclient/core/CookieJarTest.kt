@@ -47,6 +47,11 @@ class CookieJarTest {
         assertTrue(PublicSuffixList.ruleCount() > 1000, "rules loaded: ${PublicSuffixList.ruleCount()}")
     }
 
+    @Test fun aMissingPublicSuffixResourceFailsLoudly() {
+        val e = kotlin.test.assertFailsWith<IllegalStateException> { PublicSuffixList.loadForTest("/no/such/list.txt") }
+        assertTrue("/no/such/list.txt is missing from the classpath" in e.message!!)
+    }
+
     @Test fun publicSuffixEdgeInputs() {
         assertEquals(true, CookieJar.isPublicSuffix("com.")) // trailing dot is ignored
         assertEquals(false, CookieJar.isPublicSuffix("example.com."))

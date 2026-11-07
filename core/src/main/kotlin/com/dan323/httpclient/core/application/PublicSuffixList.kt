@@ -11,14 +11,14 @@ internal object PublicSuffixList {
 
     private const val RESOURCE = "/com/dan323/httpclient/core/public_suffix_list.txt"
 
-    private val rules: Rules by lazy { load() }
+    private val rules: Rules by lazy { load(RESOURCE) }
 
-    private fun load(): Rules {
+    private fun load(resource: String): Rules {
         val plain = HashSet<String>()
         val wildcards = HashSet<String>()
         val exceptions = HashSet<String>()
-        val stream = PublicSuffixList::class.java.getResourceAsStream(RESOURCE)
-            ?: error("$RESOURCE is missing from the classpath; cookie Domain checks cannot run without it")
+        val stream = PublicSuffixList::class.java.getResourceAsStream(resource)
+            ?: error("$resource is missing from the classpath; cookie Domain checks cannot run without it")
         stream.bufferedReader(Charsets.UTF_8).useLines { lines ->
             for (line in lines) {
                 val rule = line.trim().lowercase()
@@ -32,6 +32,9 @@ internal object PublicSuffixList {
         }
         return Rules(plain, wildcards, exceptions)
     }
+
+    /** Loads the rules from [resource]; fails if it is not on the classpath (tests use a wrong name). */
+    internal fun loadForTest(resource: String) = load(resource).plain.size
 
     /** Number of rules loaded from the bundled list; fails if the resource is missing. */
     fun ruleCount(): Int = rules.let { it.plain.size + it.wildcardParents.size + it.exceptions.size }
