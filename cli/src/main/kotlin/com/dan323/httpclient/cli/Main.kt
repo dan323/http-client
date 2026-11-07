@@ -50,9 +50,10 @@ private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NA
   --timeout D      total time limit for requests without `# @timeout` (headers and body), such as 30, 500ms,
                    45s or 2m (plain numbers are seconds); default 60s; -Dhttpclient.timeout and HTTPC_TIMEOUT
                    set it when the option is absent
-                   A summary line ("3 requests, 2 passed, 1 failed in 1.2s") always goes to stderr after a run.
-                   (report/output paths must differ from the .http file and each other;
-                   exit 1 = failed run, 3 = passed but a report/output file is unwritable)"""
+
+A summary line ("3 requests, 2 passed, 1 failed in 1.2s") always goes to stderr after a run.
+(report/output paths must differ from the .http file and each other;
+exit 1 = failed run, 3 = passed but a report/output file is unwritable)"""
 
 data class Options(
     val file: Path,
