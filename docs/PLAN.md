@@ -55,7 +55,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 | T21 | **Plugin GUI verification:** the sandbox IDE loads without errors; still to check by hand: highlighting, gutter icons, tool window, actions, in a Community IDE | F20, F19, F18 | S | – |
 | T22 | **Plugin intelligence:** completion, go-to-request, inspections from T13; show assertion results | F18, F14, F1 | L | T21 (T13 done: `VariableAnalysis`) |
 | T23 | **Plugin response panel:** remember the environment across restarts, run all | F19 | M | T21 |
-| T24 | **Packaging in CI** (rest of F20): build DMG/MSI/DEB and the plugin zip on the matching OS (tests on three OS already run) | F20 | S | – |
+| T24 | **Packaging in CI** (rest of F20): done in `.github/workflows/release.yml` on tags `v*` (DMG/MSI/DEB best effort, plugin zip, CLI zip/tar); first real tag run unverified | F20 | S | – |
 | T27 | **Plugin: open the linked/stored response** of a request (`<>` link, `ResponseLinks.latest`) in the plugin | F9 | S | T21 |
 | T25 | **Final cross-platform QA and release notes:** manual pass of CLI, desktop (dialogs, MSI) and plugin; fix findings | F20 | M | all |
 
