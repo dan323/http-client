@@ -1,6 +1,7 @@
 # Features
 
-A Postman-style HTTP client compatible with the JetBrains `.http` file format.
+A Postman-style HTTP client that implements a practical subset of the JetBrains `.http` format, with additional testing and execution features.
+For where this project differs from the JetBrains HTTP Client, see [jetbrains-compatibility.md](jetbrains-compatibility.md).
 Front ends: the `httpc` command line, a desktop app and an IntelliJ plugin, all built on the same `core` and `adapters`.
 
 ## `.http` files

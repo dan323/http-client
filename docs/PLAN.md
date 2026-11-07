@@ -1,7 +1,7 @@
 # Plan
 
 What is still missing, the tasks that deliver it, and the order to do them in.
-Current state: see [features.md](features.md). History: see [../CHANGELOG.md](../CHANGELOG.md).
+Current state: see [features.md](features.md); what differs from the JetBrains HTTP Client: [jetbrains-compatibility.md](jetbrains-compatibility.md). History: see [../CHANGELOG.md](../CHANGELOG.md).
 Review fixes that preceded this plan (R1-R13, all done): see [../CHANGELOG.md](../CHANGELOG.md); what was accepted is in [known-limitations.md](known-limitations.md).
 
 ## 1. Features
