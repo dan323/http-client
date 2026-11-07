@@ -9,6 +9,8 @@ Related: [competitive-gaps.md](competitive-gaps.md) (what to add), [PLAN.md](PLA
 - **File confinement can be raced.** Someone with write access inside an allowed folder can swap a parent directory for a symlink between the check and the read.
 - **Silently dropped headers.** A user-set `Host`, `Content-Length`, `Connection`, `Expect` or `Upgrade` header is dropped by the JDK client (documented, not warned about).
 
+- **Public Suffix List is a snapshot.** Cookie `Domain` checks use the list bundled in `core` (2026-11-06); suffixes added later are not recognised until the file is refreshed (procedure in `docs/features.md`, Cookie jar). Internationalised (non-ASCII) host names are compared as written, not converted to punycode.
+
 ## CLI
 
 - `samePath` compares file names case-insensitively within one folder, so two reports that differ only by case are rejected even on case-sensitive file systems (conservative).

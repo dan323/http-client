@@ -11,9 +11,9 @@ import java.time.ZoneOffset
  * shared between sessions. Supports Domain (host-only when absent), Path, Max-Age, Expires and Secure.
  *
  * Limits of this implementation:
- * - There is no full public-suffix list (core has no third-party dependencies). `Domain` attributes with a
- *   single label (`com`) and a short built-in list of common two-label suffixes (`co.uk`, ...) are rejected
- *   unless they equal the request host; other registry-controlled suffixes not in that list are not detected.
+ * - `Domain` attributes that are a public suffix per the bundled Public Suffix List ([PublicSuffixList]: `com`,
+ *   `co.uk`, `github.io`, ...) are rejected unless they equal the request host (then the cookie is host-only),
+ *   so such a cookie is never sent to other hosts under the suffix.
  * - `Secure` cookies are only accepted from, and sent over, https (no loopback exception), and a response
  *   from plain http never overwrites or deletes an existing `Secure` cookie.
  * - Size limits: a cookie (name + value) over [MAX_COOKIE_BYTES] is ignored; at most [MAX_PER_DOMAIN] cookies
@@ -179,18 +179,8 @@ class CookieJar(private val clock: () -> Instant = Instant::now) {
 
         fun isIpLiteral(host: String) = ':' in host || ipv4.matches(host)
 
-        // Common registry-controlled two-label suffixes; a stand-in for the public suffix list.
-        private val twoLabelSuffixes = setOf(
-            "co.uk", "org.uk", "ac.uk", "gov.uk", "me.uk", "ltd.uk", "plc.uk", "net.uk", "sch.uk",
-            "com.au", "net.au", "org.au", "edu.au", "gov.au", "co.nz", "org.nz", "net.nz", "govt.nz",
-            "co.jp", "or.jp", "ne.jp", "ac.jp", "go.jp", "com.br", "net.br", "org.br", "gov.br",
-            "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn", "com.mx", "com.ar", "com.tr", "com.tw",
-            "com.hk", "com.sg", "com.my", "com.ph", "com.vn", "co.in", "net.in", "org.in", "co.kr",
-            "or.kr", "co.za", "org.za", "co.il", "co.id", "co.th", "com.ua", "com.pl", "com.ru",
-        )
-
-        /** True for `com`-style single labels and the built-in two-label suffixes above (no full PSL). */
-        fun isPublicSuffix(domain: String) = '.' !in domain || domain in twoLabelSuffixes
+        /** True when [domain] is a public suffix per the bundled Public Suffix List (single labels always are). */
+        fun isPublicSuffix(domain: String) = PublicSuffixList.isPublicSuffix(domain)
 
         private val months = listOf("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
 

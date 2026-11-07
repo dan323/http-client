@@ -139,7 +139,9 @@ Setting names are case-insensitive and unknown ones are ignored. Invalid values 
 Each `RequestSession` (one CLI run; in the desktop app and plugin one per file, environment and loaded variables, kept by the shared `RunController` so when you send one request, the named requests it chains on that already ran in the session, such as a login, are not sent again until the environment file changes or the chain is reset; the selected request itself, and every request of Send all, always run again) owns an in-memory `CookieJar` in `core`. `Set-Cookie` headers
 of a response are stored, and later requests in the same session to a matching host and path get a `Cookie` header, so a login
 request followed by an authenticated one just works. Sessions never share cookies and nothing is persisted to disk.
-Supported: `Domain` (host-only when absent; a host cannot set cookies for an unrelated domain), `Path` (matched on the raw,
+Supported: `Domain` (host-only when absent; a host cannot set cookies for an unrelated domain, and a `Domain` that is a
+public suffix per the Public Suffix List, such as `com`, `co.uk` or `github.io`, is rejected unless it equals the request host,
+in which case the cookie stays host-only and is never sent to other hosts under that suffix), `Path` (matched on the raw,
 undecoded path), `Max-Age` (digits with optional `-`; `+5` or text is ignored; extreme values saturate), `Expires` (lenient RFC 6265
 date parsing: `21 Oct 2015`, `21-Oct-2015`, 2-digit years, asctime; unparseable is ignored; `Max-Age` wins), `Secure`;
 `Max-Age<=0` or a past `Expires` deletes. `# @no-cookie-jar` makes a request neither send nor store cookies.
@@ -153,9 +155,14 @@ client is never asked to follow redirects (its forwarding of such headers varies
 through the same code), so this holds on every JDK. With `@no-cookie-jar` the jar is only skipped (nothing read or stored) and explicit
 credential headers are kept on same-origin hops. Only these three headers are stripped: other custom headers such as `X-API-Key` still cross origins on a redirect, so do not put a secret in one if the server may redirect elsewhere. 307/308 re-send the request body to the new origin (as the JDK and curl do). The reported duration is the sum of all hops.
 
-Limitations: a `Cookie` header written in the request is sent as is (the jar adds nothing); there is no public-suffix list, only
-single-label `Domain` values and a short built-in list of common two-label suffixes (`co.uk`, `com.au`, ...) are rejected,
-and an IP host only matches exactly; `Secure` cookies are neither accepted from nor sent over plain http (no localhost exception),
+Public Suffix List: `core` stays free of third-party libraries, so the list is a bundled classpath resource,
+`core/src/main/resources/com/dan323/httpclient/core/public_suffix_list.txt` (ICANN and private sections, rules only; the first
+line records the list version and commit), read by `PublicSuffixList` (wildcard and exception rules supported; a name with no
+matching rule counts as a one-label suffix, as in the PSL algorithm). The list is a snapshot and goes stale as registries change;
+to update it, download `https://publicsuffix.org/list/public_suffix_list.dat`, drop comment lines (`//`), blank lines and
+anything after whitespace, put a header line with the new `VERSION` and `COMMIT` on top, replace the file and run `./gradlew :core:test`.
+
+Limitations: a `Cookie` header written in the request is sent as is (the jar adds nothing); an IP host only matches exactly; `Secure` cookies are neither accepted from nor sent over plain http (no localhost exception),
 and a plain-http response cannot overwrite a `Secure` cookie; a cookie over 4096 bytes is ignored, at most 50 per domain and
 3000 in total (oldest first evicted); no SameSite handling. `@no-cookie-jar` cannot disable a `CookieHandler` configured
 on an `HttpClient` injected into `JdkHttpExecutor` (that handler still sends and stores on its own).
