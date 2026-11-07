@@ -2,7 +2,7 @@
     <id>com.dan323.httpclient</id>
     <name>HTTP Client</name>
     <vendor>dan323</vendor>
-    <description>Run requests from JetBrains-style .http files in any IntelliJ-based IDE.</description>
+    <description>Run requests from .http files (a practical subset of the JetBrains format) in any IntelliJ-based IDE.</description>
 
     <depends>com.intellij.modules.platform</depends>
 

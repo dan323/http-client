@@ -31,7 +31,7 @@ compose.desktop {
             packageName = "HTTP Client"
             // Installers require MAJOR >= 1, so this is independent of the project version.
             packageVersion = "1.0.0"
-            description = "Postman-style client for JetBrains .http files"
+            description = "Postman-style client for .http files (a practical subset of the JetBrains format)"
             windows { menuGroup = "HTTP Client" }
         }
     }
