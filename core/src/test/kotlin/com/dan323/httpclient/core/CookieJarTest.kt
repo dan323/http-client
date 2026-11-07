@@ -31,6 +31,36 @@ class CookieJarTest {
         assertNull(jar.headerFor("http://other.localhost/")) // became host-only
     }
 
+    @Test fun publicSuffixListRules() {
+        val suffixes = listOf("com", "co.uk", "com.au", "github.io", "blogspot.com", "s3.amazonaws.com", "foo.ck", "a.kobe.jp", "xyz", "localhost", "unknowntld")
+        suffixes.forEach { assertEquals(true, CookieJar.isPublicSuffix(it), it) }
+        // wildcard `*.ck` with exception `!www.ck`, and `*.kobe.jp` with `!city.kobe.jp`
+        listOf("example.com", "example.co.uk", "me.github.io", "www.ck", "city.kobe.jp", "a.b.example.com").forEach {
+            assertEquals(false, CookieJar.isPublicSuffix(it), it)
+        }
+    }
+
+    @Test fun rejectsPublicSuffixDomainsBeyondTheOldShortList() {
+        set("http://a.example.ck/", "w=1; Domain=example.ck") // wildcard rule: example.ck is a suffix
+        set("http://me.github.io/", "g=1; Domain=github.io") // private-section suffix
+        set("http://a.b.s3.amazonaws.com/", "s=1; Domain=s3.amazonaws.com")
+        set("http://x.com.br/", "p=1; Domain=com.br")
+        assertEquals(0, jar.size())
+    }
+
+    @Test fun acceptsRegistrableDomainUnderPublicSuffix() {
+        set("http://www.example.co.uk/", "ok=1; Domain=example.co.uk")
+        assertEquals("ok=1", jar.headerFor("http://api.example.co.uk/"))
+        set("http://www.city.kobe.jp/", "k=1; Domain=city.kobe.jp") // exception rule: not a suffix
+        assertEquals("k=1", jar.headerFor("http://x.city.kobe.jp/"))
+    }
+
+    @Test fun publicSuffixDomainEqualToHostIsHostOnlyAndNotSentAcross() {
+        set("http://github.io/", "h=1; Domain=github.io")
+        assertEquals("h=1", jar.headerFor("http://github.io/"))
+        assertNull(jar.headerFor("http://victim.github.io/"))
+    }
+
     @Test fun ipLiteralsMatchExactlyOnly() {
         set("http://1.2.3.4/", "a=1; Domain=3.4", "b=2; Domain=1.2.3.4", "c=3")
         assertEquals("b=2; c=3", jar.headerFor("http://1.2.3.4/"))
