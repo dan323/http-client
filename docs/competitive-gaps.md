@@ -35,7 +35,7 @@ We do not try to match either there; we win on plain files, no proprietary colle
 | Assertion results in the desktop and plugin panels         | T17, T22              |
 | Run all, remember environment in the plugin                | T23                   |
 | Cancel button                                              | T19                   |
-| Installers and plugin zip built in CI                      | T24                   |
+| Installers and plugin zip built in CI (release workflow done; T25 QA of the assets remains) | T25 |
 
 ## 2. Gaps not in the plan yet
 
@@ -44,7 +44,6 @@ Ordered by value. "Evidence" is where the current behavior is documented or obse
 | #  | Gap                                                                                                                                                                                                                                         | Why it matters                                                                                                                                              | Evidence                                                                     | Size |
 |----|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------|------|
 | G8 | **Cookie domain checks against the Public Suffix List** (or document the approximation prominently).                                                                                                                                        | Cookie scoping is approximate today. Low impact for a dev tool.                                                                                             | features.md, cookie jar notes                                                | S    |
-| G9 | **Adoption and distribution.** Publish the plugin, desktop installers and a downloadable CLI; add examples and a getting-started page.                                                                                                      | The product is feature-rich but not installable by an outsider yet.                                                                                         | PLAN.md T24, T25                                                             | M    |
 
 ## 3. Decisions to make (currently out of scope)
 
@@ -64,6 +63,6 @@ These are what Bruno / Postman users will ask for. Each needs a decision, not a 
 1. T21 first: verify the plugin in a Community IDE (T13 and T26 are merged).
 2. Robustness quick-wins: G1-G7 are done, G8 can follow.
 3. Planned feature-work from PLAN.md: T8, then the editor-intelligence and plugin tasks.
-4. Distribution (G9, T24, T25) and the import decision.
+4. Publishing to external channels (Marketplace, Homebrew, Scoop, winget; see the follow-ups in [getting-started.md](getting-started.md)), T25 and the import decision. In-repo distribution (G9: release workflow, CLI distribution, getting-started page, examples) is done.
 
 Do not add protocols or collaboration before the plugin is verified and the quick wins land: the IDE experience is the differentiator.

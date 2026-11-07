@@ -1,0 +1,27 @@
+# A smoke test for CI: every request asserts, so a failure makes `httpc` exit 1.
+# Try it:  httpc examples/smoke-test.http --env staging --fail-on-http-error --report-junit smoke.xml
+# (--env local targets the mock server of this repository: ./gradlew :mock-server:run)
+
+# @name health
+# @assert status == 200
+GET {{base}}/get?probe=health
+Accept: application/json
+
+###
+# @name create-item
+# @assert status == 200
+# @assert body.$.json.name == "widget"
+POST {{base}}/post
+Content-Type: application/json
+
+{
+  "name": "widget",
+  "token": "{{$uuid}}"
+}
+
+###
+# Chaining: this request uses a value from the response of create-item, so create-item runs first.
+# @name check-item
+# @assert status == 200
+# @assert body.$.args.token exists
+GET {{base}}/get?token={{create-item.response.body.$.json.token}}
