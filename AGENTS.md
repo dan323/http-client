@@ -1,6 +1,6 @@
 # AGENTS.md
 
-A Postman-style HTTP client compatible with the JetBrains `.http` file format. Kotlin (JVM 21), Gradle Kotlin DSL multi-module build. See `docs/features.md` for the `.http` features and each module's README for details.
+A Postman-style HTTP client that implements a practical subset of the JetBrains `.http` format, with additional testing and execution features (matrix: `docs/jetbrains-compatibility.md`). Kotlin (JVM 21), Gradle Kotlin DSL multi-module build. See `docs/features.md` for the `.http` features and each module's README for details.
 
 ## Modules
 
