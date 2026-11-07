@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # A pull request whose changed files are all documentation (under docs/, or the root README.md or AGENTS.md)
+  # A pull request whose changed files are all documentation (under docs/, any README.md, AGENTS.md or CHANGELOG.md)
   # skips the build and the tests. The jobs below still run and report success (only their steps are skipped):
   # the required status checks must exist on every PR, and a trigger-level `paths-ignore` would leave them
   # "expected" forever and block the merge.
@@ -36,7 +36,7 @@ jobs:
           if [ "$EVENT" = "pull_request" ]; then
             # new and previous names, so moving a file out of or into the documentation counts as a code change
             files=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR}/files" --jq '.[] | .filename, (.previous_filename // empty)')
-            if [ -n "$files" ] && ! echo "$files" | grep -qvE '^(docs/|README\.md$|AGENTS\.md$)'; then code=false; fi
+            if [ -n "$files" ] && ! echo "$files" | grep -qvE '^(docs/|(.*/)?README\.md$|AGENTS\.md$|CHANGELOG\.md$)'; then code=false; fi
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "code changes: $code"
