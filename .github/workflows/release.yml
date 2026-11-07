@@ -1,6 +1,7 @@
 name: Release
 
 # Runs when a tag v* is pushed (for example v0.5.0, after the version in build.gradle.kts was bumped to match).
+# A tag with a suffix such as v0.5.0-rc1 is published as a pre-release.
 # It builds the CLI distribution, the IntelliJ plugin zip and the desktop installers and attaches them to the
 # GitHub release for the tag (created here if it does not exist yet). Nothing is published anywhere else.
 # Run manually (Actions > Release > Run workflow) with an existing tag to rebuild and re-attach the assets.
@@ -130,6 +131,9 @@ jobs:
           ls -l assets
           # Create first; if it already exists (or a concurrent run made it), upload instead.
           # A real failure (network, auth) then surfaces from whichever command ran last.
-          if ! gh release create "$TAG" assets/* --verify-tag --title "$TAG" --generate-notes; then
+          # A tag with a suffix (v0.5.0-rc1) is a release candidate: publish it as a pre-release.
+          flags=()
+          if [[ "$TAG" == *-* ]]; then flags+=(--prerelease); fi
+          if ! gh release create "$TAG" assets/* --verify-tag --title "$TAG" --generate-notes "${flags[@]}"; then
             gh release upload "$TAG" assets/* --clobber
           fi
