@@ -5,6 +5,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Desktop installers: the bundled runtime now includes `java.net.http` (without it the installed app could not send requests), and `./gradlew :desktop:checkRuntimeModules` (run in CI) fails when the app needs a JDK module the runtime lacks.
+- Distribution (G9, T24): `.github/workflows/release.yml` runs on a tag `v*` (or manually for an existing tag), checks the tag against the project version, builds the CLI distribution (`./gradlew :cli:distZip` / `distTar`, `httpc-<version>.zip|tar`), the IntelliJ plugin zip and, best effort, the desktop installers (DMG on macOS, MSI on Windows, DEB on Linux), and attaches them to the GitHub release. Nothing is published to other channels (Homebrew, Scoop, winget, JetBrains Marketplace are listed as follow-ups in `docs/getting-started.md`).
+- `docs/getting-started.md` (how to install each piece from the release assets; usage stays in `docs/features.md`) and `examples/smoke-test.http` with `examples/http-client.env.json`, linked from the README.
+
 ## [0.4.0] - 2026-11-07
 
 ### Added

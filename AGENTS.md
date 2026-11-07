@@ -24,6 +24,7 @@ Hexagonal; dependencies point inward only.
 - All tests: `./gradlew test`. One module: `./gradlew :<module>:test` (`:intellij-plugin:test` needs an IDE, see its README).
 - One test: `./gradlew :core:test --tests "com.dan323.httpclient.core.HttpFileParserTest"` (append `.methodName` for a method).
 - IntelliJ plugin: `./gradlew :intellij-plugin:buildPlugin`.
+- Desktop installer runtime: `./gradlew :desktop:checkRuntimeModules` (fails if the app needs a JDK module missing from the jlink runtime; list in `desktop/build.gradle.kts`).
 - Coverage and reports: `./gradlew :quality-reports:qualityReports`. Fails if merged coverage drops below the floor in `quality-reports/build.gradle.kts` (lines 95 %, branches 83 %). Raise the floor, never lower it.
 - Mutation tests on `core`: `./gradlew :core:pitest` (fails below 80 %; CI runs it weekly, not on every push).
 - Dependency versions are in `gradle/libs.versions.toml`.
