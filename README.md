@@ -1,6 +1,6 @@
 # http-client
 
-A Postman-style HTTP client that implements a practical subset of the JetBrains `.http` format, with additional testing and execution features. See [what is and is not supported](docs/jetbrains-compatibility.md).
+A Postman-style HTTP client that implements a practical subset of the JetBrains `.http` format, with additional testing and execution features. See [how it differs from the JetBrains HTTP Client](docs/jetbrains-compatibility.md).
 
 Hexagonal layout:
 
@@ -24,7 +24,7 @@ The build-only `quality-reports/` project (not shipped) aggregates reports of al
 - `./gradlew :core:pitest` runs PIT mutation testing on `core` (about a minute; HTML report in `core/build/reports/pitest/`). Measured mutation score 83 % (820 of 988 mutants killed); the build fails below 80 %.
 - The IntelliJ plugin is excluded from JaCoCo (the IDE test runtime instruments classes itself and its tests need an IDE).
 
-Documentation: [features](docs/features.md) · [JetBrains compatibility](docs/jetbrains-compatibility.md) · [plan](docs/PLAN.md) · [changelog](CHANGELOG.md)
+Documentation: [features](docs/features.md) · [differences from JetBrains](docs/jetbrains-compatibility.md) · [plan](docs/PLAN.md) · [changelog](CHANGELOG.md)
 
 ## CLI
 
