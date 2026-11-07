@@ -22,6 +22,13 @@ Add `httpc-<version>/bin` to your `PATH` to call `httpc` from anywhere. Nothing 
 **In GitHub Actions**, download the asset of a release that has it and run it (replace `X.Y.Z`):
 
 ```yaml
+jobs:
+  api-smoke-test:
+    runs-on: ubuntu-latest
+    env:
+      HTTPC_VERSION: X.Y.Z   # a release that has the httpc-*.zip asset
+    steps:
+      - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with: { distribution: temurin, java-version: 21 }
       - name: Install httpc
@@ -30,10 +37,11 @@ Add `httpc-<version>/bin` to your `PATH` to call `httpc` from anywhere. Nothing 
           unzip -q httpc-*.zip
         env:
           GH_TOKEN: ${{ github.token }}
-          HTTPC_VERSION: X.Y.Z   # a release that has the httpc-*.zip asset
+      - name: Run
+        run: httpc-$HTTPC_VERSION/bin/httpc examples/smoke-test.http --env staging --fail-on-http-error --report-junit smoke.xml
 ```
 
-Then call `httpc-$HTTPC_VERSION/bin/httpc` with `--fail-on-http-error --report-junit FILE` as described in [Command line](features.md#command-line). A ready-made file to run is [examples/smoke-test.http](../examples/smoke-test.http) with [examples/http-client.env.json](../examples/http-client.env.json); more files, one per feature, are in [samples/](../samples/README.md).
+`--fail-on-http-error` and `--report-junit FILE` are described in [Command line](features.md#command-line). A ready-made file to run is [examples/smoke-test.http](../examples/smoke-test.http) with [examples/http-client.env.json](../examples/http-client.env.json); more files, one per feature, are in [samples/](../samples/README.md).
 
 ## IntelliJ plugin
 
