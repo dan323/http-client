@@ -2,7 +2,7 @@
 
 What is still missing, the tasks that deliver it, and the order to do them in.
 Current state: see [features.md](features.md). History: see [../CHANGELOG.md](../CHANGELOG.md).
-Review fixes that preceded this plan: [REMEDIATION.md](REMEDIATION.md) (all done).
+Review fixes that preceded this plan (R1-R13, all done): see [../CHANGELOG.md](../CHANGELOG.md); what was accepted is in [known-limitations.md](known-limitations.md).
 
 ## 1. Features
 
@@ -37,7 +37,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 
 Done tasks are listed in the CHANGELOG, not here: T1 (file variables, settings), T2 (executor options), T3 (cookie jar),
 T4 (`ResponseExtractor`), T5 (assertions), T6 (dynamic variables v2), T7 (Basic auth shortcut), T9 (`RunReport`, JSON and JUnit export),
-T12 (`view-model`). Done as well: the review fixes R1-R13 ([REMEDIATION.md](REMEDIATION.md)), including the
+T12 (`view-model`). Done as well: the review fixes R1-R13 (see [known-limitations.md](known-limitations.md) for what was left), including the
 composition root, environment resolution, file confinement, the CI matrix part of T24 and build quality reports.
 
 Each remaining task is listed once even when it serves several features. Size: S ≈ 1 day, M ≈ 2 days, L ≈ 3 days
