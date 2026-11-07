@@ -5,6 +5,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0-rc1] - 2026-11-07
+
+Release candidate: published as a GitHub pre-release to test the release workflow, the installers and the IntelliJ plugin (T21, T25) before 0.5.0.
+
 ### Added
 - Desktop installers: the bundled runtime now includes `java.net.http` (without it the installed app could not send requests), and `./gradlew :desktop:checkRuntimeModules` (run in CI) fails when the app needs a JDK module the runtime lacks.
 - Distribution (G9, T24): `.github/workflows/release.yml` runs on a tag `v*` (or manually for an existing tag), checks the tag against the project version, builds the CLI distribution (`./gradlew :cli:distZip` / `distTar`, `httpc-<version>.zip|tar`), the IntelliJ plugin zip and, best effort, the desktop installers (DMG on macOS, MSI on Windows, DEB on Linux), and attaches them to the GitHub release. Nothing is published to other channels (Homebrew, Scoop, winget, JetBrains Marketplace are listed as follow-ups in `docs/getting-started.md`).
@@ -12,6 +16,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 - Cookie domain checks use the Public Suffix List (G8): a `Set-Cookie` `Domain` attribute that is a public suffix (`com`, `co.uk`, `github.io`, wildcard and exception rules included) is rejected unless it equals the request host, replacing the single-label check and the short built-in two-label list. The list ships as a resource in `core` (`public_suffix_list.txt`, version recorded on its first line; update procedure in `docs/features.md`), so `core` still has no third-party dependencies.
+- Desktop installer version is derived from the project version (`0.5.0-rc1` -> `1.5.1`, `0.5.0` -> `1.5.99`) instead of the constant `1.0.0`, so a newer installer upgrades an older one.
 
 ## [0.4.0] - 2026-11-07
 

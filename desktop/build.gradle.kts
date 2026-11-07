@@ -29,6 +29,18 @@ dependencies {
 // Modules loaded only by reflection or ServiceLoader are invisible to jdeps: add those here too when found.
 val extraRuntimeModules = listOf("java.net.http", "jdk.unsupported", "java.instrument")
 
+// Installers need a numeric version with MAJOR >= 1, and an installer only upgrades an older one if its version is
+// higher, so it is derived from the project version: 0.MINOR.PATCH[-rcN] becomes 1.MINOR.(PATCH*100 + N), a final
+// release counting as N = 99 (0.5.0-rc1 -> 1.5.1, 0.5.0 -> 1.5.99, 0.5.1 -> 1.5.199). The build part is at most 65535.
+val installerVersion: String = run {
+    val match = Regex("""0\.(\d+)\.(\d+)(?:-rc(\d+))?""").matchEntire(project.version.toString())
+        ?: error("Cannot derive an installer version from '${project.version}': expected 0.MINOR.PATCH or 0.MINOR.PATCH-rcN")
+    val (minor, patch, rc) = match.destructured
+    val candidate = rc.ifEmpty { "99" }.toInt()
+    require(candidate in 1..99 && patch.toInt() * 100 + candidate <= 65535) { "Version '${project.version}' is out of range for an installer" }
+    "1.$minor.${patch.toInt() * 100 + candidate}"
+}
+
 compose.desktop {
     application {
         mainClass = "com.dan323.httpclient.desktop.MainKt"
@@ -36,8 +48,7 @@ compose.desktop {
             modules(*extraRuntimeModules.toTypedArray())
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "HTTP Client"
-            // Installers require MAJOR >= 1, so this is independent of the project version.
-            packageVersion = "1.0.0"
+            packageVersion = installerVersion
             description = "Postman-style client for .http files (a practical subset of the JetBrains format)"
             windows { menuGroup = "HTTP Client" }
             // Debian package names must be lowercase with no spaces.
