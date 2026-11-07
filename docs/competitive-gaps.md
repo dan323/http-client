@@ -43,7 +43,6 @@ Ordered by value. "Evidence" is where the current behavior is documented or obse
 
 | #  | Gap                                                                                                                                                                                                                                         | Why it matters                                                                                                                                              | Evidence                                                                     | Size |
 |----|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------|------|
-| G8 | **Cookie domain checks against the Public Suffix List** (or document the approximation prominently).                                                                                                                                        | Cookie scoping is approximate today. Low impact for a dev tool.                                                                                             | features.md, cookie jar notes                                                | S    |
 | G9 | **Adoption and distribution.** Publish the plugin, desktop installers and a downloadable CLI; add examples and a getting-started page.                                                                                                      | The product is feature-rich but not installable by an outsider yet.                                                                                         | PLAN.md T24, T25                                                             | M    |
 
 ## 3. Decisions to make (currently out of scope)
@@ -62,7 +61,7 @@ These are what Bruno / Postman users will ask for. Each needs a decision, not a 
 ## 4. Suggested order
 
 1. T21 first: verify the plugin in a Community IDE (T13 and T26 are merged).
-2. Robustness quick-wins: G1-G7 are done, G8 can follow.
+2. Robustness quick-wins: G1-G8 are done.
 3. Planned feature-work from PLAN.md: T8, then the editor-intelligence and plugin tasks.
 4. Distribution (G9, T24, T25) and the import decision.
 

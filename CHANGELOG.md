@@ -5,6 +5,9 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Cookie domain checks use the Public Suffix List (G8): a `Set-Cookie` `Domain` attribute that is a public suffix (`com`, `co.uk`, `github.io`, wildcard and exception rules included) is rejected unless it equals the request host, replacing the single-label check and the short built-in two-label list. The list ships as a resource in `core` (`public_suffix_list.txt`, version recorded on its first line; update procedure in `docs/features.md`), so `core` still has no third-party dependencies.
+
 ## [0.4.0] - 2026-11-07
 
 ### Added
