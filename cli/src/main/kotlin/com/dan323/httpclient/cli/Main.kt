@@ -330,7 +330,7 @@ private fun writeReports(opts: Options, report: RunReport, err: PrintStream, wri
 }
 
 private fun writeFile(writer: ReportWriter, path: Path, what: String, err: PrintStream, saved: List<Path> = emptyList(), content: () -> String): Boolean = try {
-    if (saved.any { samePath(path, it) }) throw java.io.IOException("it is a response saved by '>>' / '>>!' in this run, which is kept")
+    refuseSavedResponse(path, saved)
     writer.write(path, content())
     true
 } catch (e: Exception) {
@@ -338,8 +338,12 @@ private fun writeFile(writer: ReportWriter, path: Path, what: String, err: Print
     false
 }
 
-private fun writeOutput(writer: OutputWriter, path: Path, bytes: ByteArray, err: PrintStream, saved: List<Path>): Boolean = try {
+private fun refuseSavedResponse(path: Path, saved: List<Path>) {
     if (saved.any { samePath(path, it) }) throw java.io.IOException("it is a response saved by '>>' / '>>!' in this run, which is kept")
+}
+
+private fun writeOutput(writer: OutputWriter, path: Path, bytes: ByteArray, err: PrintStream, saved: List<Path>): Boolean = try {
+    refuseSavedResponse(path, saved)
     writer.write(path, bytes)
     true
 } catch (e: Exception) {
