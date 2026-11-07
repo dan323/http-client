@@ -57,6 +57,15 @@ fun interface ReportWriter {
 }
 
 /**
+ * Persists raw bytes at [path] exactly as given (no charset conversion), e.g. a response body for the CLI `--output`.
+ * Same contract as [ReportWriter]: missing parent folders are created, an existing file is replaced and
+ * [java.io.IOException] is thrown when the bytes cannot be written.
+ */
+fun interface OutputWriter {
+    fun write(path: java.nio.file.Path, bytes: ByteArray)
+}
+
+/**
  * Saves a response body for a `>> path` / `>>! path` directive. [path] is relative to the .http file and already has
  * its `{{variables}}` substituted. Implementations confine it like `< path` reads, write [body] byte for byte,
  * never overwrite an existing file unless [overwrite], and return the path actually written (relative to the .http
