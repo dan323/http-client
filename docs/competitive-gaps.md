@@ -39,11 +39,7 @@ We do not try to match either there; we win on plain files, no proprietary colle
 
 ## 2. Gaps not in the plan yet
 
-Ordered by value. "Evidence" is where the current behavior is documented or observed.
-
-| #  | Gap                                                                                                                                                                                                                                         | Why it matters                                                                                                                                              | Evidence                                                                     | Size |
-|----|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------|------|
-| G8 | **Cookie domain checks against the Public Suffix List** (or document the approximation prominently).                                                                                                                                        | Cookie scoping is approximate today. Low impact for a dev tool.                                                                                             | features.md, cookie jar notes                                                | S    |
+All of these gaps (G1-G9) are done; the details are in the changelog and [features.md](features.md).
 
 ## 3. Decisions to make (currently out of scope)
 
@@ -61,7 +57,7 @@ These are what Bruno / Postman users will ask for. Each needs a decision, not a 
 ## 4. Suggested order
 
 1. T21 first: verify the plugin in a Community IDE (T13 and T26 are merged).
-2. Robustness quick-wins: G1-G7 are done, G8 can follow.
+2. Robustness quick-wins: G1-G8 are done.
 3. Planned feature-work from PLAN.md: T8, then the editor-intelligence and plugin tasks.
 4. Publishing to external channels (Marketplace, Homebrew, Scoop, winget; see the follow-ups in [getting-started.md](getting-started.md)), T25 and the import decision. In-repo distribution (G9: release workflow, CLI distribution, getting-started page, examples) is done.
 
