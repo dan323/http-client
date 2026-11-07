@@ -248,6 +248,15 @@ class VariableAnalysisTest {
         assertEquals(2, a.findVariableUsages("v").size)
     }
 
+    @Test fun savedResponsePathIsScanned() {
+        val text = "# @name one\nGET http://h\n\n>> out/{{one.response.status}}-{{nope}}.json\n###\nGET http://h\n\n>>! {{dir}}/x.json\n<> {{notResolved}}.json"
+        val a = analyze(text, "dir")
+        val undefined = a.diagnostics.filter { it.code == DiagnosticCodes.UNDEFINED_VARIABLE }
+        assertEquals(listOf("nope"), undefined.map { slice(text, it) }) // links are not resolved, so {{notResolved}} is not flagged
+        assertEquals(1, a.findVariableUsages("dir").size)
+        assertEquals(1, a.findRequestUsages("one").count { it.kind == OccurrenceKind.REQUEST_REFERENCE })
+    }
+
     @Test fun findUsages() {
         val text = "@x = 1\nGET http://h/{{x}}\n###\nGET http://h/{{x}}?{{y}}"
         val a = analyze(text)

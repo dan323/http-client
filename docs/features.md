@@ -109,7 +109,7 @@ lines is reported as parse errors alone.
 It follows the run-time rules: the same reference pattern and lookup order as `VariableResolver` (a file variable
 beats the environment in request text, and in a value only when defined above it; a variable naming itself reads the
 environment), and a response reference needs an earlier request with that name. Scanned: request line and query
-lines, header values (not names), body text, the *path* of a `< path` body (not the file), file variable values,
+lines, header values (not names), body text, the *path* of a `< path` body (not the file), the path of a `>> path` / `>>! path` save (a `<>` link path is not resolved, so it is not scanned), file variable values,
 `# @assert` expressions (without a trailing ` # comment`) and the values of `@timeout`, `@no-redirect`,
 `@no-cookie-jar`, `@proxy`. Not scanned: comments, `# @name`, other settings, trailing response handlers.
 Not decidable statically, so never flagged: whether `body.$.x` finds anything, and `$env.X` / `$processEnv X`
