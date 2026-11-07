@@ -11,7 +11,6 @@ Related: [competitive-gaps.md](competitive-gaps.md) (what to add), [PLAN.md](PLA
   Whether `Authorization` is forwarded on those JDKs is not tested. See G5 in competitive-gaps.md.
 - **File confinement can be raced.** Someone with write access inside an allowed folder can swap a parent directory for a symlink between the check and the read.
 - **Silently dropped headers.** A user-set `Host`, `Content-Length`, `Connection`, `Expect` or `Upgrade` header is dropped by the JDK client (documented, not warned about).
-- **XPath cannot be interrupted.** A timed-out evaluation keeps running on an abandoned daemon thread until it ends; the caller gets "not found" after 2 s. See G7.
 
 ## CLI
 
