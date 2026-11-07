@@ -14,6 +14,8 @@ class RequestRunner(
     private val executor: HttpExecutor,
     private val files: FileReader,
     private val dynamic: DynamicVariables,
+    /** Total timeout for a request without `# @timeout`; null means none (the front ends pass [RequestTimeouts.DEFAULT_MILLIS]). */
+    private val defaultTimeoutMillis: Long? = null,
 ) : RunRequest {
     constructor(executor: HttpExecutor, files: FileReader) : this(executor, files, DynamicVariables())
 
@@ -54,5 +56,5 @@ class RequestRunner(
     )
 
     private fun options(t: RequestTemplate, text: (String) -> String): RequestOptions =
-        RequestOptionsParser.parse(t.settings, text)
+        RequestOptionsParser.parse(t.settings, defaultTimeoutMillis, text)
 }
