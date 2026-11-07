@@ -16,7 +16,7 @@ object DefaultTimeout {
         property: (String) -> String? = System::getProperty,
         env: (String) -> String? = System::getenv,
     ): Result<Long> {
-        val raw = (property(PROPERTY) ?: env(ENV_VAR))?.takeIf { it.isNotBlank() } ?: return Result.success(RequestTimeouts.DEFAULT_MILLIS)
+        val raw = property(PROPERTY)?.takeIf { it.isNotBlank() } ?: env(ENV_VAR)?.takeIf { it.isNotBlank() } ?: return Result.success(RequestTimeouts.DEFAULT_MILLIS)
         return try {
             Result.success(RequestTimeouts.parseMillis(raw, raw, "$PROPERTY / $ENV_VAR"))
         } catch (e: IllegalArgumentException) {

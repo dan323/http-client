@@ -23,6 +23,10 @@ class DefaultTimeoutTest {
 
     @Test fun blankValuesAreIgnored() = assertEquals(60_000L, load("  ", null).getOrThrow())
 
+    @Test fun blankPropertyFallsBackToTheEnvironmentVariable() = assertEquals(600_000L, load("  ", "10m").getOrThrow())
+
+    @Test fun blankPropertyAndBlankEnvironmentVariableGiveTheDefault() = assertEquals(60_000L, load(" ", "").getOrThrow())
+
     @Test fun badValueIsAFailureNamingTheSettingNeverTheDefault() {
         val e = load("soon").exceptionOrNull()!!
         assertTrue(e.message!!.contains("httpclient.timeout / HTTPC_TIMEOUT") && e.message!!.contains("'soon'"), e.message)
