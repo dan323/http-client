@@ -34,8 +34,9 @@ jobs:
         run: |
           code=true
           if [ "$EVENT" = "pull_request" ]; then
-            # new and previous names, so moving a file out of or into the documentation counts as a code change
-            files=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR}/files" --jq '.[] | .filename, (.previous_filename // empty)')
+            # new and previous names, so moving a file out of or into the documentation counts as a code change;
+            # a name with a newline would be split into several lines below, so it is replaced by a non-doc value
+            files=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR}/files" --jq '.[] | (.filename, (.previous_filename // empty)) | if test("\n") then "name-with-newline" else . end')
             if [ -n "$files" ] && ! echo "$files" | grep -qvE '^(docs/|(.*/)?README\.md$|AGENTS\.md$|CHANGELOG\.md$)'; then code=false; fi
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
