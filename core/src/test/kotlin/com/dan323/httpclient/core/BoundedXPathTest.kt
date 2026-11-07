@@ -24,6 +24,8 @@ class BoundedXPathTest {
         while (latch.count > 0) try { Thread.sleep(5) } catch (_: InterruptedException) { }
     }
 
+    // Note: the really-stuck XPath tests leave uninterruptible JDK threads running for the rest of the test JVM
+    // (they are daemons and bounded by maxThreads per evaluator, so they cannot block JVM exit).
     private fun threads(prefix: String) =
         Thread.getAllStackTraces().keys.count { it.name.startsWith(prefix) && it.isAlive }
 
@@ -48,7 +50,7 @@ class BoundedXPathTest {
         }
         val start = System.nanoTime()
         assertNull(evaluator.evaluate { "never started" })
-        assertTrue((System.nanoTime() - start) / 1_000_000 < 40, "must fail fast, not wait for the timeout")
+        assertTrue((System.nanoTime() - start) / 1_000_000 < 2_000, "must fail fast, a blocked call would take seconds")
         assertEquals(2, threads("xp-sat"))
 
         release.countDown()
@@ -87,6 +89,11 @@ class BoundedXPathTest {
         assertEquals("1", extractor.xpath("<r>1</r>", "/r"))
     }
 
+    @Test fun aOneSlotEvaluatorNeverRejectsQuickSequentialEvaluations() {
+        val evaluator = BoundedEvaluator(maxThreads = 1, timeoutMillis = 5_000, threadName = "xp-one")
+        repeat(20_000) { i -> assertEquals(i, evaluator.evaluate { i }, "spurious rejection at call $i") }
+    }
+
     @Test fun concurrentCallersNeverExceedTheBoundAndStayConsistent() {
         val bound = 3
         val extractor = ResponseExtractor(noJson, BoundedEvaluator(maxThreads = bound, timeoutMillis = 50, threadName = "xp-conc"))
@@ -109,13 +116,12 @@ class BoundedXPathTest {
         }
     }
 
-    @Test fun catastrophicRegexStopsQuicklyAndLeavesNoThreads() {
+    @Test fun catastrophicRegexIsStoppedByTheRegexGuardQuickly() {
+        // Not about the evaluator: regex is bounded by RegexGuard, kept here as the sibling bound of the same G7 work.
         val extractor = ResponseExtractor(noJson, BoundedEvaluator(maxThreads = 1, timeoutMillis = 50, threadName = "xp-re"))
-        val before = Thread.activeCount()
         val start = System.nanoTime()
         repeat(3) { assertNull(extractor.regex("a".repeat(60) + "!", "(a+)+\$")) }
         assertTrue((System.nanoTime() - start) / 1_000_000 < 15_000)
-        assertTrue(Thread.activeCount() <= before + 1)
-        assertEquals("42", extractor.regex("id=42", "id=(\\d+)"))
+        assertEquals("42", extractor.regex("id=42", "id=([0-9]+)"))
     }
 }
