@@ -1,5 +1,7 @@
 package com.dan323.httpclient.adapters
 
+import com.dan323.httpclient.core.application.CookieJar
+import com.dan323.httpclient.core.application.RedirectFollower
 import com.dan323.httpclient.core.domain.Header
 import com.dan323.httpclient.core.domain.HttpRequest
 import com.dan323.httpclient.core.domain.HttpResponse
@@ -37,7 +39,8 @@ class JdkHttpExecutor(
     private val derived = ConcurrentHashMap<Pair<HttpClient.Redirect, ProxyAddress?>, HttpClient>()
 
     private fun clientFor(o: RequestOptions): HttpClient {
-        val redirect = if (o.followRedirects) client.followRedirects() else HttpClient.Redirect.NEVER
+        // Redirects are never left to the JDK (its forwarding of credential headers varies by version).
+        val redirect = HttpClient.Redirect.NEVER
         if (redirect == client.followRedirects() && o.proxy == null) return client
         return derived.computeIfAbsent(redirect to o.proxy) { (r, p) ->
             val b = HttpClient.newBuilder().followRedirects(r).version(client.version())
@@ -67,7 +70,15 @@ class JdkHttpExecutor(
     // dropped (documented in docs/features.md).
     private val restricted = setOf("host", "content-length", "connection", "expect", "upgrade")
 
-    override fun execute(request: HttpRequest): HttpResponse {
+    /**
+     * Redirects are followed here by [RedirectFollower] (no cookie jar), not by the JDK client: an explicit
+     * `Cookie`, `Authorization` or `Proxy-Authorization` header is dropped when a redirect leaves the origin,
+     * on every JDK version. `@no-redirect` returns the first response.
+     */
+    override fun execute(request: HttpRequest): HttpResponse =
+        RedirectFollower(::executeOnce, CookieJar()).send(request.copy(options = request.options.copy(useCookieJar = false)))
+
+    private fun executeOnce(request: HttpRequest): HttpResponse {
         val builder = java.net.http.HttpRequest.newBuilder(URI.create(request.url))
             .method(request.method, request.body?.let(BodyPublishers::ofByteArray) ?: BodyPublishers.noBody())
         request.options.timeoutMillis?.let { builder.timeout(Duration.ofMillis(it)) }
