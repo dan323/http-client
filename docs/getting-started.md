@@ -18,8 +18,8 @@ The desktop installers are built on a best-effort basis: if one is missing from 
 ### Command line
 
 ```
-unzip httpc-0.4.0.zip            # or: tar xf httpc-0.4.0.tar
-httpc-0.4.0/bin/httpc --list my-requests.http      # Windows: httpc-0.4.0\bin\httpc.bat
+unzip httpc-X.Y.Z.zip            # or: tar xf httpc-X.Y.Z.tar
+httpc-X.Y.Z/bin/httpc --list my-requests.http      # Windows: httpc-X.Y.Z\bin\httpc.bat
 ```
 
 Add `httpc-<version>/bin` to your `PATH` to call `httpc` from anywhere. Nothing else is installed or changed.
@@ -108,12 +108,13 @@ jobs:
         with: { distribution: temurin, java-version: 21 }
       - name: Install httpc
         run: |
-          gh release download v0.4.0 --repo dan323/http-client --pattern 'httpc-*.zip'
+          gh release download "v$HTTPC_VERSION" --repo dan323/http-client --pattern 'httpc-*.zip'
           unzip -q httpc-*.zip
         env:
           GH_TOKEN: ${{ github.token }}
+          HTTPC_VERSION: X.Y.Z   # a release that has the httpc-*.zip asset
       - name: Run
-        run: httpc-0.4.0/bin/httpc examples/smoke-test.http --env staging --fail-on-http-error --report-junit smoke.xml
+        run: httpc-$HTTPC_VERSION/bin/httpc examples/smoke-test.http --env staging --fail-on-http-error --report-junit smoke.xml
         env:
           HTTPC_TIMEOUT: 30s
       - uses: actions/upload-artifact@v7
