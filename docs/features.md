@@ -72,6 +72,51 @@ expressions and settings, and request names may contain dots (`auth.login`).
 GET {{host}}/users/{{user}}
 ```
 
+### Editor diagnostics (analysis)
+
+`VariableAnalysis` (`core`, pure and IO-free) checks the `{{...}}` of a `.http` text without running anything, for the
+editors (desktop and plugin use it in later tasks). `VariableAnalysis.analyze(text, environmentNames)` takes the
+text and the *names* of the available environment variables (values never enter the analysis; pass the union of
+all environments for a lenient editor, nothing for "no environment") and offers:
+
+- `diagnostics`: `Diagnostic(code, severity, message, range)`; `range` is a `SourceRange` in UTF-16 chars (offset, length,
+  0-based line and column; tabs and CRLF count as in the text). Messages name variables and requests, never values.
+- `knownVariablesAt(offset)`: file variables defined above, environment variables, `name.response.` prefixes of the
+  requests above, and the dynamic variable templates (`$uuid`, `$timestamp`, `$random.integer(from, to)`, `$env.NAME`, ...).
+- `findUsages(name)`, `findVariableUsages`, `findRequestUsages`, `occurrenceAt(offset)`: every use, `@x =` definition,
+  `# @name` declaration and `{{name.response...}}` prefix, each range covering exactly the name (for rename).
+
+| Code | Severity | Meaning |
+|---|---|---|
+| `undefined-variable` | error | not a file variable, environment variable or known dynamic variable |
+| `unknown-request` | error | `{{x.response...}}` and no request is named `x` |
+| `request-not-run-yet` | warning | the request `x` first appears later in the file (works at run time only if it already ran in the same session) |
+| `self-reference` | warning | a request reads its own response (works on a later run in the same session, e.g. a polling request) |
+| `malformed-reference` | error | `x.response` with nothing after it, an unknown part (not `status`, `headers.Name`, `body...`) or an empty `headers.`/`body.` |
+| `invalid-dynamic-variable` | error | bad arguments, e.g. `$random.integer(5, 1)` |
+| `circular-variable` | error | file variables that refer to each other (on the final value of each name) |
+| `unterminated-reference` | warning | `{{` with no `}}` after it |
+| `invalid-reference-text` | warning | `{{ a b }}`: not a reference, sent as written |
+| `duplicate-request-name` | warning | the later `# @name` repeats an earlier one |
+| `variable-defined-later` | warning | an `@a = {{b}}` value uses a file variable defined below it |
+| `parse-error` | error | the parser rejected a line (its message, on that line); one per `###` block |
+
+A file that does not parse is still analysed: each rejected line is reported as `parse-error` and left out (the offsets of the
+rest do not change), so completion, find-usages and the other diagnostics keep working while a request is half typed. The
+request that failed has no `name.response.` prefix and its references are not scanned. Only a file with more than 50 bad
+lines is reported as parse errors alone.
+
+It follows the run-time rules: the same reference pattern and lookup order as `VariableResolver` (a file variable
+beats the environment in request text, and in a value only when defined above it; a variable naming itself reads the
+environment), and a response reference needs an earlier request with that name. Scanned: request line and query
+lines, header values (not names), body text, the *path* of a `< path` body (not the file), the path of a `>> path` / `>>! path` save (a `<>` link path is not resolved, so it is not scanned), file variable values,
+`# @assert` expressions (without a trailing ` # comment`) and the values of `@timeout`, `@no-redirect`,
+`@no-cookie-jar`, `@proxy`. Not scanned: comments, `# @name`, other settings, trailing response handlers.
+Not decidable statically, so never flagged: whether `body.$.x` finds anything, and `$env.X` / `$processEnv X`
+(allow-list and value are run-time matters). Duplicate request names resolve to the latest response at run time. A
+response reference inside a file variable value is only checked for an existing request name, because the request that
+uses the variable is not known. Analysis time is linear in the text size.
+
 ### Request settings
 
 `# @setting [value]` (or `// @setting`) lines before a request line attach settings to it: for example

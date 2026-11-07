@@ -7,14 +7,14 @@ object VariableResolver {
     // Possessive quantifiers keep matching linear (no catastrophic backtracking on an unclosed `{{$uuid` followed
     // by a long run of whitespace). The captured name may therefore end in spaces/tabs; [nameOf] trims it.
     // Whitespace before `(` is horizontal only, so a reference never spans lines.
-    private val pattern = Regex(
+    internal val pattern = Regex(
         """\{\{\s*+(\${'$'}processEnv[ \t]++[^{}\s]++""" +
             """|\${'$'}(?:(?:timestamp|isoTimestamp|randomInt|uuid|random\.\w++)(?:[ \t]*+\([^{}\r\n]*+|[ \t]++[^{}\r\n]*+)?""" +
             """|[A-Za-z][\w.]*+(?:[ \t]*+\([^{}\r\n]*+)?)""" +
             """|[^{}\s]++)\s*+}}""",
     )
 
-    private fun nameOf(m: MatchResult): String = m.groupValues[1].trimEnd()
+    internal fun nameOf(m: MatchResult): String = m.groupValues[1].trimEnd()
 
     private const val MAX_EXPANSIONS = 10_000
     private const val MAX_DEPTH = 100
@@ -63,11 +63,11 @@ object VariableResolver {
 
         private fun lookup(name: String, owner: String?): String {
             val file = fileVariables[name]
-            if (file != null && (owner == null || name != owner && position.getValue(name) < position.getValue(owner))) {
+            if (file != null && LookupOrder.fileBeforeEnvironment(name, owner) { position.getValue(it) }) {
                 return expandFile(name, file)
             }
             variables[name]?.let { return it }
-            if (file != null && name != owner) return expandFile(name, file)
+            if (file != null && LookupOrder.fileAfterEnvironment(name, owner)) return expandFile(name, file)
             extra(name)?.let { impure++; return it }
             dynamic.evaluate(name)?.let { impure++; return it }
             // Only a file variable referring to its own name gets here: it means the environment's value, which is missing.
@@ -100,3 +100,17 @@ object VariableResolver {
 class VariableExpansionException(message: String) : RuntimeException(message)
 
 class UndefinedVariableException(val variable: String) : RuntimeException("Undefined variable: $variable")
+
+/**
+ * Where a file variable sits in the lookup order of [VariableResolver]; shared with `VariableAnalysis` so the
+ * editor diagnostics cannot drift from run time. [owner] is the file variable whose value is being expanded
+ * (null for request text).
+ */
+internal object LookupOrder {
+    /** A file variable wins over the environment in request text, and in a value when it was defined before [owner]. */
+    inline fun fileBeforeEnvironment(name: String, owner: String?, positionOf: (String) -> Int): Boolean =
+        owner == null || name != owner && positionOf(name) < positionOf(owner)
+
+    /** Otherwise a file variable is still found after the environment, unless it is the owner itself. */
+    fun fileAfterEnvironment(name: String, owner: String?): Boolean = name != owner
+}
