@@ -13,6 +13,8 @@ import kotlinx.serialization.json.Json
  * Format contract: a top-level `version` (currently [VERSION]) is bumped on incompatible changes; [parse] rejects a
  * newer version and accepts a missing one as 1. `passed`, `totals` and each entry's `passed` are derived: they are
  * written for consumers and ignored by [parse], which recomputes them from `results`.
+ * An entry's optional `httpError` (for example `"HTTP 503"`, null otherwise) is data, not derived: it is set when the run
+ * failed on HTTP error statuses (`--fail-on-http-error`), makes the entry `passed: false`, and is absent in older reports.
  * Entries may contain resolved-looking data from the run (URLs and error messages can include secrets such as tokens
  * in query strings); treat report files as sensitive CI artifacts.
  */
@@ -36,7 +38,7 @@ object JsonRunReport {
     @Serializable private data class EntryDto(
         val name: String, val method: String, val url: String, val status: Int? = null, val durationMillis: Long? = null,
         val passed: Boolean, val assertions: List<AssertionDto> = emptyList(), val assertionsNotRun: Int = 0, val error: String? = null,
-        val prerequisite: Boolean = false,
+        val prerequisite: Boolean = false, val httpError: String? = null,
     )
 
     @Serializable private data class TotalsDto(
@@ -49,7 +51,7 @@ object JsonRunReport {
             ReportEntry(
                 e.name, e.method, e.url, e.status, e.durationMillis,
                 e.assertions.map { AssertionResult(it.assertion, it.passed, it.expected, it.actual, it.message) },
-                e.assertionsNotRun, e.error, e.prerequisite,
+                e.assertionsNotRun, e.error, e.prerequisite, e.httpError,
             )
         })
 
@@ -61,7 +63,7 @@ object JsonRunReport {
                     EntryDto(
                         e.name, e.method, e.url, e.status, e.durationMillis, e.passed,
                         e.assertions.map { AssertionDto(it.assertion, it.passed, it.expected, it.actual, it.message) },
-                        e.assertionsNotRun, e.error, e.prerequisite,
+                        e.assertionsNotRun, e.error, e.prerequisite, e.httpError,
                     )
                 },
             )

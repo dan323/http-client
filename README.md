@@ -40,6 +40,7 @@ Documentation: [features](docs/features.md) · [plan](docs/PLAN.md) · [changelo
 - `--report-json FILE` / `--report-junit FILE` — also write a run report (per-request status, timings, assertion results, totals) as JSON or JUnit XML; console output is unchanged; a report path must differ from the input file (see [features](docs/features.md#run-reports)).
 
 - `--quiet` — no per-request output on stdout; failed assertions and errors still go to stderr.
+- `--fail-on-http-error` — exit `1` when a selected request gets a 4xx/5xx response, even if its assertions pass (printed to stderr, also with `--quiet`; prerequisites run only for chaining are not judged). Without it an HTTP error status does not fail the run.
 - `--output FILE` — write the raw response body (byte for byte, so binaries work; text keeps its original charset; gzip/br bodies stay compressed, as received) of the single selected request to `FILE` (needs `--request` when the file holds several requests; owner-only file).
 - `--var NAME=VALUE` — set a variable (repeatable); it overrides file and environment variables.
 - `--timeout DURATION` — total time limit for requests without `# @timeout` (`30`, `500ms`, `45s`, `2m`; default 60 s).

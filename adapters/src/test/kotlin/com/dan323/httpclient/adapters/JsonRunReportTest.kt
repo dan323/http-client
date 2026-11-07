@@ -51,4 +51,23 @@ class JsonRunReportTest {
         assertEquals(report, JsonRunReport.parse(edited))
         assertEquals(false, JsonRunReport.parse(edited).passed)
     }
+
+    @Test fun httpErrorRoundTripsAndIsOptional() {
+        val failing = RunReport(listOf(ReportEntry("a", "GET", "http://x", 500, 3, emptyList(), 0, null, httpError = "HTTP 500")))
+        val text = JsonRunReport.render(failing)
+        assertEquals(failing, JsonRunReport.parse(text))
+        assertEquals(false, Json.parseToJsonElement(text).jsonObject["passed"]!!.jsonPrimitive.boolean)
+        assertEquals("HTTP 500", Json.parseToJsonElement(text).jsonObject["results"]!!.let { (it as kotlinx.serialization.json.JsonArray)[0].jsonObject["httpError"]!!.jsonPrimitive.content })
+        // reports written before the field existed still parse
+        assertEquals(report, JsonRunReport.parse(JsonRunReport.render(report)))
+        val old = JsonRunReport.render(report).replace(Regex(""",\s*"httpError": null"""), "")
+        assertEquals(report, JsonRunReport.parse(old))
+    }
+
+    @Test fun httpErrorWithFailedAssertionKeepsBoth() {
+        val bad = AssertionResult("status == 200", false, "200", "500", "expected 200 but was 500")
+        val e = RunReport(listOf(ReportEntry("a", "GET", "http://x", 500, 3, listOf(bad), 0, null, httpError = "HTTP 500")))
+        assertEquals(e, JsonRunReport.parse(JsonRunReport.render(e)))
+        assertEquals(1, e.failedRequests)
+    }
 }

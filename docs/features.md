@@ -210,8 +210,10 @@ GET {{base}}/items/1
 ### Run reports
 
 `RunReport.from(outcomes)` (in `core`) builds a pure summary of a run: one entry per request (name, method, URL as
-written in the file, status, duration, assertion results, assertions not run, error) plus totals and an overall
-pass/fail. A request passes when it completed and all its assertions passed. Exporters, both in `adapters`:
+written in the file, status, duration, assertion results, assertions not run, error, optional `httpError`) plus totals
+and an overall pass/fail. A request passes when it completed and all its assertions passed; when the run is built with
+`failOnHttpError` (CLI `--fail-on-http-error`) it also needs a status below 400, otherwise the entry carries
+`httpError` (`"HTTP 503"`). Exporters, both in `adapters`:
 `JUnitXmlReport` (plain string building with XML escaping; illegal XML characters are dropped) and `JsonRunReport`
 (kotlinx-serialization, also parses a report back). Files are written through the `ReportWriter` port (`core`),
 implemented by `AtomicReportWriter` (`adapters`).
@@ -222,25 +224,29 @@ the same path, a report path that is the input `.http` file (also through `..` o
 and combining a report option with `--list` (nothing runs, so there is no report). Parent directories are created
 and files are written atomically (temp file + move), each report independently. New report files are owner-only
 (`rw-------`, POSIX) because they may contain secrets; replacing an existing report keeps that file's permissions.
-Exit codes, by precedence: 2 usage; 1 the run failed (request error, failed assertion, or the run could not start),
+Exit codes, by precedence: 2 usage; 1 the run failed (request error, failed assertion, an HTTP error status with
+`--fail-on-http-error`, or the run could not start),
 even if a report could not be written (the write error is still printed); 3 the run passed but a report could not
 be written; 0 otherwise. The pass/fail decision is `RunReport.passed`. If the run cannot start (missing file,
 unknown environment or request, unexpected exception) a report with a
 single failed `httpc` entry is still written so CI finds a file. Console output is unchanged.
 
-JUnit XML: one `testcase` per request, so `tests`/`failures`/`errors` match the elements. All failed assertions of a
-request are merged into one `failure` (one per line); a request that could not complete is an `error` (time 0). The
+JUnit XML: one `testcase` per request; `tests`/`failures`/`errors` count testcases. All failed assertions of a
+request are merged into one `failure` of type `AssertionFailure` (one per line); with `--fail-on-http-error` a 4xx/5xx
+response adds a separate `failure` of type `HttpStatusFailure` (message `HTTP 503 from GET url`), so a testcase with
+both has two `failure` elements and counts once in `failures`; a request that could not complete is an `error` (time 0). The
 testcase `name` is `"<index>. <request name or METHOD url>"` (1-based position in the run) and `classname` is the
 file name, so duplicate or unnamed requests stay distinct and stable. Prerequisites (requests run only to feed
 `{{name.response...}}` chaining) are not asserted: they are omitted when they passed and kept as an `error` when they
 failed; in JSON they are always listed with `"prerequisite": true`. An empty run reports `tests="0"`. Tabs and line
 breaks in attributes are written as character references.
 
-JSON: top-level `version` (currently 1); `JsonRunReport.parse` rejects a newer version. `passed` and `totals` (and each
+JSON: an entry's optional `httpError` is set with `--fail-on-http-error` (see below). Top-level `version` (currently 1); `JsonRunReport.parse` rejects a newer version. `passed` and `totals` (and each
 entry's `passed`) are derived: written for consumers, ignored and recomputed by `parse`.
 
-Caveats: a prerequisite or an unasserted request answering HTTP 500 still counts as passed (only transport errors and
-failed assertions fail a run), so a green report does not mean "no 5xx". Reports contain URLs as written in the file
+Caveats: by default a response with an HTTP error status (4xx/5xx) that has no failed assertion counts as passed (only
+transport errors and failed assertions fail a run), so a green report does not mean "no 5xx"; run with
+`--fail-on-http-error` to fail on them (below). Reports contain URLs as written in the file
 and error messages, which may include secrets (tokens in query strings); treat them as sensitive CI artifacts.
 
 ### Saved responses
@@ -467,6 +473,7 @@ Referencing a request that has not run, or a path that does not exist, is an err
 ```
 httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] [--allow-file-root DIR] [--list]
                   [--report-json FILE] [--report-junit FILE] [--quiet] [--output FILE] [--var NAME=VALUE] [--timeout DURATION]
+                  [--fail-on-http-error]
 ```
 
 | Option        | Effect                                               |
@@ -481,6 +488,7 @@ httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] 
 | `--output FILE` | write the raw response body (byte for byte) of the single selected request to `FILE` |
 | `--var NAME=VALUE` | set a variable, overriding file and environment variables (repeatable) |
 | `--timeout DURATION` | total time limit for requests without `# @timeout`: `30`, `500ms`, `45s`, `2m` (default 60 s; cannot be combined with `--list`) |
+| `--fail-on-http-error` | exit 1 when a selected request gets a response with status >= 400 (see below; cannot be combined with `--list`) |
 
 For each request the output is the status line with timing, the response headers, then the body.
 After a response, each assertion is printed as `PASS ...` or `FAIL ... -- message`; for a request that failed its assertions are listed as `NOT RUN ...`.
@@ -489,11 +497,13 @@ A total line `Assertions: N passed, M failed, K not run` follows the run. With `
 
 **`--quiet`:** nothing per request is printed on stdout (no `###` heading, status, headers, body, `PASS`, `NOT RUN` or the `Assertions:` total). Failed assertions are printed to stderr as `FAIL ...`, request errors as `Error: ...`, and the summary line still appears, so a quiet run says what failed. Exit codes are unchanged.
 
+**`--fail-on-http-error`:** by default an HTTP error status is not a failure: a `404` or `503` response without a failed assertion exits `0`. With the option, any selected request answering status >= 400 fails the run (exit `1`, same as a failed assertion), even if its assertions pass. Each one is printed to stderr as `FAIL HTTP 503 from <request name or METHOD url> (--fail-on-http-error)`, also with `--quiet`. Like assertions, it applies to the selected requests only: prerequisites that run just to feed `{{name.response...}}` chaining are not judged (with `--request X`, a 404 from a prerequisite does not fail the run; without `--request` every request is selected). Redirects (3xx) are not errors. In reports the entry fails: JSON gets an optional `httpError` string (`"HTTP 503"`, `null` otherwise; reports without the field still parse) and `passed: false`; JUnit XML gets a `failure` with `type="HttpStatusFailure"` and a message such as `HTTP 503 from GET http://host/path`, next to the `AssertionFailure` one when assertions failed too. The decision is `RunReport.from(outcomes, failOnHttpError = true)` in `core`. Usage error (exit `2`) with `--list`.
+
 **`--output FILE`:** after the run, the body of the selected request's response is written to `FILE` as the raw bytes received, byte for byte, with no decoding: images, PDFs and archives are saved intact, and a text response in a non-UTF-8 charset (e.g. ISO-8859-1) keeps its original encoding instead of being transcoded to UTF-8 (versions before this wrote decoded UTF-8). The client does not decompress, so a `Content-Encoding: gzip` / `br` response is saved still compressed, exactly as received. It needs exactly one selected request: use `--request`, or a file with one request; otherwise it is a usage error (exit `2`, discovered before anything is sent). Prerequisites are never written. Nothing is written when that request fails. It goes through the `OutputWriter` port (bytes) and `AtomicReportWriter`, which also implements `ReportWriter` for reports: parent folders are created, the write is atomic and a new file is owner-only (`rw-------`, POSIX) because bodies may contain secrets. `FILE` must differ from the input `.http` file and from the report paths (also through `..`, symlinks or case-only differences) and cannot be repeated or combined with `--list`. An unwritable output counts like an unwritable report (exit `3` on a passed run, `1` on a failed one).
 
 **`--var NAME=VALUE`:** the name is everything before the first `=` and must be non-empty without whitespace or braces; the value may be empty or contain `=`. Repeating a name is a usage error. Precedence: `--var` beats file variables (`@name = value` lines), which beat the environment file. The resolver prefers file variables over the variable map, so the CLI removes the overridden names from the file variables first; other file variables that mention them then see the `--var` value. Values are treated like any resolved variable: they are replaced by `{{name}}` in failure messages, and usage errors never echo the value. `--quiet` and `--var` cannot be combined with `--list`.
 
-Exit codes, by precedence: `2` bad arguments (usage is printed, nothing runs); `1` a request or setup failed (missing file, unknown environment or request), an assertion failed, or any other error; `3` the run passed but a requested report or output file could not be written; `0` otherwise. Parser warnings (ignored response handlers, see above) go to stderr as `warning: FILE: ...`; request failures go to stderr as `Error: ...`.
+Exit codes, by precedence: `2` bad arguments (usage is printed, nothing runs); `1` a request or setup failed (missing file, unknown environment or request), an assertion failed, a selected request got an HTTP error status with `--fail-on-http-error`, or any other error; `3` the run passed but a requested report or output file could not be written; `0` otherwise. Parser warnings (ignored response handlers, see above) go to stderr as `warning: FILE: ...`; request failures go to stderr as `Error: ...`.
 
 Run with `./gradlew :cli:run --args="requests.http --env dev"`, or build a launcher with
 `./gradlew :cli:installDist` (output in `cli/build/install/httpc/bin`).
