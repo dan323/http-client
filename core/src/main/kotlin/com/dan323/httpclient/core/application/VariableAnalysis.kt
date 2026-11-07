@@ -62,7 +62,7 @@ data class Occurrence(val name: String, val kind: OccurrenceKind, val range: Sou
  * names the request before the first `.response.`; it needs an earlier request with that name).
  *
  * What is scanned is what is resolved at run time: the request line and query continuation lines, header values,
- * body text, the path of a `< path` body (not the file's contents), `@x = value` values, `# @assert` expressions
+ * body text, the path of a `< path` body (not the file's contents), the path of a `>> path` / `>>! path` save, `@x = value` values, `# @assert` expressions
  * (without a trailing ` # comment`) and the values of the settings that are resolved (`timeout`, `no-redirect`,
  * `no-cookie-jar`, `proxy`). Comments, header names, `# @name` and trailing response handlers are not.
  *
@@ -408,6 +408,15 @@ class VariableAnalysis private constructor(
             }
             var lastBody = -1
             for (j in bodyFrom until to) if (!handler[j - bodyFrom] && lines.text(j).isNotBlank()) lastBody = j
+            // `>> path` / `>>! path` after the last body line: the path is resolved when the response is saved.
+            for (j in bodyFrom until to) {
+                if (j <= lastBody) continue
+                val raw = lines.text(j)
+                val save = HttpLineSyntax.responseSave(raw.trim()) ?: continue
+                if (save.path.isEmpty()) continue
+                val marker = leadOf(j) + if (save.overwrite) 3 else 2
+                segment(lines.start(j) + raw.indexOf(save.path, marker), save.path, owner)
+            }
             if (lastBody < 0) return
             val first = lines.text(bodyFrom).trim()
             if (lastBody == bodyFrom && HttpLineSyntax.isFileReference(first)) {
