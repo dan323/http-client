@@ -95,6 +95,10 @@ jobs:
       - name: Build plugin
         if: needs.changes.outputs.code == 'true'
         run: ./gradlew :intellij-plugin:buildPlugin --console=plain
+      # The installers bundle a jlink-trimmed JRE; fail if the app needs a JDK module that runtime lacks (it would crash only when installed).
+      - name: Check desktop runtime modules
+        if: needs.changes.outputs.code == 'true'
+        run: ./gradlew :desktop:checkRuntimeModules --console=plain
 
   # Aggregated test report + merged JaCoCo report (+ coverage floor). The JaCoCo XML is what SonarCloud reads
   # (sonar.coverage.jacoco.xmlReportPaths=quality-reports/build/reports/jacoco/testCodeCoverageReport/testCodeCoverageReport.xml).
