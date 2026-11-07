@@ -1,0 +1,36 @@
+# Known limitations
+
+Issues found in the R1-R13 review (all fixed or deliberately left; the history is in [../CHANGELOG.md](../CHANGELOG.md)) and
+accepted for now. None blocks a release. Fix one when it starts to matter, then delete its line.
+Related: [competitive-gaps.md](competitive-gaps.md) (what to add), [PLAN.md](PLAN.md) (open tasks).
+
+## Execution and security
+
+- **Redirects without the cookie jar.** With `@no-cookie-jar` the JDK client follows redirects itself, and how it treats explicit credential headers
+  (`Cookie`, `Authorization`) depends on the JDK version. `JdkRedirectHeaderTest` fails on JDK 21.0.2 and passes on newer 21.x. See G5 in competitive-gaps.md.
+- **File confinement can be raced.** Someone with write access inside an allowed folder can swap a parent directory for a symlink between the check and the read.
+- **Silently dropped headers.** A user-set `Host`, `Content-Length`, `Connection`, `Expect` or `Upgrade` header is dropped by the JDK client (documented, not warned about).
+- **XPath cannot be interrupted.** A timed-out evaluation keeps running on an abandoned daemon thread until it ends; the caller gets "not found" after 2 s. See G7.
+
+## CLI
+
+- `samePath` compares file names case-insensitively within one folder, so two reports that differ only by case are rejected even on case-sensitive file systems (conservative).
+
+## Front ends
+
+- **Plugin:** the VFS listener (forget on delete/move), the gutter icon, and the tool window are not tested without an IDE. The sandbox IDE only loads without errors (T21 in PLAN.md).
+- **Desktop and plugin:** no UI for the `$env` and file-root allowlists (system property / environment variable only).
+
+## Mock server (test fixture, low priority)
+
+- It binds in the constructor instead of `start()`, and a non-numeric port argument silently falls back to 8080.
+- Not looked at again: bad percent-escape handling, the default single-threaded executor with an unbounded body read, and repeated query keys as lists.
+
+## Deliberate deviations from the JetBrains HTTP Client
+
+Decided in the review, not bugs:
+
+- `< path` file bodies are confined to the `.http` file's folder by default; an allowlist (`--allow-file-root`, `HTTPC_ALLOW_FILE_ROOTS`) widens it. JetBrains does not confine.
+- An unknown or mistyped method (`GTE http://x`) is a parse error with the line number, not a URL.
+- `> {% ... %}` response handlers are skipped with a warning, not run.
+- The "(none)" environment really means none: variables from the file only, never a silent fallback.
