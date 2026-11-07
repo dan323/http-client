@@ -110,4 +110,15 @@ class JUnitXmlReportTest {
         assertEquals("2. pre2", (cases.item(0) as org.w3c.dom.Element).getAttribute("name"))
         assertEquals("3. main", (cases.item(1) as org.w3c.dom.Element).getAttribute("name"))
     }
+
+    @Test fun httpStatusFailureIsAFailureWithStatusInMessage() {
+        val outcome = RunOutcome.Success(req("a", "http://x/a"), HttpResponse(503, emptyList(), ByteArray(0), 7))
+        val xml = JUnitXmlReport.render(RunReport.from(listOf(outcome), failOnHttpError = true))
+        val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(ByteArrayInputStream(xml.toByteArray()))
+        assertEquals("1", doc.documentElement.getAttribute("failures"))
+        assertEquals("0", doc.documentElement.getAttribute("errors"))
+        val f = doc.getElementsByTagName("failure").item(0) as org.w3c.dom.Element
+        assertEquals("HttpStatusFailure", f.getAttribute("type"))
+        assertEquals("HTTP 503 from GET http://x/a", f.getAttribute("message"))
+    }
 }

@@ -59,4 +59,10 @@ class MainTest {
         assertEquals(listOf(b), select(listOf(a, b), "2"))
         assertNull(select(listOf(a, b), "3"))
     }
+
+    @Test fun parsesFailOnHttpError() {
+        assertEquals(false, parseArgs(listOf("f.http"))!!.failOnHttpError)
+        assertEquals(true, parseArgs(listOf("f.http", "--fail-on-http-error"))!!.failOnHttpError)
+        assertNull(parseArgs(listOf("f.http", "--fail-on-http-error", "--list")))
+    }
 }

@@ -14,8 +14,10 @@ data class ReportEntry(
     val error: String?,
     /** True for requests that only ran to feed `{{name.response...}}` chaining; their assertions are not evaluated. */
     val prerequisite: Boolean = false,
+    /** Set (for example `HTTP 503`) when the run was asked to fail on HTTP error statuses and this response had one; null otherwise. */
+    val httpError: String? = null,
 ) {
-    val passed: Boolean get() = error == null && assertions.all { it.passed }
+    val passed: Boolean get() = error == null && httpError == null && assertions.all { it.passed }
 }
 
 /** Pure summary of a run built from its [RunOutcome]s; exporters (JSON, JUnit XML) live in the adapters. */
@@ -30,16 +32,24 @@ data class RunReport(val entries: List<ReportEntry>) {
     val passed: Boolean get() = entries.all { it.passed }
 
     companion object {
-        fun from(outcomes: List<RunOutcome>, isPrerequisite: (RunOutcome) -> Boolean = { false }): RunReport =
-            RunReport(outcomes.map { entry(it, isPrerequisite(it)) })
+        /**
+         * With [failOnHttpError], a response with status >= 400 ([RunOutcome.Success.httpError]) fails its entry, except for
+         * prerequisites (like assertions, the status of requests that only feed chaining is not judged).
+         */
+        fun from(
+            outcomes: List<RunOutcome>,
+            failOnHttpError: Boolean = false,
+            isPrerequisite: (RunOutcome) -> Boolean = { false },
+        ): RunReport = RunReport(outcomes.map { entry(it, isPrerequisite(it), failOnHttpError) })
 
-        private fun entry(outcome: RunOutcome, prerequisite: Boolean): ReportEntry {
+        private fun entry(outcome: RunOutcome, prerequisite: Boolean, failOnHttpError: Boolean): ReportEntry {
             val r = outcome.request
             val name = r.name ?: "${r.method} ${r.url}"
             return when (outcome) {
                 is RunOutcome.Success -> ReportEntry(
                     name, r.method, r.url, outcome.response.statusCode, outcome.response.durationMillis,
                     outcome.assertions, 0, null, prerequisite,
+                    if (failOnHttpError && !prerequisite && outcome.httpError) "HTTP ${outcome.response.statusCode}" else null,
                 )
                 is RunOutcome.Failure -> ReportEntry(
                     name, r.method, r.url, null, null, emptyList(), outcome.assertionsNotRun, outcome.message, prerequisite,

@@ -19,6 +19,9 @@ sealed interface RunOutcome {
         val linkError: String? = null,
     ) : RunOutcome {
         val assertionsPassed: Boolean get() = assertions.all { it.passed }
+
+        /** True for a 4xx/5xx response (status >= 400); used by the CLI `--fail-on-http-error`. */
+        val httpError: Boolean get() = response.statusCode >= 400
     }
 
     /** [assertionsNotRun] counts the request's `# @assert` lines that could not be evaluated because it failed. */

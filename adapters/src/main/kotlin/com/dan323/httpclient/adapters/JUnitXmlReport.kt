@@ -32,9 +32,11 @@ object JUnitXmlReport {
                 append("    <error message=\"${attr(error)}\" type=\"RequestError\">${escape("${e.method} ${e.url}: $error")}</error>\n")
             } else {
                 val failed = e.assertions.filterNot { it.passed }
-                val message = failed.joinToString("\n") { it.message }
-                val body = failed.joinToString("\n") { "${it.assertion} -- ${it.message}" }
-                append("    <failure message=\"${attr(message)}\" type=\"AssertionFailure\">${escape(body)}</failure>\n")
+                val httpMessage = e.httpError?.let { "$it from ${e.method} ${e.url}" }
+                val message = (listOfNotNull(httpMessage) + failed.map { it.message }).joinToString("\n")
+                val body = (listOfNotNull(httpMessage) + failed.map { "${it.assertion} -- ${it.message}" }).joinToString("\n")
+                val type = if (e.httpError != null) "HttpStatusFailure" else "AssertionFailure"
+                append("    <failure message=\"${attr(message)}\" type=\"$type\">${escape(body)}</failure>\n")
             }
             append("  </testcase>\n")
         }
