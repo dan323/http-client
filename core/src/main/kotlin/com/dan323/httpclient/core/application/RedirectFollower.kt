@@ -9,11 +9,10 @@ import java.net.URI
 /**
  * Sends a request through [executor] using the session's [cookies].
  *
- * With the cookie jar off the executor handles everything (including redirects).
- * With the jar on, redirects are followed here, hop by hop, with the executor told not to follow any:
- * the `Cookie` header is recomputed from the jar for every hop's URL, `Set-Cookie` of every hop (the
- * `POST /login` -> `302` + `Set-Cookie` flow) is stored, and cookie jar state never leaks to another host
- * through the executor's own redirect handling. Rules: at most [MAX_REDIRECTS] hops (then an error, like
+ * Redirects are always followed here, hop by hop, with the executor told not to follow any, so the
+ * behaviour does not depend on the JDK version. With the cookie jar on, the `Cookie` header is recomputed
+ * from the jar for every hop's URL and `Set-Cookie` of every hop (the `POST /login` -> `302` + `Set-Cookie`
+ * flow) is stored; with `@no-cookie-jar` the jar is neither read nor written. Rules: at most [MAX_REDIRECTS] hops (then an error, like
  * the JDK), `@no-redirect` returns the first response, 301/302 on a non-GET/HEAD method and 303 switch to
  * GET without body (and drop Content-* headers), 307/308 keep method and body, and an explicit
  * `Cookie`, `Authorization` or `Proxy-Authorization` header written in the request is dropped when the
@@ -23,7 +22,7 @@ import java.net.URI
  *
  * Not thread-safe by itself beyond what [executor] and [cookies] guarantee; it keeps no state between calls.
  */
-internal class RedirectFollower(
+class RedirectFollower(
     private val executor: HttpExecutor,
     private val cookies: CookieJar,
     private val nanoTime: () -> Long = System::nanoTime,
@@ -36,7 +35,7 @@ internal class RedirectFollower(
     }
 
     fun send(request: HttpRequest): HttpResponse {
-        if (!request.options.useCookieJar) return executor.execute(request)
+        val useJar = request.options.useCookieJar
         val follow = request.options.followRedirects
         var current = request.copy(options = request.options.copy(followRedirects = false))
         var total = 0L
@@ -49,10 +48,10 @@ internal class RedirectFollower(
                 if (left <= 0) throw java.net.http.HttpTimeoutException("request timed out after $timeout ms")
                 current = current.copy(options = current.options.copy(timeoutMillis = left))
             }
-            val sent = withCookies(current)
+            val sent = if (useJar) withCookies(current) else current
             val response = executor.execute(sent)
             total += response.durationMillis
-            cookies.store(sent.url, response.headers)
+            if (useJar) cookies.store(sent.url, response.headers)
             val next = if (follow) redirectTarget(current, response) else null
             if (next == null) return response.copy(durationMillis = total)
             if (++hops > MAX_REDIRECTS) throw IllegalStateException("Too many redirects (more than $MAX_REDIRECTS)")

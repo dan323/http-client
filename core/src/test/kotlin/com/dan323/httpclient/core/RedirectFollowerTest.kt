@@ -33,11 +33,24 @@ class RedirectFollowerTest {
         options: RequestOptions = RequestOptions(),
     ) = HttpRequest(method, url, headers, body?.toByteArray(), options)
 
-    @Test fun jarOffDelegatesToTheExecutorUntouched() {
-        script += redirect(302, "/x")
+    @Test fun jarOffStillFollowsItselfButNeverTouchesTheJar() {
+        script += redirect(302, "/x", Header("Set-Cookie", "sid=1; Path=/")); script += ok()
+        jar.store("http://a.test/", listOf(Header("Set-Cookie", "old=1; Path=/")))
         val r = req(options = RequestOptions(useCookieJar = false))
-        assertEquals(302, follower.send(r).statusCode)
-        assertEquals(listOf(r), sent)
+        assertEquals(200, follower.send(r).statusCode)
+        assertEquals(listOf("http://a.test/start", "http://a.test/x"), sent.map { it.url })
+        assertFalse(sent.any { it.options.followRedirects }, "the executor is told not to follow")
+        assertFalse(sent.any { s -> s.headers.any { it.name == "Cookie" } }, "no jar cookie is added")
+        assertNull(jar.headerFor("http://a.test/x")?.takeIf { "sid=1" in it }, "Set-Cookie of the redirect is not stored")
+    }
+
+    @Test fun jarOffDropsCredentialsAcrossOriginsAndKeepsThemWithin() {
+        val creds = listOf(Header("Cookie", "c=1"), Header("Authorization", "t"), Header("Proxy-Authorization", "p"))
+        script += redirect(302, "/same"); script += redirect(302, "http://b.test/x"); script += ok()
+        follower.send(req(headers = creds, options = RequestOptions(useCookieJar = false)))
+        assertEquals(creds, sent[0].headers)
+        assertEquals(creds, sent[1].headers)
+        assertEquals(emptyList(), sent[2].headers)
     }
 
     @Test fun followsRelativeLocationAndSumsDurations() {
