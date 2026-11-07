@@ -73,4 +73,22 @@ class OutcomeDisplayTest {
         assertEquals("n", u.title)
         assertEquals("n  ·  GET http://h/", u.summary)
     }
+
+    @Test fun saveAndLinkFeedback() {
+        val r = req("GET http://h/\n")
+        val resp = HttpResponse(200, emptyList(), ByteArray(0), 1)
+        val plain = RunOutcome.Success(r, resp).display() as OutcomeDisplay.Response
+        assertNull(plain.savedLabel)
+        assertTrue(plain.notices.isEmpty())
+        val saved = RunOutcome.Success(r, resp, savedTo = "out/a-1.json").display() as OutcomeDisplay.Response
+        assertEquals("Saved to out/a-1.json", saved.savedLabel)
+        assertEquals(listOf(OutcomeDisplay.Notice("Saved to out/a-1.json", false)), saved.notices)
+        val failed = RunOutcome.Success(r, resp, saveError = "Cannot save response to '../x': outside", linkError = "Cannot keep the response link: disk full").display() as OutcomeDisplay.Response
+        assertEquals(
+            listOf(OutcomeDisplay.Notice("Cannot save response to '../x': outside", true), OutcomeDisplay.Notice("Cannot keep the response link: disk full", true)),
+            failed.notices,
+        )
+        assertNull(failed.savedLabel)
+        assertEquals(200, failed.status)
+    }
 }

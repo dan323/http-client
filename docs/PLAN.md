@@ -18,7 +18,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F6 | More dynamic variables (`$random.*`, `$env.X`, timestamp offsets, `$randomInt` range) | core | done |
 | F7 | More extraction: XPath, regex, headers (for chaining and assertions) | core | done |
 | F8 | Executor settings: redirects, timeouts, proxy | core | done |
-| F9 | Response history and saved responses | core, UIs | open |
+| F9 | Response history and saved responses | core, UIs | partial: `>>` / `>>!` / `<>` and link recording done (T26); history browser (T18, desktop) and opening a `<>`-linked response (T18 desktop, T27 plugin) open |
 | F10 | CLI: `--json`, `--junit`, `--quiet`, `--output`, `--var`, meaningful exit codes | CLI | done (T10): reports, exit codes 0/1/2/3, `--quiet`, `--output`, `--var`, summary line |
 | F11 | Desktop: remember last file, environment, window, recent files | desktop | done (T14): last file, environment, window, recent files |
 | F12 | Desktop: several files at once, folder view | desktop | open |
@@ -30,7 +30,6 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F18 | Plugin: completion, navigation, inspections | plugin | open |
 | F19 | Plugin: richer response panel, remember environment, run all | plugin | partial: shared view-model, run guard, reset chain done; remember environment across restarts and run all open |
 | F20 | Verification and release: plugin tried in a real IDE, CI on macOS/Windows/Linux, installers | all | partial: tests on all three OS and plugin build in CI; GUI of the plugin, installers in CI and cross-platform QA open |
-| F21 | Saved responses linked from the `.http` file, as in the JetBrains plugin: `>> file` / `>>! file` save the response body, `<> file` links a request to its latest stored response | core, UIs | open |
 
 **Later / out of scope for now:** GraphQL, WebSocket, gRPC, full OAuth2 flows, Postman/curl import, team sync.
 
@@ -58,7 +57,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 | T22 | **Plugin intelligence:** completion, go-to-request, inspections from T13; show assertion results | F18, F14, F1 | L | T13, T21 |
 | T23 | **Plugin response panel:** remember the environment across restarts, run all | F19 | M | T21 |
 | T24 | **Packaging in CI** (rest of F20): build DMG/MSI/DEB and the plugin zip on the matching OS (tests on three OS already run) | F20 | S | – |
-| T26 | **Saved responses and links:** parse `>> file` / `>>! file` (today they are skipped with a parser warning, like other handlers) and `<> file`; write the response body to the named file (`>>` never overwrites, `>>!` does) through a port, with paths confined like `< path` (`FileAccessPolicy`); keep a `<> file` link to the latest stored response up to date, with the response files kept in a history folder next to the `.http` file (`.http-history/` via the T11 `HistoryStore`); open the linked response from desktop and plugin | F21, F9 | M | – (T11 done: `HistoryStore` / `FileHistoryStore`) |
+| T27 | **Plugin: open the linked/stored response** of a request (`<>` link, `ResponseLinks.latest`) in the plugin | F9 | S | T21 |
 | T25 | **Final cross-platform QA and release notes:** manual pass of CLI, desktop (dialogs, MSI) and plugin; fix findings | F20 | M | all |
 
 ### Feature to task map
@@ -67,7 +66,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 |---|---|
 | F1 | T17, T22 |
 | F4 | T8 |
-| F9 | T26 |
+| F9 | T18, T27 |
 | F11 | T14 |
 | F12 | T15 |
 | F13 | T18 |
@@ -78,7 +77,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 | F18 | T13, T21, T22 |
 | F19 | T21, T23 |
 | F20 | T21, T24, T25 |
-| F21 | T26 |
 
 Shared work, written once: T13 (F14, F18), T14 (F11, F12, F17), T21 (F18, F19, F20).
 
@@ -90,10 +88,10 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 | Wave | Tasks | Why together |
 |---|---|---|
 | 1 | T21 (plugin GUI check) | Done by hand in a real IDE; its findings may reshape T22/T23 |
-| 2 | T13 (variable analysis), T14 (desktop persistence), T26 (saved responses, builds on the done T11) | disjoint areas |
+| 2 | T13 (variable analysis), T14 (desktop persistence) | disjoint areas |
 | 3 | T8 (multipart), T19 (cancel button), T23 (plugin panel) | disjoint areas |
 | 4 | T22 (plugin intelligence), T16 (desktop editor), T15 (workspace) | need T13 / T14 |
-| 5 | T17 (desktop extras), T18 (history browser), T20 (environment editor), T24 (packaging) | up to three at a time |
+| 5 | T17 (desktop extras), T18 (history browser), T20 (environment editor), T24 (packaging), T27 (plugin: open linked response) | up to three at a time |
 | 6 | T25 (QA and release notes) | needs everything |
 
 ### Rules for every task

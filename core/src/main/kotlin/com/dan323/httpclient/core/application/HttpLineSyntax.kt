@@ -62,8 +62,23 @@ object HttpLineSyntax {
     /** Query continuation line (`?a=1`, `&b=2`) that extends the request URL. */
     fun isQueryContinuation(trimmed: String) = trimmed.startsWith("?") || trimmed.startsWith("&")
 
-    /** `<> file` response-redirect line. */
-    fun isResponseRedirect(trimmed: String) = trimmed.startsWith("<> ")
+    private val saveLine = Regex("""^>>(!?)(?:\s+(.*))?$""")
+    private val linkLine = Regex("""^<>(?:\s+(.*))?$""")
+
+    /** A `>> path` / `>>! path` line; [path] is trimmed and may be empty (an error the parser reports). */
+    class ResponseSaveLine(val overwrite: Boolean, val path: String)
+
+    /** `>> path` (never overwrites) or `>>! path` (overwrites): the saved-response directive, else null. `>>path` is text. */
+    fun responseSave(trimmed: String): ResponseSaveLine? =
+        saveLine.matchEntire(trimmed)?.let { ResponseSaveLine(it.groupValues[1] == "!", it.groupValues[2].trim()) }
+
+    fun isResponseSave(trimmed: String) = saveLine.matches(trimmed)
+
+    /** The path of a `<> path` response-link line (empty for a bare `<>`), else null. */
+    fun responseLink(trimmed: String): String? = linkLine.matchEntire(trimmed)?.groupValues?.get(1)?.trim()
+
+    /** `<> file` response-link line. */
+    fun isResponseRedirect(trimmed: String) = linkLine.matches(trimmed)
 
     /** `> {% ... %}` script start or `> file` response handler. */
     fun isResponseHandler(trimmed: String) = trimmed.startsWith("> ") || trimmed == ">"

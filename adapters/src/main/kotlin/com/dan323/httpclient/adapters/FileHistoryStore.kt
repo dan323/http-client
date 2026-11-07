@@ -29,7 +29,7 @@ import java.time.format.DateTimeFormatter
  * ```
  * .http-history/
  *   api.http/                       one folder per .http file (name sanitized, see [HistoryNames])
- *     20261106T101500123Z-a1b2c3d4/ one folder per run; the name is the run id (UTC time + 8 random hex digits)
+ *     20261106T101500123Z-n0000-a1b2c3d4/ one folder per run; the name is the run id (UTC time, a sequence number within the millisecond, 8 random hex digits)
  *       run.json                    the index of the run, written last (a run without it is incomplete and ignored)
  *       0.body  1.body ...          raw response bodies by request index (cut to maxBodyBytes)
  * ```
@@ -41,7 +41,8 @@ import java.time.format.DateTimeFormatter
  *
  * Stored responses are raw: bodies and headers may contain secrets. On POSIX, files and folders are created
  * owner-only (`rw-------` / `rwx------`) and never readable by others, even briefly. Nothing outside the history
- * folder is written. Only the newest [maxRuns] runs per file are kept. A body larger than [maxBodyBytes] is
+ * folder is written. Only the newest [maxRuns] runs per file are kept, plus the newest run of every `<>` link key
+ * (see [recordLinked]) that is older than that, so a link never stops resolving because of other requests' runs. A body larger than [maxBodyBytes] is
  * stored cut, with `bodyTruncated` set. Corrupt or foreign entries are skipped with a call to [onWarning].
  *
  * @param historyDirFor the history folder of a `.http` file; see [nextToHttpFile] and [underRoot]
@@ -60,7 +61,28 @@ class FileHistoryStore(
 
     private val random = SecureRandom()
 
-    override fun record(httpFile: Path, report: RunReport, responses: List<HttpResponse?>): HistoryRun {
+    override fun record(httpFile: Path, report: RunReport, responses: List<HttpResponse?>): HistoryRun =
+        store(httpFile, report, responses, null)
+
+    override fun recordLinked(httpFile: Path, key: String, report: RunReport, response: HttpResponse): HistoryRun =
+        store(httpFile, report, listOf(response), key)
+
+    override fun latestLinked(httpFile: Path, key: String): StoredResponse? {
+        if (key.isBlank()) return null
+        val fileDir = fileDir(httpFile)
+        for (id in runIds(fileDir)) {
+            val run = loadRun(fileDir, id) ?: continue
+            val entries = run.report().entries
+            // a keyed response matches its key; responses of ordinary runs carry no key and match by request name
+            for (resp in run.dto.responses.sortedByDescending { it.index }) {
+                val matches = if (resp.key != null) resp.key == key else entries.getOrNull(resp.index)?.name == key
+                if (matches) toStored(fileDir.resolve(id), run, resp.index)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun store(httpFile: Path, report: RunReport, responses: List<HttpResponse?>, key: String?): HistoryRun {
         require(responses.size == report.entries.size) { "responses (${responses.size}) must match the report entries (${report.entries.size})" }
         val fileDir = fileDir(httpFile)
         createPrivateDirectories(fileDir)
@@ -71,7 +93,7 @@ class FileHistoryStore(
                 if (r == null) return@mapIndexedNotNull null
                 val kept = if (r.body.size > maxBodyBytes) r.body.copyOf(maxBodyBytes) else r.body
                 writeAtomically(runDir.resolve("$i.body"), kept)
-                ResponseDto(i, r.statusCode, r.headers.map { HeaderDto(it.name, it.value) }, r.durationMillis, r.body.size.toLong(), r.body.size > maxBodyBytes)
+                ResponseDto(i, r.statusCode, r.headers.map { HeaderDto(it.name, it.value) }, r.durationMillis, r.body.size.toLong(), r.body.size > maxBodyBytes, key)
             }
             val dto = RunDto(FORMAT_VERSION, id, now.toString(), JSON.parseToJsonElement(JsonRunReport.render(report)), stored)
             writeAtomically(runDir.resolve(RUN_FILE), JSON.encodeToString(dto).toByteArray(Charsets.UTF_8))
@@ -167,7 +189,7 @@ class FileHistoryStore(
                 s.filter { Files.isDirectory(it, LinkOption.NOFOLLOW_LINKS) }
                     .map { it.fileName.toString() }
                     .filter { HistoryNames.isRunId(it) }
-                    .sorted(Comparator.reverseOrder())
+                    .sorted(HistoryNames.OLDEST_FIRST.reversed())
                     .toList()
             }
         } catch (e: IOException) {
@@ -187,7 +209,9 @@ class FileHistoryStore(
 
     private fun createRunDir(fileDir: Path, now: Instant): Pair<String, Path> {
         repeat(20) {
-            val id = HistoryNames.newRunId(now, random)
+            // Re-read each time: another store instance or process may have recorded in this millisecond meanwhile.
+            val existing = try { Files.list(fileDir).use { st -> st.map { it.fileName.toString() }.toList() } } catch (_: IOException) { emptyList() }
+            val id = HistoryNames.newRunId(now, HistoryNames.nextSeq(now, existing), random)
             val dir = fileDir.resolve(id)
             try {
                 Files.createDirectory(dir, *dirAttrs())
@@ -208,7 +232,26 @@ class FileHistoryStore(
             if (!Files.exists(dir.resolve(RUN_FILE), LinkOption.NOFOLLOW_LINKS) && runOf(id)?.isBefore(cutoff) == true) deleteTree(dir)
         }
         val complete = ids.filter { Files.exists(fileDir.resolve(it).resolve(RUN_FILE), LinkOption.NOFOLLOW_LINKS) }
-        complete.drop(maxRuns).forEach { deleteTree(fileDir.resolve(it)) }
+        // The newest record of every `<>` link key survives, whatever other keys record later: a link must keep
+        // resolving even when unrelated requests are run more than maxRuns times. At most one extra run per distinct key.
+        val seen = HashSet<String>()
+        complete.take(maxRuns).forEach { id -> keysOf(fileDir, id).let(seen::addAll) }
+        for (id in complete.drop(maxRuns)) {
+            val fresh = keysOf(fileDir, id).filter { seen.add(it) }
+            if (fresh.isEmpty()) deleteTree(fileDir.resolve(id))
+        }
+    }
+
+    /**
+     * The `<>` link keys recorded in run [id] whose response body is readable (empty for ordinary runs and for runs
+     * written before keys existed). An unreadable record does not count: it must not make an older, readable one expendable.
+     */
+    private fun keysOf(fileDir: Path, id: String): List<String> {
+        val run = loadRun(fileDir, id) ?: return emptyList()
+        return run.dto.responses.mapNotNull { r ->
+            val body = fileDir.resolve(id).resolve("${r.index}.body")
+            r.key?.takeIf { Files.isRegularFile(body, LinkOption.NOFOLLOW_LINKS) && Files.isReadable(body) }
+        }
     }
 
     private fun runOf(id: String): Instant? = HistoryNames.timeOf(id)
@@ -233,6 +276,8 @@ class FileHistoryStore(
         val durationMillis: Long,
         val bodySize: Long,
         val bodyTruncated: Boolean,
+        /** Set for responses recorded for a `<>` link (see [recordLinked]); absent in older entries. */
+        val key: String? = null,
     )
 
     @Serializable private data class RunDto(
@@ -272,14 +317,35 @@ class FileHistoryStore(
 
 /** Run ids and file-system-safe names for the history folder. */
 internal object HistoryNames {
-    private val RUN_ID = Regex("^\\d{8}T\\d{9}Z-[0-9a-f]{8}$")
+    /** Old ids: time + 8 random hex digits. Current ids: time + `n` + 4 hex digits sequence within the millisecond + 8 random hex digits. */
+    private val RUN_ID = Regex("^\\d{8}T\\d{9}Z-(?:[0-9a-f]{8}|n[0-9a-f]{4}-[0-9a-f]{8})$")
     private val FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmssSSS'Z'").withZone(ZoneOffset.UTC)
     private val PARSE = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmssSSS'Z'")
     private val RESERVED = Regex("^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$", RegexOption.IGNORE_CASE)
     const val MAX_COMPONENT = 80
 
-    fun newRunId(now: Instant, random: SecureRandom): String =
-        FORMAT.format(now) + "-" + ByteArray(4).also { random.nextBytes(it) }.joinToString("") { "%02x".format(it) }
+    private const val TIME_LENGTH = 19 // yyyyMMddTHHmmssSSSZ
+
+    /** [seq] orders runs recorded within the same millisecond (see [nextSeq]); the random part only makes the name unique. */
+    fun newRunId(now: Instant, seq: Int, random: SecureRandom): String =
+        FORMAT.format(now) + "-n" + "%04x".format(seq.coerceIn(0, MAX_SEQ)) + "-" + ByteArray(4).also { random.nextBytes(it) }.joinToString("") { "%02x".format(it) }
+
+    const val MAX_SEQ = 0xffff
+
+    private fun seqOf(id: String): Int = if (id.length > TIME_LENGTH + 9 && id[TIME_LENGTH + 1] == 'n') id.substring(TIME_LENGTH + 2, TIME_LENGTH + 6).toInt(16) else -1
+
+    /** The sequence number for a new run in the millisecond of [now]: one more than the highest already present among [existing] ids. */
+    fun nextSeq(now: Instant, existing: Collection<String>): Int {
+        val time = FORMAT.format(now)
+        return (existing.filter { it.startsWith(time) && isRunId(it) }.maxOfOrNull { seqOf(it) } ?: -1) + 1
+    }
+
+    /**
+     * Oldest first: by time, then by sequence within the millisecond (an old id without a sequence is older than any
+     * sequenced one of the same millisecond), then by name. Recorded order, not the random part, decides.
+     */
+    val OLDEST_FIRST: Comparator<String> =
+        compareBy<String>({ it.substring(0, TIME_LENGTH) }, { seqOf(it) }, { it })
 
     fun isRunId(s: String) = RUN_ID.matches(s)
 

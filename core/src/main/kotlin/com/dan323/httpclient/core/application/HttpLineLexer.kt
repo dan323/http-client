@@ -45,7 +45,18 @@ object HttpLineLexer {
                 add(HttpTokenKind.COMMENT, 0, line.length)
                 next = if (HttpLineSyntax.endsScript(trimmed.substring(trimmed.indexOf("{%") + 2))) Mode.BODY else Mode.SCRIPT
             }
-            (mode == Mode.BODY || mode == Mode.HEADERS) && (HttpLineSyntax.isResponseHandler(trimmed) || HttpLineSyntax.isResponseRedirect(trimmed)) -> {
+            // `>> path`, `>>! path` and `<> path`: the marker is a comment, the path a file reference (with variables).
+            (mode == Mode.BODY || mode == Mode.HEADERS) && (HttpLineSyntax.isResponseSave(trimmed) || HttpLineSyntax.isResponseRedirect(trimmed)) -> {
+                val indent = line.length - line.trimStart().length
+                val markerEnd = indent + trimmed.takeWhile { !it.isWhitespace() }.length
+                add(HttpTokenKind.WHITESPACE, 0, indent)
+                add(HttpTokenKind.COMMENT, indent, markerEnd)
+                val pathStart = line.length - line.substring(markerEnd).trimStart().length
+                add(HttpTokenKind.WHITESPACE, markerEnd, pathStart)
+                addText(HttpTokenKind.FILE_REF, pathStart, line.length)
+                next = Mode.BODY
+            }
+            (mode == Mode.BODY || mode == Mode.HEADERS) && HttpLineSyntax.isResponseHandler(trimmed) -> {
                 add(HttpTokenKind.COMMENT, 0, line.length)
                 next = Mode.BODY
             }
