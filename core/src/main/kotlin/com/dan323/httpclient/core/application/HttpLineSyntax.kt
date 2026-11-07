@@ -8,13 +8,18 @@ sealed interface RequestLineKind {
     data object BareUrl : RequestLineKind
     /** `WORD URL` where WORD is not an HTTP method (a typo such as `GTE`). */
     data class UnknownMethod(val word: String) : RequestLineKind
+    /** `WORD rest` or a lone `WORD` where WORD is a request type this client does not support (`GRAPHQL`, `WEBSOCKET`, `GRPC`). */
+    data class UnsupportedProtocol(val word: String) : RequestLineKind
     /** A lone known method word with no URL (`GET`). */
     data class MissingUrl(val word: String) : RequestLineKind
 }
 
 /** Line classification shared by the parser and the lexer. */
 object HttpLineSyntax {
-    val METHODS = setOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "CONNECT", "GRAPHQL", "WEBSOCKET", "GRPC")
+    val METHODS = setOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "CONNECT")
+
+    /** Request types of the JetBrains format that are not supported; they must fail instead of being sent as plain HTTP. */
+    val UNSUPPORTED_PROTOCOLS = setOf("GRAPHQL", "WEBSOCKET", "GRPC")
 
     private val fileVariable = Regex("""^@([^\s=]+)\s*=\s*(.*)$""")
     private val httpVersion = Regex("""\s+HTTP/\S+$""")
@@ -31,10 +36,12 @@ object HttpLineSyntax {
     fun classifyRequestLine(line: String): RequestLineKind {
         val t = line.trim()
         val ws = t.indexOfFirst { it.isWhitespace() }
+        if (ws < 0 && t.uppercase() in UNSUPPORTED_PROTOCOLS) return RequestLineKind.UnsupportedProtocol(t)
         if (ws < 0) return if (t.uppercase() in METHODS) RequestLineKind.MissingUrl(t) else RequestLineKind.BareUrl
         val word = t.substring(0, ws)
         val rest = t.substring(ws).trim()
         return when {
+            word.uppercase() in UNSUPPORTED_PROTOCOLS -> RequestLineKind.UnsupportedProtocol(word)
             word.uppercase() in METHODS -> RequestLineKind.Method(word, rest)
             letters.matches(word) && stripHttpVersion(rest).isNotBlank() -> RequestLineKind.UnknownMethod(word)
             else -> RequestLineKind.BareUrl

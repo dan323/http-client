@@ -192,9 +192,14 @@ class HttpFileParserTest {
     }
 
     @Test
-    fun `GRAPHQL and WEBSOCKET are accepted methods`() {
-        assertEquals("GRAPHQL", parser.parse("GRAPHQL http://x/g\n").requests.single().method)
-        assertEquals("WEBSOCKET", parser.parse("WEBSOCKET ws://x/g\n").requests.single().method)
+    fun `GRAPHQL WEBSOCKET and GRPC are parse errors naming the line, not sent as HTTP`() {
+        for (word in listOf("GRAPHQL", "WEBSOCKET", "GRPC", "grpc")) {
+            val e = assertFailsWith<HttpParseException> { parser.parse("GET http://a\n###\n# c\n$word http://x/g\n") }
+            assertEquals(4, e.line)
+            assertEquals("Line 4: ${word.uppercase()} requests are not supported (only HTTP methods are sent)", e.message)
+        }
+        val lone = assertFailsWith<HttpParseException> { parser.parse("WEBSOCKET\n") }
+        assertEquals(true, "WEBSOCKET requests are not supported" in lone.message!!)
     }
 
     @Test
