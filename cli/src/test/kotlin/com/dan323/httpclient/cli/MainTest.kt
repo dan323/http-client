@@ -21,6 +21,21 @@ class MainTest {
         assertEquals(Options(Path.of("f.http"), "dev", "2", true), o)
     }
 
+    @Test fun parsesTimeout() {
+        assertNull(parseArgs(listOf("f.http"))!!.timeoutMillis)
+        assertEquals(30_000L, parseArgs(listOf("f.http", "--timeout", "30"))!!.timeoutMillis)
+        assertEquals(500L, parseArgs(listOf("f.http", "--timeout", "500ms"))!!.timeoutMillis)
+        assertEquals(120_000L, parseArgs(listOf("--timeout", "2m", "f.http"))!!.timeoutMillis)
+    }
+
+    @Test fun rejectsBadOrRepeatedOrMisplacedTimeout() {
+        assertNull(parseArgs(listOf("f.http", "--timeout")))
+        assertNull(parseArgs(listOf("f.http", "--timeout", "0")))
+        assertNull(parseArgs(listOf("f.http", "--timeout", "soon")))
+        assertNull(parseArgs(listOf("f.http", "--timeout", "1", "--timeout", "2")))
+        assertNull(parseArgs(listOf("f.http", "--timeout", "1", "--list")))
+    }
+
     @Test fun parsesAllowFileRoot() {
         assertEquals(emptyList(), parseArgs(listOf("f.http"))!!.allowFileRoots)
         val o = parseArgs(listOf("f.http", "--allow-file-root", "a", "--allow-file-root", "/b c"))!!

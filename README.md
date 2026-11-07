@@ -42,6 +42,7 @@ Documentation: [features](docs/features.md) · [plan](docs/PLAN.md) · [changelo
 - `--quiet` — no per-request output on stdout; failed assertions and errors still go to stderr.
 - `--output FILE` — write the response body of the single selected request to `FILE` (needs `--request` when the file holds several requests; owner-only file).
 - `--var NAME=VALUE` — set a variable (repeatable); it overrides file and environment variables.
+- `--timeout DURATION` — total time limit for requests without `# @timeout` (`30`, `500ms`, `45s`, `2m`; default 60 s).
 
 After a run a summary line such as `3 requests, 2 passed, 1 failed in 1.2s` is printed to stderr.
 
