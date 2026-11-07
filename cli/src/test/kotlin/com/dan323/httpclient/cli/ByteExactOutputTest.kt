@@ -9,6 +9,7 @@ import java.nio.file.attribute.PosixFilePermissions
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -76,5 +77,61 @@ class ByteExactOutputTest {
         val target = dir.resolve("img.png")
         assertEquals(0, download("/bin", target).first)
         assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(target)))
+    }
+
+    @Test fun gzipBodyIsWrittenAsTheCompressedBytesReceived() {
+        val plain = "hello hello hello hello".toByteArray()
+        val gz = ByteArrayOutputStream().also { o -> java.util.zip.GZIPOutputStream(o).use { it.write(plain) } }.toByteArray()
+        server.createContext("/gz") { ex ->
+            ex.responseHeaders.add("Content-Encoding", "gzip")
+            ex.sendResponseHeaders(200, gz.size.toLong())
+            ex.responseBody.use { it.write(gz) }
+            ex.close()
+        }
+        server.start()
+        val target = dir.resolve("gz.bin")
+        assertEquals(0, download("/gz", target).first)
+        assertContentEquals(gz, Files.readAllBytes(target)) // not decompressed
+    }
+
+    @Test fun outputNamingASavedResponseIsRefusedAndNeverWritten() {
+        serve("/saved", "text/plain", "response".toByteArray())
+        val f = dir.resolve("s.http").also { Files.writeString(it, "GET $base/saved\n>> saved.txt\n") }
+        val calls = mutableListOf<java.nio.file.Path>()
+        val e = ByteArrayOutputStream()
+        val code = run(
+            listOf(f.toString(), "--quiet", "--output", dir.resolve("sub/../saved.txt").toString()),
+            PrintStream(ByteArrayOutputStream()), PrintStream(e), outputWriter = com.dan323.httpclient.core.port.out.OutputWriter { p, _ -> calls.add(p) },
+        )
+        val err = e.toString()
+        assertEquals(3, code, err)
+        assertContains(err, "Cannot write output")
+        assertContains(err, "saved by '>>'")
+        assertContains(err, "Run passed; only the report/output file could not be written.")
+        assertEquals(emptyList(), calls) // the writer was never reached
+        assertEquals("response", Files.readString(dir.resolve("saved.txt")))
+    }
+
+    @Test fun unwritableOutputGivesExit3OnAPassedRun() {
+        serve("/ok", "text/plain", "x".toByteArray())
+        val f = dir.resolve("u.http").also { Files.writeString(it, "GET $base/ok\n") }
+        val e = ByteArrayOutputStream()
+        val code = run(
+            listOf(f.toString(), "--quiet", "--output", dir.resolve("o.bin").toString()),
+            PrintStream(ByteArrayOutputStream()), PrintStream(e), outputWriter = com.dan323.httpclient.core.port.out.OutputWriter { _, _ -> throw java.io.IOException("disk full") },
+        )
+        val err = e.toString()
+        assertEquals(3, code, err)
+        assertContains(err, "Error: Cannot write output")
+        assertContains(err, "disk full")
+        assertContains(err, "Run passed; only the report/output file could not be written.")
+    }
+
+    @Test fun outputPathThatIsADirectoryGivesExit3() {
+        serve("/ok", "text/plain", "x".toByteArray())
+        val target = Files.createDirectory(dir.resolve("adir"))
+        val (code, err) = download("/ok", target)
+        assertEquals(3, code, err)
+        assertContains(err, "Cannot write output")
     }
 }
