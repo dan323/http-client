@@ -222,6 +222,18 @@ class VariableAnalysisTest {
         assertEquals(1, a.findUsages("b").size)
     }
 
+    @Test fun anUnsupportedProtocolBlockWithHeadersAndBodyGivesOneParseErrorAndKeepsLaterBlocks() {
+        val text = "@a = 1\nGRPC localhost:50051/{{a}}\nContent-Type: application/json\n\n{\"x\": \"{{a}}\"}\n###\nGET http://h/{{a}}/{{b}}"
+        val a = analyze(text)
+        val ds = a.diagnostics
+        // the header line after the rejected line becomes the next request line and is rejected too, but only one error per block is reported
+        assertEquals(1, ds.count { it.code == DiagnosticCodes.PARSE_ERROR })
+        assertEquals(1, ds.single { it.code == DiagnosticCodes.PARSE_ERROR }.range.line)
+        assertEquals(1, ds.count { it.code == DiagnosticCodes.UNDEFINED_VARIABLE })
+        assertEquals("b", slice(text, ds.single { it.code == DiagnosticCodes.UNDEFINED_VARIABLE }))
+        assertEquals(3, a.findVariableUsages("a").size) // the definition, the leftover body line of the rejected block (read as a request of its own) and the later block
+    }
+
     @Test fun anIncompleteRequestLineDoesNotBlankTheFile() {
         val text = "@a = 1\nGET\n###\nGET http://h/{{a}}/{{b}}"
         val a = analyze(text)
