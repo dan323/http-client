@@ -48,7 +48,7 @@ class RedirectFollowerTest {
         val creds = listOf(Header("Cookie", "c=1"), Header("Authorization", "t"), Header("Proxy-Authorization", "p"))
         script += redirect(302, "/same"); script += redirect(302, "http://b.test/x"); script += ok()
         follower.send(req(headers = creds, options = RequestOptions(useCookieJar = false)))
-        assertEquals(3, creds.size)
+        assertEquals(creds, sent[0].headers)
         assertEquals(creds, sent[1].headers)
         assertEquals(emptyList(), sent[2].headers)
     }
