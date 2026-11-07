@@ -3,6 +3,7 @@ package com.dan323.httpclient.adapters
 import com.dan323.httpclient.core.application.DynamicVariables
 import com.dan323.httpclient.core.application.RequestRunner
 import com.dan323.httpclient.core.application.RequestSession
+import com.dan323.httpclient.core.application.RequestTimeouts
 import com.dan323.httpclient.core.port.out.HistoryStore
 import com.dan323.httpclient.core.port.out.HttpExecutor
 import java.nio.file.Path
@@ -25,27 +26,31 @@ class SessionFactory(
     /**
      * A new, empty session for requests of [httpFile]: `< path` bodies are read, and `>> path` responses are written, in the file's folder plus the roots
      * of [policy]; `{{$env.NAME}}` reads the OS variables allowed by `-Dhttpclient.allowEnv` / `HTTPC_ALLOW_ENV` plus
-     * [allowEnv] (the hint in the error message is [envHint]).
+     * [allowEnv] (the hint in the error message is [envHint]). A request without `# @timeout` gets [defaultTimeoutMillis]
+     * as its total timeout (headers and body).
      */
     fun create(
         httpFile: Path,
         policy: FileAccessPolicy,
         allowEnv: Set<String> = emptySet(),
         envHint: String = SystemEnvironmentVariables.DEFAULT_HINT,
+        defaultTimeoutMillis: Long = RequestTimeouts.DEFAULT_MILLIS,
     ): RequestSession {
         val dir = httpFile.toAbsolutePath().parent
         val dynamic = DynamicVariables(env = SystemEnvironmentVariables.fromConfiguration(extra = allowEnv, hint = envHint))
         return RequestSession(
-            RequestRunner(executor, LocalFileReader(dir, policy), dynamic), executor, KotlinxJsonExtractor(),
+            RequestRunner(executor, LocalFileReader(dir, policy), dynamic, defaultTimeoutMillis), executor, KotlinxJsonExtractor(),
         ).withPersistence(LocalResponseSaver(httpFile, policy), history?.let { HistoryLinkRecorder(httpFile.toAbsolutePath(), it) })
     }
 
     /**
-     * Like [create] with the policy from the system property / environment variable ([FileAccessPolicy.load]); a bad
-     * setting comes back as a failure carrying the message for the user.
+     * Like [create] with the policy and the default timeout from the system properties / environment variables
+     * ([FileAccessPolicy.load], [DefaultTimeout.load]); a bad setting comes back as a failure carrying the message for the user.
      */
     fun createConfigured(httpFile: Path): Result<RequestSession> =
-        FileAccessPolicy.load().map { create(httpFile, it) }
+        FileAccessPolicy.load().mapCatching { policy ->
+            create(httpFile, policy, defaultTimeoutMillis = DefaultTimeout.load().getOrThrow())
+        }
 
     override fun close() { (executor as? AutoCloseable)?.close() }
 }

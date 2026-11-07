@@ -123,7 +123,7 @@ uses the variable is not known. Analysis time is linear in the text size.
 `# @timeout 5`, `# @no-redirect`, `# @no-cookie-jar`. The parser records them on the request
 (`RequestTemplate.settings`); the following are honoured per request by the executor (carried as `HttpRequest.options`):
 
-- `# @timeout 5`: maximum time for the whole exchange, response headers and body; on expiry the request is cancelled and fails with a timeout. Without `@timeout` there is no total limit (the default client only has a 30 s connect timeout). Interrupting the calling thread cancels the in-flight request and fails with a `CancellationException` (the interrupt flag is kept). A whole, positive number: plain numbers are seconds, or add `ms`, `s` or `m` (any case, `@timeout 500ms`). Decimals (`1.5s`), `0`, negatives and values that overflow are rejected. May use `{{vars}}`.
+- `# @timeout 5`: maximum time for the whole exchange, response headers and body; on expiry the request is cancelled and fails with a timeout. Without `@timeout` the default total timeout applies: 60 s, or the CLI `--timeout`, or the system property `httpclient.timeout` / environment variable `HTTPC_TIMEOUT` (same duration format; the desktop app and the plugin read the property and the variable; a bad value is reported when a request runs, never replaced by the default). The client also has a 30 s connect timeout. There is no way to disable the limit: use a long `@timeout` for slow endpoints. Interrupting the calling thread cancels the in-flight request and fails with a `CancellationException` (the interrupt flag is kept). A whole, positive number: plain numbers are seconds, or add `ms`, `s` or `m` (any case, `@timeout 500ms`). Decimals (`1.5s`), `0`, negatives and values that overflow are rejected. May use `{{vars}}`.
 - `# @no-redirect`: do not follow HTTP redirects (the 3xx response is returned). An optional value `true` (default) or `false` (`# @no-redirect false` keeps redirects); it may use `{{vars}}`; any other value is an error.
 - `# @proxy host:port`: send the request through that HTTP proxy. Forms: `host`, `host:port`, `http://host:port`, IPv6 as `[::1]:8080`; the port defaults to 80. Only plain HTTP proxies are supported: other schemes (`https://`, `socks://`) and credentials (`user:pass@host`) are rejected. May use `{{vars}}`.
 
@@ -463,7 +463,7 @@ Referencing a request that has not run, or a path that does not exist, is an err
 
 ```
 httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] [--allow-file-root DIR] [--list]
-                  [--report-json FILE] [--report-junit FILE] [--quiet] [--output FILE] [--var NAME=VALUE]
+                  [--report-json FILE] [--report-junit FILE] [--quiet] [--output FILE] [--var NAME=VALUE] [--timeout DURATION]
 ```
 
 | Option        | Effect                                               |
@@ -477,6 +477,7 @@ httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] 
 | `--quiet`     | no per-request output on stdout (see below) |
 | `--output FILE` | write the response body of the single selected request to `FILE` |
 | `--var NAME=VALUE` | set a variable, overriding file and environment variables (repeatable) |
+| `--timeout DURATION` | total time limit for requests without `# @timeout`: `30`, `500ms`, `45s`, `2m` (default 60 s; cannot be combined with `--list`) |
 
 For each request the output is the status line with timing, the response headers, then the body.
 After a response, each assertion is printed as `PASS ...` or `FAIL ... -- message`; for a request that failed its assertions are listed as `NOT RUN ...`.
