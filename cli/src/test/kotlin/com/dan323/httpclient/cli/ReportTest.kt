@@ -275,4 +275,46 @@ class ReportTest {
         val dep = file("# @name pre\nGET $base/status/404\n\n###\n# @name main\n# @assert status == 200\nGET $base/get?x={{pre.response.status}}\n")
         assertEquals(0, cli(dep, "--fail-on-http-error", "--request", "main").first)
     }
+
+    private fun failureTypes(doc: org.w3c.dom.Document) = (0 until doc.getElementsByTagName("failure").length)
+        .map { (doc.getElementsByTagName("failure").item(it) as org.w3c.dom.Element).getAttribute("type") }
+
+    @Test fun failedAssertionPlusHttpErrorCountsOnceAndShowsBothReasons() {
+        val base = "http://127.0.0.1:${server.port}"
+        val f = file("# @name boom\n# @assert status == 200\nGET $base/status/503\n")
+        val json = dir.resolve("b.json"); val xml = dir.resolve("b.xml")
+        val (code, _, err) = cli(f, "--fail-on-http-error", "--quiet", "--report-json", json.toString(), "--report-junit", xml.toString())
+        assertEquals(1, code, err)
+        assertContains(err, "FAIL HTTP 503 from boom (--fail-on-http-error)")
+        assertContains(err, "FAIL status == 200")
+        assertContains(err, "1 request, 0 passed, 1 failed")
+        val entry = JsonRunReport.parse(Files.readString(json)).entries[0]
+        assertEquals("HTTP 503", entry.httpError)
+        assertEquals(1, entry.assertions.count { !it.passed })
+        val doc = parseXml(xml)
+        assertEquals("1", doc.documentElement.getAttribute("failures"))
+        assertEquals(listOf("AssertionFailure", "HttpStatusFailure"), failureTypes(doc))
+    }
+
+    @Test fun transportFailureWithFlagStaysAnErrorWithoutHttpError() {
+        val f = file("# @name down\nGET http://127.0.0.1:${closedPort()}/x\n")
+        val json = dir.resolve("t.json"); val xml = dir.resolve("t.xml")
+        val (code, _, err) = cli(f, "--fail-on-http-error", "--report-json", json.toString(), "--report-junit", xml.toString())
+        assertEquals(1, code, err)
+        assertNull(JsonRunReport.parse(Files.readString(json)).entries[0].httpError)
+        val doc = parseXml(xml)
+        assertEquals(1, doc.getElementsByTagName("error").length)
+        assertEquals(emptyList(), failureTypes(doc))
+        assertEquals("0", doc.documentElement.getAttribute("failures"))
+    }
+
+    @Test fun selectedHttpErrorWithPassingAssertionsFailsUnderRequest() {
+        val base = "http://127.0.0.1:${server.port}"
+        val f = file("# @name ok\nGET $base/get\n\n###\n# @name boom\n# @assert status == 502\nGET $base/status/502\n")
+        val (code, _, err) = cli(f, "--fail-on-http-error", "--request", "boom")
+        assertEquals(1, code, err)
+        assertContains(err, "FAIL HTTP 502 from boom (--fail-on-http-error)")
+        assertContains(err, "1 request, 0 passed, 1 failed")
+        assertEquals(0, cli(f, "--request", "boom").first)
+    }
 }

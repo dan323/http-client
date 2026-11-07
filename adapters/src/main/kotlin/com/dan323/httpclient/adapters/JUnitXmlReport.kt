@@ -4,8 +4,10 @@ import com.dan323.httpclient.core.application.RunReport
 
 /**
  * Renders a [RunReport] as JUnit XML. Exactly one `testcase` per reported request, so `tests`, `failures` and
- * `errors` match the elements: all failed assertions of a request are merged into a single `failure` (one per line);
- * a request that could not complete is an `error`.
+ * `errors` count testcases: all failed assertions of a request are merged into a single `failure` of type
+ * `AssertionFailure` (one per line); a response failed by `--fail-on-http-error` ([com.dan323.httpclient.core.application.ReportEntry.httpError])
+ * adds its own `failure` of type `HttpStatusFailure`, so a testcase with both has two `failure` elements (valid in
+ * the common JUnit schema) and still counts once in `failures`; a request that could not complete is an `error`.
  *
  * Identity: `classname` is the suite name (the CLI passes the file name) and `name` is `"<index>. <request name>"`,
  * where the 1-based index is the request's position in the run, so duplicate or unnamed requests stay distinct and
@@ -32,11 +34,15 @@ object JUnitXmlReport {
                 append("    <error message=\"${attr(error)}\" type=\"RequestError\">${escape("${e.method} ${e.url}: $error")}</error>\n")
             } else {
                 val failed = e.assertions.filterNot { it.passed }
-                val httpMessage = e.httpError?.let { "$it from ${e.method} ${e.url}" }
-                val message = (listOfNotNull(httpMessage) + failed.map { it.message }).joinToString("\n")
-                val body = (listOfNotNull(httpMessage) + failed.map { "${it.assertion} -- ${it.message}" }).joinToString("\n")
-                val type = if (e.httpError != null) "HttpStatusFailure" else "AssertionFailure"
-                append("    <failure message=\"${attr(message)}\" type=\"$type\">${escape(body)}</failure>\n")
+                if (failed.isNotEmpty()) {
+                    val message = failed.joinToString("\n") { it.message }
+                    val body = failed.joinToString("\n") { "${it.assertion} -- ${it.message}" }
+                    append("    <failure message=\"${attr(message)}\" type=\"AssertionFailure\">${escape(body)}</failure>\n")
+                }
+                e.httpError?.let {
+                    val message = "$it from ${e.method} ${e.url}"
+                    append("    <failure message=\"${attr(message)}\" type=\"HttpStatusFailure\">${escape(message)}</failure>\n")
+                }
             }
             append("  </testcase>\n")
         }
