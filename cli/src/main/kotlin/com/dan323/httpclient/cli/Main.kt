@@ -3,6 +3,7 @@ package com.dan323.httpclient.cli
 import com.dan323.httpclient.adapters.JsonRunReport
 import com.dan323.httpclient.adapters.AtomicReportWriter
 import com.dan323.httpclient.adapters.JUnitXmlReport
+import com.dan323.httpclient.core.port.out.OutputWriter
 import com.dan323.httpclient.core.port.out.ReportWriter
 import com.dan323.httpclient.core.application.RunReport
 import com.dan323.httpclient.core.application.RequestTimeouts
@@ -43,8 +44,8 @@ private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NA
   --report-json F  write a JSON run report (results, assertions, timings, totals) to F
   --report-junit F write a JUnit XML run report to F
   --quiet          print no per-request output on stdout (failed assertions and errors still go to stderr)
-  --output F       write the response body of the single selected request to F (needs --request unless the
-                   file holds one request; owner-only file; cannot be combined with --list)
+  --output F       write the raw response body (byte for byte) of the single selected request to F (needs
+                   --request unless the file holds one request; owner-only file; cannot be combined with --list)
   --var N=V        set variable N to V, overriding file and environment variables (repeatable; V may be
                    empty or contain '=')
   --timeout D      total time limit for requests without `# @timeout` (headers and body), such as 30, 500ms,
@@ -214,16 +215,16 @@ fun main(args: Array<String>) {
  * report or output file could not be written (the message says whether the run itself passed; all are always attempted). When a report is requested and the run cannot start (missing file, unknown
  * environment or request, unexpected exception) an error report with a single failed entry is still written.
  */
-fun run(args: List<String>, out: PrintStream, err: PrintStream, writer: ReportWriter = AtomicReportWriter()): Int {
+fun run(args: List<String>, out: PrintStream, err: PrintStream, outputWriter: OutputWriter = AtomicReportWriter(), writer: ReportWriter = AtomicReportWriter()): Int {
     val opts = parseArgs(args, err) ?: run { err.println(USAGE); return 2 }
     return try {
-        execute(opts, out, err, writer)
+        execute(opts, out, err, writer, outputWriter)
     } catch (e: Exception) {
         failWithReport(opts, err, writer, "Unexpected error: ${e.message ?: e}")
     }
 }
 
-private fun execute(opts: Options, out: PrintStream, err: PrintStream, writer: ReportWriter): Int {
+private fun execute(opts: Options, out: PrintStream, err: PrintStream, writer: ReportWriter, outputWriter: OutputWriter): Int {
     if (!Files.isRegularFile(opts.file)) return failWithReport(opts, err, writer, "No such file: ${opts.file}")
 
     val parsed = HttpFileParser().parse(Files.readString(opts.file))
@@ -301,8 +302,9 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream, writer: R
     val saved = outcomes.filterIsInstance<RunOutcome.Success>().mapNotNull { it.savedTo?.let(inputDir::resolve) }
     var written = writeReports(opts, report, err, writer, saved)
     opts.output?.let { path ->
-        val body = (outcomes.firstOrNull { it.request === selected[0] } as? RunOutcome.Success)?.response?.bodyAsString()
-        if (body != null && !writeFile(writer, path, "output", err, saved) { body }) written = false
+        // the raw bytes as received: byte-exact for binary bodies; text keeps its original charset (no transcoding)
+        val body = (outcomes.firstOrNull { it.request === selected[0] } as? RunOutcome.Success)?.response?.body
+        if (body != null && !writeOutput(outputWriter, path, body, err, saved)) written = false
     }
     if (!report.passed || saveFailed) {
         if (!written) err.println("Run failed; the report/output file could not be written either.")
@@ -328,11 +330,24 @@ private fun writeReports(opts: Options, report: RunReport, err: PrintStream, wri
 }
 
 private fun writeFile(writer: ReportWriter, path: Path, what: String, err: PrintStream, saved: List<Path> = emptyList(), content: () -> String): Boolean = try {
-    if (saved.any { samePath(path, it) }) throw java.io.IOException("it is a response saved by '>>' / '>>!' in this run, which is kept")
+    refuseSavedResponse(path, saved)
     writer.write(path, content())
     true
 } catch (e: Exception) {
     err.println("Error: Cannot write $what $path: ${e.message ?: e}")
+    false
+}
+
+private fun refuseSavedResponse(path: Path, saved: List<Path>) {
+    if (saved.any { samePath(path, it) }) throw java.io.IOException("it is a response saved by '>>' / '>>!' in this run, which is kept")
+}
+
+private fun writeOutput(writer: OutputWriter, path: Path, bytes: ByteArray, err: PrintStream, saved: List<Path>): Boolean = try {
+    refuseSavedResponse(path, saved)
+    writer.write(path, bytes)
+    true
+} catch (e: Exception) {
+    err.println("Error: Cannot write output $path: ${e.message ?: e}")
     false
 }
 

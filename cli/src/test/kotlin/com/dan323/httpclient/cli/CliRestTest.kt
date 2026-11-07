@@ -123,13 +123,13 @@ class CliRestTest {
     // --- --output
 
     @Test fun outputWritesTheBodyOfTheSingleRequestThroughThePort() {
-        val written = mutableMapOf<Path, String>()
+        val written = mutableMapOf<Path, ByteArray>()
         val f = file("GET $base/anything/hello\n")
         val target = dir.resolve("never-created.txt")
         val o = ByteArrayOutputStream(); val e = ByteArrayOutputStream()
-        val code = run(listOf(f, "--output", target.toString()), PrintStream(o), PrintStream(e)) { p, c -> written[p] = c }
+        val code = run(listOf(f, "--output", target.toString()), PrintStream(o), PrintStream(e), { p, c -> written[p] = c })
         assertEquals(0, code, e.toString())
-        assertContains(written.getValue(target), "/anything/hello")
+        assertContains(String(written.getValue(target), Charsets.UTF_8), "/anything/hello")
         assertFalse(Files.exists(target))
     }
 
