@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 - Distribution (G9, T24): `.github/workflows/release.yml` runs on a tag `v*` (or manually for an existing tag), checks the tag against the project version, builds the CLI distribution (`./gradlew :cli:distZip` / `distTar`, `httpc-<version>.zip|tar`), the IntelliJ plugin zip and, best effort, the desktop installers (DMG on macOS, MSI on Windows, DEB on Linux), and attaches them to the GitHub release. Nothing is published to other channels (Homebrew, Scoop, winget, JetBrains Marketplace are listed as follow-ups in `docs/getting-started.md`).
-- `docs/getting-started.md` (install from release assets, first request, environment files, running in CI) and `examples/smoke-test.http` with `examples/http-client.env.json`, linked from the README.
+- `docs/getting-started.md` (how to install each piece from the release assets; usage stays in `docs/features.md`) and `examples/smoke-test.http` with `examples/http-client.env.json`, linked from the README.
 
 ## [0.4.0] - 2026-11-07
 
