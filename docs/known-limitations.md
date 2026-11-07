@@ -7,7 +7,8 @@ Related: [competitive-gaps.md](competitive-gaps.md) (what to add), [PLAN.md](PLA
 ## Execution and security
 
 - **Redirects without the cookie jar.** With `@no-cookie-jar` the JDK client follows redirects itself, and how it treats explicit credential headers
-  (`Cookie`, `Authorization`) depends on the JDK version. `JdkRedirectHeaderTest` fails on JDK 21.0.2 and passes on newer 21.x. See G5 in competitive-gaps.md.
+  (`Cookie`, `Authorization`) depends on the JDK version. `JdkRedirectHeaderTest` checks only `Cookie`: it fails on JDK 21.0.2 and passes on newer 21.x.
+  Whether `Authorization` is forwarded on those JDKs is not tested. See G5 in competitive-gaps.md.
 - **File confinement can be raced.** Someone with write access inside an allowed folder can swap a parent directory for a symlink between the check and the read.
 - **Silently dropped headers.** A user-set `Host`, `Content-Length`, `Connection`, `Expect` or `Upgrade` header is dropped by the JDK client (documented, not warned about).
 - **XPath cannot be interrupted.** A timed-out evaluation keeps running on an abandoned daemon thread until it ends; the caller gets "not found" after 2 s. See G7.
@@ -33,4 +34,4 @@ Decided in the review, not bugs:
 - `< path` file bodies are confined to the `.http` file's folder by default; an allowlist (`--allow-file-root`, `HTTPC_ALLOW_FILE_ROOTS`) widens it. JetBrains does not confine.
 - An unknown or mistyped method (`GTE http://x`) is a parse error with the line number, not a URL.
 - `> {% ... %}` response handlers are skipped with a warning, not run.
-- The "(none)" environment really means none: variables from the file only, never a silent fallback.
+- The "(none)" environment really means none: no environment variables are used, only file variables and the built-in dynamic variables (`{{$uuid}}`, `{{$randomInt}}`, ...), and there is never a silent fallback to another environment.
