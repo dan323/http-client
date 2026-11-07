@@ -36,7 +36,7 @@ object JsonRunReport {
     @Serializable private data class EntryDto(
         val name: String, val method: String, val url: String, val status: Int? = null, val durationMillis: Long? = null,
         val passed: Boolean, val assertions: List<AssertionDto> = emptyList(), val assertionsNotRun: Int = 0, val error: String? = null,
-        val prerequisite: Boolean = false,
+        val prerequisite: Boolean = false, val httpError: String? = null,
     )
 
     @Serializable private data class TotalsDto(
@@ -49,7 +49,7 @@ object JsonRunReport {
             ReportEntry(
                 e.name, e.method, e.url, e.status, e.durationMillis,
                 e.assertions.map { AssertionResult(it.assertion, it.passed, it.expected, it.actual, it.message) },
-                e.assertionsNotRun, e.error, e.prerequisite,
+                e.assertionsNotRun, e.error, e.prerequisite, e.httpError,
             )
         })
 
@@ -61,7 +61,7 @@ object JsonRunReport {
                     EntryDto(
                         e.name, e.method, e.url, e.status, e.durationMillis, e.passed,
                         e.assertions.map { AssertionDto(it.assertion, it.passed, it.expected, it.actual, it.message) },
-                        e.assertionsNotRun, e.error, e.prerequisite,
+                        e.assertionsNotRun, e.error, e.prerequisite, e.httpError,
                     )
                 },
             )

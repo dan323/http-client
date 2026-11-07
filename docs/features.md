@@ -239,8 +239,9 @@ breaks in attributes are written as character references.
 JSON: top-level `version` (currently 1); `JsonRunReport.parse` rejects a newer version. `passed` and `totals` (and each
 entry's `passed`) are derived: written for consumers, ignored and recomputed by `parse`.
 
-Caveats: a prerequisite or an unasserted request answering HTTP 500 still counts as passed (only transport errors and
-failed assertions fail a run), so a green report does not mean "no 5xx". Reports contain URLs as written in the file
+Caveats: by default a response with an HTTP error status (4xx/5xx) that has no failed assertion counts as passed (only
+transport errors and failed assertions fail a run), so a green report does not mean "no 5xx"; run with
+`--fail-on-http-error` to fail on them (below). Reports contain URLs as written in the file
 and error messages, which may include secrets (tokens in query strings); treat them as sensitive CI artifacts.
 
 ### Saved responses
@@ -467,6 +468,7 @@ Referencing a request that has not run, or a path that does not exist, is an err
 ```
 httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] [--allow-file-root DIR] [--list]
                   [--report-json FILE] [--report-junit FILE] [--quiet] [--output FILE] [--var NAME=VALUE] [--timeout DURATION]
+                  [--fail-on-http-error]
 ```
 
 | Option        | Effect                                               |
@@ -481,6 +483,7 @@ httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] 
 | `--output FILE` | write the raw response body (byte for byte) of the single selected request to `FILE` |
 | `--var NAME=VALUE` | set a variable, overriding file and environment variables (repeatable) |
 | `--timeout DURATION` | total time limit for requests without `# @timeout`: `30`, `500ms`, `45s`, `2m` (default 60 s; cannot be combined with `--list`) |
+| `--fail-on-http-error` | exit 1 when a selected request gets a response with status >= 400 (see below; cannot be combined with `--list`) |
 
 For each request the output is the status line with timing, the response headers, then the body.
 After a response, each assertion is printed as `PASS ...` or `FAIL ... -- message`; for a request that failed its assertions are listed as `NOT RUN ...`.
@@ -488,6 +491,8 @@ A total line `Assertions: N passed, M failed, K not run` follows the run. With `
 **Summary line:** after a run the CLI prints `3 requests, 2 passed, 1 failed in 1.2s` to **stderr** (so stdout stays the response data, e.g. when piped); it counts every request that ran, prerequisites included, and a request passes when it completed and its assertions held. It is not printed for `--list` or when the run cannot start.
 
 **`--quiet`:** nothing per request is printed on stdout (no `###` heading, status, headers, body, `PASS`, `NOT RUN` or the `Assertions:` total). Failed assertions are printed to stderr as `FAIL ...`, request errors as `Error: ...`, and the summary line still appears, so a quiet run says what failed. Exit codes are unchanged.
+
+**`--fail-on-http-error`:** by default an HTTP error status is not a failure: a `404` or `503` response without a failed assertion exits `0`. With the option, any selected request answering status >= 400 fails the run (exit `1`, same as a failed assertion), even if its assertions pass. Each one is printed to stderr as `FAIL HTTP 503 from <request name or METHOD url> (--fail-on-http-error)`, also with `--quiet`. Like assertions, it applies to the selected requests only: prerequisites that run just to feed `{{name.response...}}` chaining are not judged (with `--request X`, a 404 from a prerequisite does not fail the run; without `--request` every request is selected). Redirects (3xx) are not errors. In reports the entry fails: JSON gets an optional `httpError` string (`"HTTP 503"`, `null` otherwise; reports without the field still parse) and `passed: false`; JUnit XML gets a `failure` with `type="HttpStatusFailure"` and a message such as `HTTP 503 from GET http://host/path`. The decision is `RunReport.from(outcomes, failOnHttpError = true)` in `core`. Usage error (exit `2`) with `--list`.
 
 **`--output FILE`:** after the run, the body of the selected request's response is written to `FILE` as the raw bytes received, byte for byte, with no decoding: images, PDFs and archives are saved intact, and a text response in a non-UTF-8 charset (e.g. ISO-8859-1) keeps its original encoding instead of being transcoded to UTF-8 (versions before this wrote decoded UTF-8). The client does not decompress, so a `Content-Encoding: gzip` / `br` response is saved still compressed, exactly as received. It needs exactly one selected request: use `--request`, or a file with one request; otherwise it is a usage error (exit `2`, discovered before anything is sent). Prerequisites are never written. Nothing is written when that request fails. It goes through the `OutputWriter` port (bytes) and `AtomicReportWriter`, which also implements `ReportWriter` for reports: parent folders are created, the write is atomic and a new file is owner-only (`rw-------`, POSIX) because bodies may contain secrets. `FILE` must differ from the input `.http` file and from the report paths (also through `..`, symlinks or case-only differences) and cannot be repeated or combined with `--list`. An unwritable output counts like an unwritable report (exit `3` on a passed run, `1` on a failed one).
 
