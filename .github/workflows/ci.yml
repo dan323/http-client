@@ -14,7 +14,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A pull request whose changed files are all under docs/ skips the build and the tests. The jobs below still run
+  # and report success (only their steps are skipped): the required status checks must exist on every PR, and a
+  # trigger-level `paths-ignore` would leave them "expected" forever and block the merge.
+  changes:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          code=true
+          if [ "$EVENT" = "pull_request" ]; then
+            # new and previous names, so moving a file out of or into docs/ counts as a code change
+            files=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR}/files" --jq '.[] | .filename, (.previous_filename // empty)')
+            if [ -n "$files" ] && ! echo "$files" | grep -qv '^docs/'; then code=false; fi
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "code changes: $code"
+
   test:
+    needs: changes
     if: github.event_name != 'schedule'
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -27,20 +54,22 @@ jobs:
       # JDK 21 matches the Gradle toolchain (jvmToolchain(21)), so the JdkHttpExecutor redirect tests
       # run on the same JDK everywhere.
       - uses: actions/setup-java@v6
+        if: needs.changes.outputs.code == 'true'
         with:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6
+        if: needs.changes.outputs.code == 'true'
       # The IntelliJ plugin module needs an IDE, so only its build (not its tests) runs in the plugin job below.
       # The desktop UI tests are headless but still want an X display on Linux (Windows and macOS have one).
       - name: Test (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && needs.changes.outputs.code == 'true'
         run: xvfb-run -a ./gradlew :core:test :adapters:test :cli:test :mock-server:test :desktop:test :view-model:test --console=plain
       - name: Test (Windows, macOS)
-        if: runner.os != 'Linux'
+        if: runner.os != 'Linux' && needs.changes.outputs.code == 'true'
         run: ./gradlew :core:test :adapters:test :cli:test :mock-server:test :desktop:test :view-model:test --console=plain
       - name: Upload test reports
-        if: failure()
+        if: failure() && needs.changes.outputs.code == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: test-reports-${{ runner.os }}
@@ -49,34 +78,42 @@ jobs:
   # Catches a plugin build break. There is no local IDE on the runner, so the build downloads
   # IntelliJ IDEA (ideaVersion in gradle.properties); ideaPath is ignored when it does not exist.
   plugin:
+    needs: changes
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
+        if: needs.changes.outputs.code == 'true'
         with:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6
+        if: needs.changes.outputs.code == 'true'
       - name: Build plugin
+        if: needs.changes.outputs.code == 'true'
         run: ./gradlew :intellij-plugin:buildPlugin --console=plain
 
   # Aggregated test report + merged JaCoCo report (+ coverage floor). The JaCoCo XML is what SonarCloud reads
   # (sonar.coverage.jacoco.xmlReportPaths=quality-reports/build/reports/jacoco/testCodeCoverageReport/testCodeCoverageReport.xml).
   quality:
+    needs: changes
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
+        if: needs.changes.outputs.code == 'true'
         with:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6
+        if: needs.changes.outputs.code == 'true'
       - name: Quality reports
+        if: needs.changes.outputs.code == 'true'
         run: xvfb-run -a ./gradlew :quality-reports:qualityReports --console=plain
       - name: Upload quality reports
-        if: always()
+        if: always() && needs.changes.outputs.code == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: quality-reports
@@ -89,10 +126,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
+        if: needs.changes.outputs.code == 'true'
         with:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6
+        if: needs.changes.outputs.code == 'true'
       - name: PIT (core)
         run: ./gradlew :core:pitest --console=plain
       - name: Upload PIT report
