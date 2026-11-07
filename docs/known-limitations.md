@@ -7,7 +7,7 @@ Related: [competitive-gaps.md](competitive-gaps.md) (what to add), [PLAN.md](PLA
 ## Execution and security
 
 - **Redirects without the cookie jar.** With `@no-cookie-jar` the JDK client follows redirects itself, and how it treats explicit credential headers
-  (`Cookie`, `Authorization`) depends on the JDK version. `JdkRedirectHeaderTest` checks only `Cookie`: it fails on JDK 21.0.2 and passes on newer 21.x.
+  (`Cookie`, `Authorization`) depends on the JDK version. `JdkRedirectHeaderTest` sends both headers but only asserts on `Cookie`: it fails on JDK 21.0.2 and passes on newer 21.x.
   Whether `Authorization` is forwarded on those JDKs is not tested. See G5 in competitive-gaps.md.
 - **File confinement can be raced.** Someone with write access inside an allowed folder can swap a parent directory for a symlink between the check and the read.
 - **Silently dropped headers.** A user-set `Host`, `Content-Length`, `Connection`, `Expect` or `Upgrade` header is dropped by the JDK client (documented, not warned about).
