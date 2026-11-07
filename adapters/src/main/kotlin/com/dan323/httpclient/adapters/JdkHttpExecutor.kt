@@ -15,6 +15,7 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest.BodyPublishers
 import java.net.http.HttpResponse.BodyHandlers
 import java.time.Duration
+import java.util.Optional
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicReference
@@ -24,26 +25,27 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
 /**
- * Executes requests with the JDK client. Redirect policy and proxy are client-level in the JDK, so requests
- * that need `@no-redirect` or `@proxy` use a derived client, built once per (redirect policy, proxy) and reused.
- * A derived client copies the injected client's connect timeout, SSL context/parameters, authenticator,
+ * Executes requests with the JDK client. Redirects are followed by [RedirectFollower], never by the JDK, so
+ * every request is sent by a client with `Redirect.NEVER`: the default client already is one, and an injected
+ * client with another policy (or any request naming an `@proxy`) uses a derived client, built once per proxy
+ * and reused. A derived client copies the injected client's connect timeout, SSL context/parameters, authenticator,
  * cookie handler, executor and HTTP version; only the request priority cannot be read back and is not copied.
  * Call [close] to release derived clients (the injected client is left to its owner).
  */
 class JdkHttpExecutor(
     private val client: HttpClient = HttpClient.newBuilder()
-        .followRedirects(HttpClient.Redirect.NORMAL)
+        .followRedirects(HttpClient.Redirect.NEVER)
         .connectTimeout(Duration.ofSeconds(30))
         .build(),
 ) : HttpExecutor, AutoCloseable {
-    private val derived = ConcurrentHashMap<Pair<HttpClient.Redirect, ProxyAddress?>, HttpClient>()
+    private val derived = ConcurrentHashMap<Optional<ProxyAddress>, HttpClient>()
 
     private fun clientFor(o: RequestOptions): HttpClient {
         // Redirects are never left to the JDK (its forwarding of credential headers varies by version).
-        val redirect = HttpClient.Redirect.NEVER
-        if (redirect == client.followRedirects() && o.proxy == null) return client
-        return derived.computeIfAbsent(redirect to o.proxy) { (r, p) ->
-            val b = HttpClient.newBuilder().followRedirects(r).version(client.version())
+        if (client.followRedirects() == HttpClient.Redirect.NEVER && o.proxy == null) return client
+        return derived.computeIfAbsent(Optional.ofNullable(o.proxy)) { key ->
+            val p = key.orElse(null)
+            val b = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).version(client.version())
             client.connectTimeout().ifPresent(b::connectTimeout)
             client.cookieHandler().ifPresent(b::cookieHandler)
             client.authenticator().ifPresent(b::authenticator)

@@ -147,6 +147,13 @@ class AdaptersTest {
             repeat(3) { assertEquals(302, exec.execute(HttpRequest("GET", url, options = noRedirect)).statusCode) }
             assertEquals(200, exec.execute(HttpRequest("GET", url)).statusCode)
             val field = JdkHttpExecutor::class.java.getDeclaredField("derived").apply { isAccessible = true }
+            assertEquals(0, (field.get(exec) as Map<*, *>).size, "the default client never follows redirects itself, so no derived client")
+        }
+        val injected = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build()
+        JdkHttpExecutor(injected).use { exec ->
+            repeat(3) { assertEquals(302, exec.execute(HttpRequest("GET", url, options = noRedirect)).statusCode) }
+            assertEquals(200, exec.execute(HttpRequest("GET", url)).statusCode)
+            val field = JdkHttpExecutor::class.java.getDeclaredField("derived").apply { isAccessible = true }
             assertEquals(1, (field.get(exec) as Map<*, *>).size)
         }
     }
