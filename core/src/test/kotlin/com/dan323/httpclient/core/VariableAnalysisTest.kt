@@ -211,6 +211,29 @@ class VariableAnalysisTest {
         assertTrue("base" in names && "env1" in names && "one.response." in names)
     }
 
+    @Test fun anUnsupportedProtocolBlockIsAParseErrorAndTheRestIsStillAnalysed() {
+        val text = "@a = 1\nGET http://h/{{a}}\n###\nGRPC localhost:50051/{{a}}\n###\nGET http://h/{{b}}"
+        val a = analyze(text)
+        val ds = a.diagnostics
+        assertEquals(setOf(DiagnosticCodes.PARSE_ERROR, DiagnosticCodes.UNDEFINED_VARIABLE), ds.map { it.code }.toSet())
+        val pe = ds.single { it.code == DiagnosticCodes.PARSE_ERROR }
+        assertEquals(3, pe.range.line)
+        assertTrue("GRPC requests are not supported" in pe.message)
+        assertEquals(1, a.findUsages("b").size)
+    }
+
+    @Test fun anUnsupportedProtocolBlockWithHeadersAndBodyGivesOneParseErrorAndKeepsLaterBlocks() {
+        val text = "@a = 1\nGRPC localhost:50051/{{a}}\nContent-Type: application/json\n\n{\"x\": \"{{a}}\"}\n###\nGET http://h/{{a}}/{{b}}"
+        val a = analyze(text)
+        val ds = a.diagnostics
+        // the header line after the rejected line becomes the next request line and is rejected too, but only one error per block is reported
+        assertEquals(1, ds.count { it.code == DiagnosticCodes.PARSE_ERROR })
+        assertEquals(1, ds.single { it.code == DiagnosticCodes.PARSE_ERROR }.range.line)
+        assertEquals(1, ds.count { it.code == DiagnosticCodes.UNDEFINED_VARIABLE })
+        assertEquals("b", slice(text, ds.single { it.code == DiagnosticCodes.UNDEFINED_VARIABLE }))
+        assertEquals(3, a.findVariableUsages("a").size) // the definition, the leftover body line of the rejected block (read as a request of its own) and the later block
+    }
+
     @Test fun anIncompleteRequestLineDoesNotBlankTheFile() {
         val text = "@a = 1\nGET\n###\nGET http://h/{{a}}/{{b}}"
         val a = analyze(text)
