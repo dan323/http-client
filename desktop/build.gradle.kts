@@ -33,6 +33,8 @@ compose.desktop {
             packageVersion = "1.0.0"
             description = "Postman-style client for .http files (a practical subset of the JetBrains format)"
             windows { menuGroup = "HTTP Client" }
+            // Debian package names must be lowercase with no spaces.
+            linux { packageName = "http-client" }
         }
     }
 }

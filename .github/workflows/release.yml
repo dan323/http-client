@@ -123,8 +123,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           ls -l assets
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          # Create first; if it already exists (or a concurrent run made it), upload instead.
+          # A real failure (network, auth) then surfaces from whichever command ran last.
+          if ! gh release create "$TAG" assets/* --verify-tag --title "$TAG" --generate-notes; then
             gh release upload "$TAG" assets/* --clobber
-          else
-            gh release create "$TAG" assets/* --verify-tag --title "$TAG" --generate-notes
           fi
