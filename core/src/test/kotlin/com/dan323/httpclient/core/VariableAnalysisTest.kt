@@ -191,6 +191,63 @@ class VariableAnalysisTest {
         assertEquals(DiagnosticCodes.PARSE_ERROR, d.code)
     }
 
+    @Test fun responseReferencesThatWorkInALaterSessionAreWarnings() {
+        val text = "# @name poll\nGET http://h/{{poll.response.body.\$.next}}\n###\nGET http://h/{{late.response.status}}\n###\n# @name late\nGET http://h"
+        val ds = analyze(text).diagnostics
+        assertEquals(setOf(DiagnosticCodes.SELF_REFERENCE, DiagnosticCodes.REQUEST_NOT_RUN_YET), ds.map { it.code }.toSet())
+        assertTrue(ds.all { it.severity == Severity.WARNING })
+    }
+
+    @Test fun aBadRequestKeepsTheRestOfTheFileAnalysed() {
+        val text = "@base = http://h\n# @name one\nGET {{base}}/a\n###\nGTE {{base}}/typo\n###\n# @name three\nGET {{base}}/{{one.response.status}}/{{nope}}"
+        val a = analyze(text, "env1")
+        val ds = a.diagnostics
+        assertEquals(setOf(DiagnosticCodes.PARSE_ERROR, DiagnosticCodes.UNDEFINED_VARIABLE), ds.map { it.code }.toSet())
+        assertEquals(4, ds.single { it.code == DiagnosticCodes.PARSE_ERROR }.range.line) // the bad line only
+        assertEquals("nope", slice(text, ds.single { it.code == DiagnosticCodes.UNDEFINED_VARIABLE }))
+        // find-usages, go-to-definition and completion still work everywhere
+        assertEquals(3, a.findVariableUsages("base").size) // the definition and the two uses outside the bad request
+        val names = a.knownVariablesAt(text.length).map { it.name }
+        assertTrue("base" in names && "env1" in names && "one.response." in names)
+    }
+
+    @Test fun anIncompleteRequestLineDoesNotBlankTheFile() {
+        val text = "@a = 1\nGET\n###\nGET http://h/{{a}}/{{b}}"
+        val a = analyze(text)
+        assertEquals(setOf(DiagnosticCodes.PARSE_ERROR, DiagnosticCodes.UNDEFINED_VARIABLE), a.diagnostics.map { it.code }.toSet())
+        assertEquals(2, a.findVariableUsages("a").size)
+        assertEquals(1, a.findUsages("b").size)
+    }
+
+    @Test fun oneParseErrorPerBlockEvenWhenSeveralLinesAreBad() {
+        val text = "GTE http://h\nContent-Type text/plain\nAnother header\n###\nGET http://h/{{x}}"
+        val ds = analyze(text).diagnostics
+        assertEquals(1, ds.count { it.code == DiagnosticCodes.PARSE_ERROR })
+        assertEquals(1, ds.count { it.code == DiagnosticCodes.UNDEFINED_VARIABLE })
+    }
+
+    @Test fun parseErrorRangesAndOffsetsUseTheOriginalText() {
+        val text = "GET http://h/{{ok}}\r\n###\r\nGTE http://h\r\n###\r\nGET http://h/{{late}}"
+        val ds = analyze(text, "ok").diagnostics
+        val error = ds.single { it.code == DiagnosticCodes.PARSE_ERROR }
+        assertEquals("GTE http://h", slice(text, error))
+        assertEquals(2, error.range.line)
+        assertEquals("late", slice(text, ds.single { it.code == DiagnosticCodes.UNDEFINED_VARIABLE }))
+    }
+
+    @Test fun aFileWithManyBadLinesFallsBackToParseErrorsOnly() {
+        val text = (1..200).joinToString("\n###\n") { "GTE http://h/$it" }
+        val a = analyze(text)
+        assertTrue(a.diagnostics.isNotEmpty() && a.diagnostics.all { it.code == DiagnosticCodes.PARSE_ERROR })
+        assertTrue(a.occurrences.isEmpty())
+    }
+
+    @Test fun aBadLineInsideAFileVariableBlockKeepsTheDefinition() {
+        val text = "@v = 1\nGTE x\nGET http://h/{{v}}"
+        val a = analyze(text)
+        assertEquals(2, a.findVariableUsages("v").size)
+    }
+
     @Test fun findUsages() {
         val text = "@x = 1\nGET http://h/{{x}}\n###\nGET http://h/{{x}}?{{y}}"
         val a = analyze(text)
