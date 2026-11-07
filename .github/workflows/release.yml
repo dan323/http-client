@@ -136,4 +136,6 @@ jobs:
           if [[ "$TAG" == *-* ]]; then flags+=(--prerelease); fi
           if ! gh release create "$TAG" assets/* --verify-tag --title "$TAG" --generate-notes "${flags[@]}"; then
             gh release upload "$TAG" assets/* --clobber
+            # the release already existed: make sure a candidate does not stay marked as a stable release
+            if [[ "$TAG" == *-* ]]; then gh release edit "$TAG" --prerelease; fi
           fi
