@@ -14,6 +14,7 @@ import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
@@ -125,5 +126,52 @@ class SavedResponseSessionTest {
         val outcomes = session().runChained(all, all[1], emptyMap())
         assertTrue("read-only" in (outcomes[0] as RunOutcome.Success).saveError!!)
         assertEquals("main.json", (outcomes[1] as RunOutcome.Success).savedTo)
+    }
+
+    @Test fun `a bare run does not save or link`() {
+        session().run(req(ResponseSave("o.json", false), links = listOf("x")), emptyMap())
+        assertTrue(saved.isEmpty() && linked.isEmpty())
+    }
+
+    @Test fun `a request referenced only from a save path runs first`() {
+        val all = com.dan323.httpclient.core.application.HttpFileParser().parse(
+            "# @name pre\nGET http://h/pre\n\n###\n# @name main\nGET http://h/main\n\n>> {{pre.response.status}}.json\n",
+        ).requests
+        val chain = com.dan323.httpclient.core.application.withDependencies(all, listOf(all[1]))
+        assertEquals(listOf("pre", "main"), chain.map { it.name })
+        val viaVariable = com.dan323.httpclient.core.application.HttpFileParser().parse(
+            "@dir = {{pre.response.status}}\n# @name pre\nGET http://h/pre\n\n###\n# @name main\nGET http://h/main\n\n>> {{dir}}/x.json\n",
+        ).requests
+        assertEquals(listOf("pre", "main"), com.dan323.httpclient.core.application.withDependencies(viaVariable, listOf(viaVariable[1])).map { it.name })
+    }
+
+    @Test fun `cancellation and interruption in the saver or the link recorder stop the session`() {
+        val two = listOf(req(ResponseSave("o.json", false), name = "one"), req(name = "two"))
+        val cancelled = session(ResponseSaver { _, _, _ -> throw java.util.concurrent.CancellationException("stop") })
+        assertFailsWith<java.util.concurrent.CancellationException> { cancelled.runAll(two, emptyMap()) }
+        val viaInterrupt = session(ResponseSaver { _, _, _ -> throw java.util.concurrent.CancellationException("stop").initCause(InterruptedException()) as java.util.concurrent.CancellationException })
+        try {
+            assertFailsWith<java.util.concurrent.CancellationException> { viaInterrupt.runAll(two, emptyMap()) }
+            assertTrue(Thread.interrupted(), "the interrupt flag is restored")
+        } finally { Thread.interrupted() }
+        val interruptedSaver = session(ResponseSaver { _, _, _ -> throw InterruptedException("stop") })
+        try {
+            assertFailsWith<InterruptedException> { interruptedSaver.runAll(two, emptyMap()) }
+            assertTrue(Thread.interrupted())
+        } finally { Thread.interrupted() }
+        val linkReq = listOf(req(links = listOf("x"), name = "one"), req(name = "two"))
+        assertFailsWith<java.util.concurrent.CancellationException> { session(links = ResponseLinkRecorder { _, _ -> throw java.util.concurrent.CancellationException("stop") }).runAll(linkReq, emptyMap()) }
+        try {
+            assertFailsWith<InterruptedException> { session(links = ResponseLinkRecorder { _, _ -> throw InterruptedException() }).runAll(linkReq, emptyMap()) }
+            assertTrue(Thread.interrupted())
+        } finally { Thread.interrupted() }
+    }
+
+    @Test fun `a runtime failure while recording the link keeps the response and the assertions`() {
+        val o = run(req(links = listOf("x"), assertions = listOf("status == 200")),
+            s = session(links = ResponseLinkRecorder { _, _ -> throw IllegalStateException("boom") })) as RunOutcome.Success
+        assertEquals("Cannot keep the response link: boom", o.linkError)
+        assertEquals(200, o.response.statusCode)
+        assertTrue(o.assertionsPassed)
     }
 }

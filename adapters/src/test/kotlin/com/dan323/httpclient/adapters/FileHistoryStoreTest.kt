@@ -219,11 +219,11 @@ class FileHistoryStoreTest {
     }
 
     @Test fun runIdsAreUniqueAndSortable() {
-        val ids = (1..200).map { HistoryNames.newRunId(Instant.parse("2026-11-06T10:00:00Z"), SecureRandom()) }
+        val ids = (1..200).map { HistoryNames.newRunId(Instant.parse("2026-11-06T10:00:00Z"), 0, SecureRandom()) }
         assertEquals(200, ids.toSet().size)
         assertTrue(ids.all { HistoryNames.isRunId(it) })
         assertEquals(Instant.parse("2026-11-06T10:00:00Z"), HistoryNames.timeOf(ids[0]))
-        assertTrue(HistoryNames.newRunId(Instant.parse("2026-11-06T10:00:00Z"), SecureRandom()) < HistoryNames.newRunId(Instant.parse("2026-11-06T10:00:01Z"), SecureRandom()))
+        assertTrue(HistoryNames.newRunId(Instant.parse("2026-11-06T10:00:00Z"), 0, SecureRandom()) < HistoryNames.newRunId(Instant.parse("2026-11-06T10:00:01Z"), 0, SecureRandom()))
     }
 
     @Test fun concurrentWritersDoNotLoseOrCorruptRuns() {
@@ -281,5 +281,38 @@ class FileHistoryStoreTest {
         // an old file without keys loads and is pruned as before
         val old = runFolder().resolve(s.list(http).last().id).resolve("run.json")
         assertFalse("\"key\"" in Files.readString(old))
+    }
+
+    @Test fun `runs of the same millisecond from different store instances keep the recorded order`() {
+        val fixed = Clock.fixed(Instant.parse("2026-11-06T10:00:00Z"), ZoneOffset.UTC)
+        repeat(20) { i ->
+            val a = store(clock = fixed); val b = store(clock = fixed)
+            a.recordLinked(http, "k", report("k"), response("a$i"))
+            b.recordLinked(http, "k", report("k"), response("b$i"))
+            assertEquals("b$i", store(clock = fixed).latestLinked(http, "k")!!.response.bodyAsString())
+            val bodies = store(clock = fixed).list(http).map { it.id }
+            assertEquals(bodies.sortedWith(HistoryNames.OLDEST_FIRST.reversed()), bodies)
+        }
+    }
+
+    @Test fun `old run ids stay readable and order before new ones of the same millisecond`() {
+        val old = "20261106T100000000Z-ffffffff"
+        val first = HistoryNames.newRunId(Instant.parse("2026-11-06T10:00:00Z"), 0, SecureRandom())
+        val second = HistoryNames.newRunId(Instant.parse("2026-11-06T10:00:00Z"), 1, SecureRandom())
+        val later = "20261106T100000001Z-00000000"
+        assertTrue(HistoryNames.isRunId(old))
+        assertEquals(listOf(old, first, second, later), listOf(later, second, old, first).sortedWith(HistoryNames.OLDEST_FIRST))
+        assertEquals(0, HistoryNames.nextSeq(Instant.parse("2026-11-06T10:00:00Z"), listOf(old, "junk")))
+        assertEquals(2, HistoryNames.nextSeq(Instant.parse("2026-11-06T10:00:00Z"), listOf(old, first, "20261106T100000001Z-n0009-00000000", second)))
+    }
+
+    @Test fun `an unreadable newer record does not make the readable older one expendable`() {
+        val s = store(maxRuns = 2)
+        s.recordLinked(http, "a", report("a"), response("old-readable"))
+        val newer = s.recordLinked(http, "a", report("a"), response("newer"))
+        Files.delete(runFolder().resolve(newer.id).resolve("0.body")) // the newer record lost its body
+        s.record(http, report("x"), listOf(response("plain")))
+        s.record(http, report("y"), listOf(response("plain"))) // both "a" runs are now outside the window
+        assertEquals("old-readable", s.latestLinked(http, "a")!!.response.bodyAsString())
     }
 }

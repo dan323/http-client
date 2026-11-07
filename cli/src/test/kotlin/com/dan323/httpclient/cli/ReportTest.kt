@@ -63,6 +63,33 @@ class ReportTest {
         assertEquals(1, doc.getElementsByTagName("failure").length)
     }
 
+    @Test fun reportsNeverReplaceASavedResponse() {
+        val base = "http://127.0.0.1:${server.port}"
+        val f = file("GET $base/get\n>> saved.json\n")
+        val (code, _, err) = cli(f, "--report-json", dir.resolve("sub/../saved.json").toString(), "--report-junit", dir.resolve("ok.xml").toString())
+        assertEquals(3, code, err)
+        assertContains(err, "Cannot write report")
+        assertContains(err, "saved by '>>'")
+        val saved = Files.readString(dir.resolve("saved.json"))
+        assertFalse(saved.contains("\"entries\""), saved) // still the HTTP response, not a report
+        assertContains(saved, "url")
+        assertTrue(Files.exists(dir.resolve("ok.xml"))) // the other report is still written
+        // a different name is fine, and --output colliding with a saved response is refused as well
+        val (code2, _, err2) = cli(f, "--output", dir.resolve("saved-1.json").toString())
+        assertEquals(3, code2, err2)
+        assertContains(err2, "Cannot write output")
+    }
+
+    @Test fun corruptHistoryWarningsGoToTheCallersErrorStream() {
+        val base = "http://127.0.0.1:${server.port}"
+        val f = file("GET $base/get\n<> link.json\n")
+        val bad = Files.createDirectories(dir.resolve(".http-history/r.http/20200101T000000000Z-deadbeef"))
+        Files.writeString(bad.resolve("run.json"), "{not json")
+        val (code, _, err) = cli(f)
+        assertEquals(0, code, err)
+        assertContains(err, "warning: skipping unreadable history entry")
+    }
+
     @Test fun passingRunExitsZeroAndReportsPassed() {
         val f = file("GET http://127.0.0.1:${server.port}/get\n")
         val json = dir.resolve("ok.json")

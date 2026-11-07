@@ -186,12 +186,100 @@ class LocalResponseSaverTest {
         assertEquals(setOf("api.http", "r.json", "r-1.json", "r-2.json", "r-3.json"), Files.list(dir).use { st -> st.map { it.fileName.toString() }.toList().toSet() })
     }
 
-    @Test fun `a failed move removes the reservation and the temp file`() {
-        val failing = LocalResponseSaver(http, FileAccessPolicy(), move = { _, _ -> throw IOException("disk full") })
+    private fun names() = Files.list(dir).use { st -> st.map { it.fileName.toString() }.toList().toSet() }
+
+    @Test fun `a failed publish leaves neither a reservation nor a temp file`() {
+        val failing = LocalResponseSaver(http, FileAccessPolicy(), move = { _, _ -> throw IOException("disk full") }, link = { _, _ -> throw IOException("disk full") })
         assertFailsWith<IOException> { failing.save("m.json", body, false) }
         assertFailsWith<IOException> { failing.save("m.json", body, true) }
-        assertEquals(listOf("api.http"), Files.list(dir).use { st -> st.map { it.fileName.toString() }.toList() })
+        assertEquals(setOf("api.http"), names())
         assertEquals("m.json", saver().save("m.json", body, false)) // the name was not left reserved
+    }
+
+    @Test fun `without hard links a plain move still never replaces an existing name`() {
+        val noLinks = LocalResponseSaver(http, FileAccessPolicy(), link = { _, _ -> throw UnsupportedOperationException("no links") })
+        assertEquals("n.txt", noLinks.save("n.txt", "one".toByteArray(), false))
+        assertEquals("n-1.txt", noLinks.save("n.txt", "two".toByteArray(), false))
+        assertEquals("one", Files.readString(dir.resolve("n.txt")))
+        val fsErr = LocalResponseSaver(http, FileAccessPolicy(), link = { _, _ -> throw java.nio.file.FileSystemException("x", null, "not supported") })
+        assertEquals("n-2.txt", fsErr.save("n.txt", "three".toByteArray(), false))
+        assertEquals("three", Files.readString(dir.resolve("n-2.txt")))
+        assertEquals(setOf("api.http", "n.txt", "n-1.txt", "n-2.txt"), names())
+    }
+
+    @Test fun `no empty or partial file is visible at the final name while publishing`() {
+        var seen: Long? = null
+        val probing = LocalResponseSaver(http, FileAccessPolicy(), link = { l, existing ->
+            seen = if (Files.exists(l)) Files.size(l) else -1L // before the link nothing exists at the final name
+            Files.createLink(l, existing)
+        })
+        probing.save("p.bin", body, false)
+        assertEquals(-1L, seen)
+        assertContentEquals(body, Files.readAllBytes(dir.resolve("p.bin")))
+    }
+
+    @Test fun `leading or trailing whitespace is refused as given, not trimmed`() {
+        for (p in listOf(" a.txt", "a.txt ", "a.txt\t", "\na.txt", "sub/a.txt\n")) {
+            val e = assertFailsWith<IOException>(p) { saver().save(p, body, true) }
+            assertTrue("whitespace" in e.message!!, e.message)
+        }
+        assertEquals("empty file path", assertFailsWith<IOException> { saver().save("  ", body, true) }.message)
+        assertEquals(setOf("api.http"), names())
+    }
+
+    @Test fun `a folder swapped for a symlink before publishing never touches an outside file`() {
+        assumeFalse(File.separatorChar == '\\')
+        val victim = Files.writeString(outside.resolve("x.txt"), "precious")
+        for (overwrite in listOf(true, false)) {
+            val sub = dir.resolve("sub$overwrite")
+            val swap = { _: Path, _: Path ->
+                Files.move(sub, dir.resolve("moved$overwrite"))
+                symlink(sub, outside)
+            }
+            val swapping = LocalResponseSaver(http, FileAccessPolicy(),
+                move = { a, b -> swap(a, b); Files.move(a, b, java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING) },
+                link = { l, e -> swap(l, e); Files.createLink(l, e) })
+            assertFailsWith<IOException> { swapping.save("sub$overwrite/x.txt", body, overwrite) }
+            assertEquals("precious", Files.readString(victim), "overwrite=$overwrite")
+            assertEquals(listOf("x.txt"), Files.list(outside).use { st -> st.map { it.fileName.toString() }.toList() })
+        }
+    }
+
+    @Test fun `a folder swapped for a symlink before the last check is refused`() {
+        assumeFalse(File.separatorChar == '\\')
+        val victim = Files.writeString(outside.resolve("y.txt"), "precious")
+        val sub = dir.resolve("late")
+        Files.createDirectory(sub)
+        val saver = LocalResponseSaver(http, FileAccessPolicy(), afterWrite = {
+            Files.move(sub, dir.resolve("late-moved"))
+            symlink(sub, outside)
+        })
+        val e = assertFailsWith<FileAccessDeniedException> { saver.save("late/y.txt", body, true) }
+        assertTrue("nothing was written" in e.message!!, e.message)
+        assertEquals("precious", Files.readString(victim))
+        assertEquals(listOf("y.txt"), Files.list(outside).use { st -> st.map { it.fileName.toString() }.toList() })
+    }
+
+    @Test fun `a file that ended up outside the roots is reported, a new one is removed`() {
+        // a stronger attacker who also smuggles the temp file along; simulated inside the publish step
+        val swapping = LocalResponseSaver(http, FileAccessPolicy(),
+            move = { tmp, target -> smuggle(tmp, target.parent); Files.move(tmp, target) },
+            link = { l, e -> smuggle(e, l.parent); Files.createLink(l, e) })
+        for (overwrite in listOf(true, false)) {
+            val e = assertFailsWith<FileAccessDeniedException> { swapping.save("sub$overwrite/x.txt", body, overwrite) }
+            assertTrue("changed while being saved" in e.message!!, e.message)
+            assertEquals(!overwrite, "removed" in e.message!!, e.message)
+            Files.deleteIfExists(outside.resolve("x.txt"))
+            Files.delete(dir.resolve("sub$overwrite"))
+        }
+    }
+
+    /** Replaces folder [sub] by a symlink to `outside` and carries [file] (by name) over, so a rename by name works there. */
+    private fun smuggle(file: Path, sub: Path) {
+        Files.copy(file, outside.resolve(file.fileName))
+        val moved = dir.resolve("held-${sub.fileName}")
+        Files.move(sub, moved)
+        symlink(sub, outside)
     }
 
     @Test fun `a hard link to the http file is protected`() {
@@ -215,24 +303,6 @@ class LocalResponseSaverTest {
         assertFailsWith<FileAccessDeniedException> { saver().save("dlink/x.txt", body, true) }
         assertFailsWith<FileAccessDeniedException> { saver().save("dlink/sub/x.txt", body, false) }
         assertFalse(Files.exists(outside.resolve("missing-dir")))
-    }
-
-    @Test fun `a file that ended up outside the roots is removed and reported`() {
-        // a folder swapped for a symlink after the checks and before the move; simulated inside the move step
-        val swapping = LocalResponseSaver(http, FileAccessPolicy(), move = { tmp, target ->
-            val sub = target.parent
-            val held = Files.move(tmp, dir.resolve("held.tmp"))
-            Files.deleteIfExists(target) // the reservation of a save without overwrite
-            Files.delete(sub)
-            symlink(sub, outside)
-            Files.move(held, target)
-        })
-        for (overwrite in listOf(true, false)) {
-            val e = assertFailsWith<FileAccessDeniedException> { swapping.save("sub$overwrite/x.txt", body, overwrite) }
-            assertTrue("changed while being saved" in e.message!!, e.message)
-            assertFalse(Files.exists(outside.resolve("x.txt")), "the escaped file must be deleted")
-            Files.delete(dir.resolve("sub$overwrite"))
-        }
     }
 
     @Test fun `end to end through SessionFactory the failed save leaves the result and leaks nothing`() {

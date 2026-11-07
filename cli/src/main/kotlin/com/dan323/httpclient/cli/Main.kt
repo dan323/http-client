@@ -241,7 +241,7 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream, writer: R
     val started = System.nanoTime()
     // Prerequisites run for their responses only: assertions are evaluated for the selected requests.
     var saveFailed = false
-    val outcomes = SessionFactory(history = FileHistoryStore()).use { factory ->
+    val outcomes = SessionFactory(history = FileHistoryStore(onWarning = { err.println("warning: $it") })).use { factory ->
     val session = factory.create(opts.file, FileAccessPolicy(opts.allowFileRoots, FileAccessPolicy.CLI_HINT), opts.allowEnv, "pass --allow-env NAME")
     session.runAll(chosen, variables, assertFor = { r -> selected.any { it === r } }) { outcome ->
         val r = outcome.request
@@ -278,10 +278,13 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream, writer: R
     val report = RunReport.from(outcomes) { o -> selected.none { it === o.request } }
     val elapsed = (System.nanoTime() - started) / 1_000_000
     err.println(summary(report, elapsed))
-    var written = writeReports(opts, report, err, writer)
+    // Responses saved by `>>` / `>>!` are not replaced by a report or --output that names the same file (symlinks, case aliases too).
+    val inputDir = (opts.file.toAbsolutePath().parent ?: opts.file.toAbsolutePath().root)
+    val saved = outcomes.filterIsInstance<RunOutcome.Success>().mapNotNull { it.savedTo?.let(inputDir::resolve) }
+    var written = writeReports(opts, report, err, writer, saved)
     opts.output?.let { path ->
         val body = (outcomes.firstOrNull { it.request === selected[0] } as? RunOutcome.Success)?.response?.bodyAsString()
-        if (body != null && !writeFile(writer, path, "output", err) { body }) written = false
+        if (body != null && !writeFile(writer, path, "output", err, saved) { body }) written = false
     }
     if (!report.passed || saveFailed) {
         if (!written) err.println("Run failed; the report/output file could not be written either.")
@@ -299,14 +302,15 @@ internal fun summary(report: RunReport, elapsedMillis: Long): String {
 }
 
 /** Writes the requested reports independently; returns false when any of them failed (each failure is printed). */
-private fun writeReports(opts: Options, report: RunReport, err: PrintStream, writer: ReportWriter): Boolean {
+private fun writeReports(opts: Options, report: RunReport, err: PrintStream, writer: ReportWriter, saved: List<Path> = emptyList()): Boolean {
     val suite = opts.file.fileName?.toString() ?: "httpc"
-    val json = opts.reportJson?.let { writeFile(writer, it, "report", err) { JsonRunReport.render(report) } } ?: true
-    val junit = opts.reportJunit?.let { writeFile(writer, it, "report", err) { JUnitXmlReport.render(report, suite) } } ?: true
+    val json = opts.reportJson?.let { writeFile(writer, it, "report", err, saved) { JsonRunReport.render(report) } } ?: true
+    val junit = opts.reportJunit?.let { writeFile(writer, it, "report", err, saved) { JUnitXmlReport.render(report, suite) } } ?: true
     return json && junit
 }
 
-private fun writeFile(writer: ReportWriter, path: Path, what: String, err: PrintStream, content: () -> String): Boolean = try {
+private fun writeFile(writer: ReportWriter, path: Path, what: String, err: PrintStream, saved: List<Path> = emptyList(), content: () -> String): Boolean = try {
+    if (saved.any { samePath(path, it) }) throw java.io.IOException("it is a response saved by '>>' / '>>!' in this run, which is kept")
     writer.write(path, content())
     true
 } catch (e: Exception) {

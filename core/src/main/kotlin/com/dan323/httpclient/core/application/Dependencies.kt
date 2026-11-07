@@ -7,8 +7,8 @@ private val referencePattern = Regex("""\{\{\s*([^{}\s]+)\s*}}""")
 private const val RESPONSE_MARKER = ".response."
 
 /**
- * Names of the requests whose responses [this] reads: from the URL, header values, body, setting values and
- * assertions, and from the file variables those use (transitively). A reference `{{a.b.response.x}}` names
+ * Names of the requests whose responses [this] reads: from the URL, header values, body, setting values,
+ * assertions and the `>>` / `>>!` save path, and from the file variables those use (transitively). A reference `{{a.b.response.x}}` names
  * the request `a.b` (split on the first `.response.`, like `RequestSession`).
  */
 // Over-inclusion note: a file variable is followed even where an earlier file variable or the environment shadows it
@@ -24,6 +24,7 @@ private fun RequestTemplate.referencedNames(): Set<String> {
     }
     texts += settings.values
     texts += assertions
+    saveResponse?.let { texts += it.path } // `>> {{other.response...}}.json` needs that request to run first
     val names = mutableSetOf<String>()
     val visited = mutableSetOf<String>()
     while (texts.isNotEmpty()) {
