@@ -1,0 +1,130 @@
+name: Release
+
+# Runs when a tag v* is pushed (for example v0.5.0, after the version in build.gradle.kts was bumped to match).
+# It builds the CLI distribution, the IntelliJ plugin zip and the desktop installers and attaches them to the
+# GitHub release for the tag (created here if it does not exist yet). Nothing is published anywhere else.
+# Run manually (Actions > Release > Run workflow) with an existing tag to rebuild and re-attach the assets.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and attach assets to (for example v0.5.0)"
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  # CLI distribution and plugin zip: required, the release is not created without them.
+  cli-and-plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Check the tag matches the project version
+        shell: bash
+        run: |
+          version=$(sed -nE 's/^[[:space:]]*version = "([^"]+)".*/\1/p' build.gradle.kts | head -n1)
+          echo "project version: $version, tag: $TAG"
+          if [ "v$version" != "$TAG" ]; then echo "::error::tag $TAG does not match version $version in build.gradle.kts"; exit 1; fi
+      - name: Build CLI distribution and plugin
+        run: ./gradlew :cli:distZip :cli:distTar :intellij-plugin:buildPlugin --console=plain
+      - name: Collect assets
+        shell: bash
+        run: |
+          mkdir -p assets
+          cp cli/build/distributions/httpc-*.zip cli/build/distributions/httpc-*.tar assets/
+          for f in intellij-plugin/build/distributions/*.zip; do cp "$f" "assets/http-client-intellij-plugin-${TAG#v}.zip"; done
+          ls -l assets
+      - uses: actions/upload-artifact@v7
+        with:
+          name: assets-cli-and-plugin
+          path: assets/*
+          if-no-files-found: error
+
+  # Desktop installers need the target OS (jpackage cannot cross-compile). Best effort: a failure here (for
+  # example a missing WiX on the runner) does not block the release; the installer is just not attached.
+  desktop:
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            task: packageDmg
+            dir: dmg
+            ext: dmg
+            label: macos
+          # windows-2022 ships WiX Toolset 3.x, which the MSI needs; newer images may not.
+          - os: windows-2022
+            task: packageMsi
+            dir: msi
+            ext: msi
+            label: windows
+          - os: ubuntu-latest
+            task: packageDeb
+            dir: deb
+            ext: deb
+            label: linux
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Build installer
+        shell: bash
+        run: ./gradlew :desktop:${{ matrix.task }} --console=plain
+      - name: Collect asset
+        shell: bash
+        run: |
+          mkdir -p assets
+          f=$(ls desktop/build/compose/binaries/main/${{ matrix.dir }}/*.${{ matrix.ext }} | head -n1)
+          cp "$f" "assets/http-client-desktop-${TAG#v}-${{ matrix.label }}.${{ matrix.ext }}"
+          ls -l assets
+      - uses: actions/upload-artifact@v7
+        with:
+          name: assets-desktop-${{ matrix.label }}
+          path: assets/*
+          if-no-files-found: error
+
+  release:
+    needs: [cli-and-plugin, desktop]
+    # the desktop job may fail without blocking the release
+    if: ${{ !cancelled() && needs.cli-and-plugin.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: assets-*
+          path: assets
+          merge-multiple: true
+      - name: Create the release and attach the assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ls -l assets
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" assets/* --clobber
+          else
+            gh release create "$TAG" assets/* --verify-tag --title "$TAG" --generate-notes
+          fi

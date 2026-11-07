@@ -12,6 +12,7 @@ Hexagonal layout:
 - `quality-reports/` — build-only project for aggregated test and coverage reports (below).
 - `mock-server/` — local httpbin-style server used by `samples/` (`./gradlew :mock-server:run`).
 - `samples/` — `.http` files for manual testing ([README](samples/README.md)).
+- `examples/` — a CI smoke-test `.http` file with its environment file (see [getting started](docs/getting-started.md)).
 - `intellij-plugin/` — IntelliJ plugin ([README](intellij-plugin/README.md)) (works in Community editions). Build with `./gradlew :intellij-plugin:buildPlugin`; set `ideaPath` in `gradle.properties` to a local IDE install.
 
 Run tests: `./gradlew test`.
@@ -24,7 +25,7 @@ The build-only `quality-reports/` project (not shipped) aggregates reports of al
 - `./gradlew :core:pitest` runs PIT mutation testing on `core` (about a minute; HTML report in `core/build/reports/pitest/`). Measured mutation score 83 % (820 of 988 mutants killed); the build fails below 80 %.
 - The IntelliJ plugin is excluded from JaCoCo (the IDE test runtime instruments classes itself and its tests need an IDE).
 
-Documentation: [features](docs/features.md) · [differences from JetBrains](docs/jetbrains-compatibility.md) · [plan](docs/PLAN.md) · [changelog](CHANGELOG.md)
+Documentation: [getting started](docs/getting-started.md) · [features](docs/features.md) · [differences from JetBrains](docs/jetbrains-compatibility.md) · [plan](docs/PLAN.md) · [changelog](CHANGELOG.md)
 
 ## CLI
 
@@ -51,4 +52,4 @@ Exit codes: `0` success, `1` a request, assertion or setup failed, `2` bad argum
 
 `# @assert status == 200` lines are checked after each response; the CLI prints PASS/FAIL and exits 1 on any failure (see [features](docs/features.md#assertions)).
 
-`./gradlew :cli:installDist` builds a standalone `httpc` launcher in `cli/build/install/httpc/bin`.
+`./gradlew :cli:installDist` builds a standalone `httpc` launcher in `cli/build/install/httpc/bin`; `./gradlew :cli:distZip` (or `distTar`) builds the downloadable distribution that releases attach. Install steps for release assets: [getting started](docs/getting-started.md).
