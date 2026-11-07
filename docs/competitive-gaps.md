@@ -30,8 +30,8 @@ We do not try to match either there; we win on plain files, no proprietary colle
 |------------------------------------------------------------|-----------------------|
 | Plugin never tried in a real IDE, Community unverified     | T21 (release blocker) |
 | Multipart and form bodies, file uploads                    | T8                    |
-| Variable completion, undefined-variable diagnostics, find  | T13, T16, T22         |
-| Response history browser, compare, saved responses         | T18, T26              |
+| Variable completion, diagnostics and find in the editors (the analysis in `core` is done, T13) | T16, T22 |
+| Response history browser and compare (saved responses `>>` / `<>` are done, T26) | T18 |
 | Assertion results in the desktop and plugin panels         | T17, T22              |
 | Run all, remember environment in the plugin                | T23                   |
 | Cancel button                                              | T19                   |
@@ -63,12 +63,12 @@ These are what Bruno / Postman users will ask for. Each needs a decision, not a 
 | Pre/post-request scripts, response handlers | all                | Needs a sandboxed script engine (a third-party dependency; would live in `adapters`). Assertions + chaining cover most CI use. Defer. |
 | OAuth 2 flows, Digest auth                  | Postman, JetBrains | Defer; Basic and Bearer cover the common case.                                                                                        |
 | GraphQL, WebSocket, gRPC                    | all                | Defer. Do G4 first so they fail loudly.                                                                                               |
-| OpenAPI-based completion, HTTP/2 settings   | JetBrains          | Later, after editor intelligence (T13, T16, T22).                                                                                     |
+| OpenAPI-based completion, HTTP/2 settings   | JetBrains          | Later, after editor intelligence (T16, T22).                                                                                     |
 | Cloud sync, team workspaces                 | Postman            | Non-goal: Git is the sync mechanism.                                                                                                  |
 
 ## 4. Suggested order
 
-1. Finish what is open: PRs for T13 and T26, then T21 (verify the plugin in a Community IDE).
+1. T21 first: verify the plugin in a Community IDE (T13 and T26 are merged).
 2. Robustness quick-wins: G1, G2, G3, G4, G6 (all small), then G5 and G7.
 3. Planned feature-work from PLAN.md: T8, then the editor-intelligence and plugin tasks.
 4. Distribution (G9, T24, T25) and the import decision.
