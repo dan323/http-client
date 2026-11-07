@@ -152,10 +152,10 @@ class CookieJarSessionTest {
         assertEquals("x", String(sent[1].body!!))
     }
 
-    @Test fun optedOutRequestIsPassedToTheExecutorUntouched() {
+    @Test fun optedOutRequestIsFollowedByTheSessionWithoutTheJar() {
         val s = sessionOver(redirecting(emptyMap()))
         s.run(get("http://h/x", "no-cookie-jar" to ""), emptyMap())
-        assertEquals(true, sent.single().options.followRedirects) // the executor keeps handling redirects itself
+        assertEquals(false, sent.single().options.followRedirects) // redirects are never left to the executor
     }
 
     @Test fun cancellationStopsRunAllInsteadOfContinuing() {

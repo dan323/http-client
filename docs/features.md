@@ -127,9 +127,9 @@ uses the variable is not known. Analysis time is linear in the text size.
 - `# @no-redirect`: do not follow HTTP redirects (the 3xx response is returned). An optional value `true` (default) or `false` (`# @no-redirect false` keeps redirects); it may use `{{vars}}`; any other value is an error.
 - `# @proxy host:port`: send the request through that HTTP proxy. Forms: `host`, `host:port`, `http://host:port`, IPv6 as `[::1]:8080`; the port defaults to 80. Only plain HTTP proxies are supported: other schemes (`https://`, `socks://`) and credentials (`user:pass@host`) are rejected. May use `{{vars}}`.
 
-The JDK client controls `Host`, `Content-Length`, `Connection`, `Expect` and `Upgrade` itself, so user-set headers with these names are dropped silently. With the session cookie jar on (the default), redirects are followed by the session: an explicit `Cookie`, `Authorization` or `Proxy-Authorization` header is dropped when a redirect leaves the origin (scheme, host, port) but kept on same-origin hops, where the jar also adds its matching cookies, and `@timeout` is one deadline across all hops. With `@no-cookie-jar` the JDK client follows redirects itself and its handling of explicit credential headers is JDK-version dependent (not guaranteed here).
+The JDK client controls `Host`, `Content-Length`, `Connection`, `Expect` and `Upgrade` itself, so user-set headers with these names are dropped silently. With the session cookie jar on (the default), redirects are followed by the session (also without a jar, see Redirects below): an explicit `Cookie`, `Authorization` or `Proxy-Authorization` header is dropped when a redirect leaves the origin (scheme, host, port) but kept on same-origin hops, where the jar also adds its matching cookies, and `@timeout` is one deadline across all hops. With `@no-cookie-jar` redirects are followed the same way, only without reading or storing cookies: the JDK client is never left to follow redirects, so the credential handling is the same on every JDK.
 
-Setting names are case-insensitive and unknown ones are ignored. Invalid values (including a blank `@proxy`) fail when the request is resolved with an `Invalid @timeout` / `@proxy` / `@no-redirect` error, before anything is sent. `JdkHttpExecutor` reuses one derived client per (redirect policy, proxy) and copies the injected client's connect timeout, SSL, authenticator, cookie handler, executor and HTTP version; request priority cannot be copied.
+Setting names are case-insensitive and unknown ones are ignored. Invalid values (including a blank `@proxy`) fail when the request is resolved with an `Invalid @timeout` / `@proxy` / `@no-redirect` error, before anything is sent. `JdkHttpExecutor` sends with `Redirect.NEVER` clients (redirects are followed by `RedirectFollower`), reusing one derived client per proxy when the injected client needs one or a request names an `@proxy`, and copies the injected client's connect timeout, SSL, authenticator, cookie handler, executor and HTTP version; request priority cannot be copied.
 
 - `# @no-cookie-jar`: do not use the cookie jar for this request (see below). Same optional `true`/`false` value as `@no-redirect`.
 
@@ -147,9 +147,10 @@ Redirects: when the jar is in use, the session follows redirects itself, one hop
 any), so `Set-Cookie` on a `302` (the `POST /login` -> `302` flow) is stored and the `Cookie` header is recomputed for every hop's
 URL. Up to 10 hops, then an error. `# @no-redirect` returns the first response (its cookies are still stored). 301/302 on `POST`
 and 303 switch to `GET` without body; 307/308 keep method and body. An explicit `Cookie`, `Authorization` or
-`Proxy-Authorization` request header is dropped when a redirect leaves the origin (scheme, host, port). Measured: the JDK
-client itself does not forward manually set headers on redirects, so hop-by-hop handling is also what makes same-site hops
-carry the cookie. The reported duration is the sum of all hops. With `@no-cookie-jar` the executor's own redirect handling applies.
+`Proxy-Authorization` request header is dropped when a redirect leaves the origin (scheme, host, port). The JDK
+client is never asked to follow redirects (its forwarding of such headers varies by JDK version; `JdkHttpExecutor` itself follows
+through the same code), so this holds on every JDK. With `@no-cookie-jar` the jar is only skipped (nothing read or stored) and explicit
+credential headers are kept on same-origin hops. Only these three headers are stripped: other custom headers such as `X-API-Key` still cross origins on a redirect, so do not put a secret in one if the server may redirect elsewhere. 307/308 re-send the request body to the new origin (as the JDK and curl do). The reported duration is the sum of all hops.
 
 Limitations: a `Cookie` header written in the request is sent as is (the jar adds nothing); there is no public-suffix list, only
 single-label `Domain` values and a short built-in list of common two-label suffixes (`co.uk`, `com.au`, ...) are rejected,
