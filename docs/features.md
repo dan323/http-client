@@ -450,7 +450,9 @@ The same expressions (via `ResponseExtractor` in `core`) are what assertions use
 
 The body is decoded with the `charset` of the response's `Content-Type` (UTF-8 when absent or unknown). XPath is
 evaluated with secure processing (no DOCTYPE, no external access, no extension functions) and stops after 2 seconds,
-finding nothing (the evaluation itself cannot be interrupted, so it keeps running on an abandoned daemon thread until it ends).
+finding nothing. The evaluation itself cannot be interrupted, so the number of evaluations is capped instead: at most 4 run
+at a time in the whole process (timed-out ones count until they really end). While all 4 are busy a new XPath
+evaluation fails fast and finds nothing, like a timeout. Regex is stopped after 2 seconds as well.
 
 Failure messages (also in `--report-json` / `--report-junit` and on stderr) never contain substituted variable
 values: a value that appears in an error text (for example the resolved URL in an invalid-URI error) is shown as

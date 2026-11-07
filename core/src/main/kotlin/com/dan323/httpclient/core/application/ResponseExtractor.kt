@@ -24,11 +24,17 @@ import org.xml.sax.InputSource
  * - `body.regex:pattern`: first match of the regex; group 1 when the pattern has a group, else the whole match
  *
  * XPath evaluation is hardened (secure processing, no DOCTYPE, no external access) and stops after
- * [XPATH_TIMEOUT_MILLIS]; a timed-out expression finds nothing.
+ * [XPATH_TIMEOUT_MILLIS]; a timed-out expression finds nothing. A timed-out evaluation cannot be interrupted, so it is
+ * bounded instead: all extractors share [BoundedEvaluator.DEFAULT_MAX_THREADS] daemon threads, and while they are all
+ * busy a new XPath evaluation fails fast and finds nothing too. Regex is bounded by [RegexGuard].
  *
  * Returns null when the expression is unsupported, malformed or finds nothing.
  */
-class ResponseExtractor(private val json: JsonExtractor) {
+class ResponseExtractor internal constructor(
+    private val json: JsonExtractor,
+    private val evaluator: BoundedEvaluator,
+) {
+    constructor(json: JsonExtractor) : this(json, SHARED_XPATH)
 
     fun extract(response: HttpResponse, expression: String): String? = when {
         expression == "status" -> response.statusCode.toString()
@@ -58,19 +64,7 @@ class ResponseExtractor(private val json: JsonExtractor) {
         return if (index == "*") values.takeIf { it.isNotEmpty() }?.joinToString("\n") else values.getOrNull(index.toInt())
     }
 
-    fun xpath(xml: String, expression: String): String? {
-        val task = java.util.concurrent.FutureTask<String?> { xpathUnbounded(xml, expression) }
-        // XPath evaluation cannot be interrupted, so it runs on a daemon thread that is abandoned on timeout.
-        Thread(task, "xpath-eval").apply { isDaemon = true }.start()
-        return try {
-            task.get(XPATH_TIMEOUT_MILLIS, java.util.concurrent.TimeUnit.MILLISECONDS)
-        } catch (e: java.util.concurrent.TimeoutException) {
-            task.cancel(true)
-            null
-        } catch (e: java.util.concurrent.ExecutionException) {
-            null
-        }
-    }
+    fun xpath(xml: String, expression: String): String? = evaluator.evaluate { xpathUnbounded(xml, expression) }
 
     private fun xpathUnbounded(xml: String, expression: String): String? {
         val factory = DocumentBuilderFactory.newInstance().apply {
@@ -96,7 +90,8 @@ class ResponseExtractor(private val json: JsonExtractor) {
     }
 
     companion object {
-        const val XPATH_TIMEOUT_MILLIS = 2_000L
+        const val XPATH_TIMEOUT_MILLIS = BoundedEvaluator.DEFAULT_TIMEOUT_MILLIS
+        private val SHARED_XPATH = BoundedEvaluator()
         private val INDEXED_HEADER = Regex("(.+)\\[(\\d{1,6}|\\*)]")
     }
 }
