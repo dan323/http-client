@@ -55,3 +55,22 @@ fun interface EnvironmentVariables {
 fun interface ReportWriter {
     fun write(path: java.nio.file.Path, content: String)
 }
+
+/**
+ * Saves a response body for a `>> path` / `>>! path` directive. [path] is relative to the .http file and already has
+ * its `{{variables}}` substituted. Implementations confine it like `< path` reads, write [body] byte for byte,
+ * never overwrite an existing file unless [overwrite], and return the path actually written (relative to the .http
+ * file, `/` separators; without [overwrite] a numeric suffix may have been added). They throw [java.io.IOException]
+ * when the path is rejected or the write fails; the message names the path and never contains [body].
+ */
+fun interface ResponseSaver {
+    fun save(path: String, body: ByteArray, overwrite: Boolean): String
+}
+
+/**
+ * Remembers the latest response of a request that has a `<> path` link (see `ResponseLinks`). [key] identifies the
+ * request in its .http file. Throws [java.io.IOException] when recording fails.
+ */
+fun interface ResponseLinkRecorder {
+    fun record(key: String, outcome: com.dan323.httpclient.core.application.RunOutcome.Success)
+}

@@ -1,5 +1,6 @@
 package com.dan323.httpclient.intellij
 
+import com.dan323.httpclient.adapters.FileHistoryStore
 import com.dan323.httpclient.adapters.SessionFactory
 import com.dan323.httpclient.adapters.UpwardEnvironmentLocator
 import com.dan323.httpclient.core.application.EnvironmentChoice
@@ -24,7 +25,7 @@ import java.nio.file.Path
 @Service(Service.Level.PROJECT)
 class HttpClientService(@Suppress("unused") private val project: Project) : Disposable {
     private val locator = UpwardEnvironmentLocator()
-    private val factory = SessionFactory()
+    private val factory = SessionFactory(history = FileHistoryStore())
     private val state = ClientState(locator) { file -> factory.createConfigured(file) }
 
     var environmentChoice: EnvironmentChoice

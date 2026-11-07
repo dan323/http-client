@@ -20,11 +20,11 @@ GET {{base}}/me
 
 - `# @name x` or `// @name x` names a request (needed for chaining and `--request`).
 - Lines starting with `#` or `//` are comments.
-- A bare URL (no method) means `GET`. A trailing `HTTP/1.1` is ignored. An unknown method (`GTE http://x`) is a parse error naming the line, with a "did you mean" hint for a one-letter typo; a method with no URL is also an error. `GRAPHQL`, `WEBSOCKET` and `GRPC` are accepted as method words but sent as plain HTTP requests. Indented `?a=1` / `&b=2` lines after the request line extend the URL, and an indented header line without `:` continues the previous header value. `> handler` / `<> file` lines are ignored with a warning only when they come after the body; earlier ones are body text. `<@ path` reads the file but does not substitute variables inside it (warning).
+- A bare URL (no method) means `GET`. A trailing `HTTP/1.1` is ignored. An unknown method (`GTE http://x`) is a parse error naming the line, with a "did you mean" hint for a one-letter typo; a method with no URL is also an error. `GRAPHQL`, `WEBSOCKET` and `GRPC` are accepted as method words but sent as plain HTTP requests. Indented `?a=1` / `&b=2` lines after the request line extend the URL, and an indented header line without `:` continues the previous header value. `> handler`, `>> file` and `<> file` lines count only when they come after the body; earlier ones are body text. `<@ path` reads the file but does not substitute variables inside it (warning).
 - Headers follow the request line; a header line without `:` is a parse error naming the line. A blank line starts the body.
 - A body consisting only of `< ./path` (note the space; `<html>` is plain text) is read from that file, relative to the `.http` file.
   - **Security note (deviates from JetBrains, which does not confine):** `< path` and `<@ path` may only read files inside the `.http` file's folder, checked after `..` normalisation and after resolving symlinks (a symlink pointing out of the folder is rejected, as are absolute paths elsewhere). A rejected read fails that request with an error naming the path and how to allow it; no file contents are included. To allow more directories: CLI `--allow-file-root DIR` (repeatable); desktop app and IDE plugin `-Dhttpclient.allowFileRoots=DIR` or environment variable `HTTPC_ALLOW_FILE_ROOTS=DIR`, several separated by the platform path separator (`:`, or `;` on Windows). Roots from the property/env var must be absolute (a leading `~` is expanded); relative roots, empty values (also `--allow-file-root ""`), unparsable paths and filesystem roots such as `/` or `C:\` are rejected with an error naming the entry (shown as a failed request in the desktop app, in the tool window in the IDE, and as a usage error in the CLI); a root equal to your home directory only prints a warning. In the IDE the environment variable `HTTPC_ALLOW_FILE_ROOTS` is the practical choice (the property needs VM options). Residual risk: the file is opened without following a final symlink and re-verified, but someone with write access inside an allowed folder could still race the check by swapping a parent directory for a symlink.
-- Response handlers (`> {% ... %}`, `> file`) and `<> file` redirects are not supported: they are not sent as body, and the parser reports a warning per ignored line (`HttpFile.warnings`; the CLI prints them on stderr).
+- Response handlers (`> {% ... %}`, `> file`) are not supported: they are not sent as body, and the parser reports a warning per ignored line (`HttpFile.warnings`; the CLI prints them on stderr). `>> file`, `>>! file` and `<> file` are supported, see "Saved responses".
 
 ## Variables
 
@@ -197,15 +197,97 @@ Caveats: a prerequisite or an unasserted request answering HTTP 500 still counts
 failed assertions fail a run), so a green report does not mean "no 5xx". Reports contain URLs as written in the file
 and error messages, which may include secrets (tokens in query strings); treat them as sensitive CI artifacts.
 
+### Saved responses
+
+After the request (and after a `> {% ... %}` handler, which is parsed but ignored), as in the JetBrains plugin:
+
+```
+GET {{host}}/orders/1
+
+>> out/order-{{id}}.json
+<> order.json
+```
+
+- `>> path` saves the response body to `path`; it never overwrites. Like JetBrains, an existing name gets a numeric
+  suffix before the extension: `out.json`, `out-1.json`, `out-2.json`. `>>! path` overwrites.
+- `<> path` links the request to its latest stored response (see below).
+- Order: JetBrains writes the handler, then `>>`, then `<>` lines; this parser accepts the `>>`/`<>` lines in any order
+  but only after the body: a `>>`/`>>!`/`<>` line is a directive only in the trailing region, i.e. when every non-blank
+  line after it is also a directive or a response handler. A line starting with `>> ` followed by more body text is body
+  (`>>x` without a space never is a directive). Ambiguity, the same as in JetBrains: a last body line that starts with
+  `>> ` (`hello` then `>> quoted reply`) is read as a directive, so existing files keep working; to avoid surprises the
+  parser adds a warning when such a line directly follows the body (no blank line) and its path contains whitespace
+  (what prose looks like), and a blank line before the directive removes both the doubt and the warning. To keep a
+  line like that as body text, put more body text after it.
+  At most one `>>`/`>>!` per request (JetBrains allows one): a second is a parse error with its line number. Several `<>`
+  lines are fine (JetBrains accumulates them). An empty path is a parse error naming the line.
+- The path may contain `{{variables}}`, resolved when the request runs. It is relative to the `.http` file; paths with
+  spaces are fine, `\` counts as a separator on every platform. Names that cannot exist on Windows are refused on every
+  platform, so a project shared between systems does not save files another system cannot hold: reserved device names
+  (`CON`, `PRN`, `AUX`, `NUL`, `COM0-9`, `LPT0-9`, also with an extension), a segment ending in a dot or a space, and
+  the characters `< > : " | ? *` and control characters (which also rules out `file.txt:stream`).
+- Confinement is the one of `< path` bodies (`FileAccessPolicy`: the `.http` file's folder plus the allowlist): `..`
+  out of the allowed folders, absolute paths (`/x`, `\x`, `C:\x`), symlinks leading out, a final symlink, a folder,
+  the `.http` file itself and (for `>>!`) a read-only file are refused. Missing parent folders are created, only
+  inside the allowed roots. Files are written atomically, owner-only on POSIX (an overwritten file keeps its
+  permissions), byte for byte (no charset conversion); an empty body gives an empty file. Concurrent saves of the same
+  name end up in different files (`>>`). The port is `ResponseSaver` (`core`), `LocalResponseSaver` (`adapters`).
+- A save happens after the assertions are evaluated, also when they failed, but not when the request itself failed.
+  A rejected or failed save fails only the save: the request's result stays, `RunOutcome.Success.saveError` holds the
+  message (names the path, hides substituted values, never contains the body) and `savedTo` the path written.
+  Paths are not part of reports. The path shown after a successful save (`savedTo`, the CLI line) follows the same rule
+  as error messages: values substituted into `{{variables}}` (3 characters or more) come back as `{{name}}`, so
+  `>> out/{{token}}.json` prints `out/{{token}}.json`, never the token. The file on disk has the real name.
+- The temp file (random name, owner-only) is written in the final, already verified folder; `>>!` is one atomic rename
+  inside that folder, and `>>` hard-links the finished temp file to the first free name (a link fails if the name exists,
+  so nothing is clobbered and no empty or partial file is ever visible), then removes the temp name (without hard links a
+  plain move without replace is used). Right before publishing, the folder's real path must still be the verified one
+  and the temp file must be in it. If a folder was swapped for a symlink after validation, the source (named by its random
+  temp name) does not exist at the new location, so the rename/link fails and nothing outside is touched, also for `>>!`.
+  Residual race (same family as `< path` reads; the JDK has no openat): an attacker who can write inside the allowed
+  folders, can observe the random temp name and swaps the folder in the microseconds between the last check and the
+  syscall, while placing a file of that name at the new location, can still make one save land outside; that is detected
+  afterwards, a `>>` file is removed, a `>>!` replacement cannot be restored and the error says so.
+- The path is validated exactly as written: leading or trailing whitespace is refused (never trimmed into a different
+  path).
+- Bare `RequestSession.run` does not save or link; `>>`/`>>!`/`<>` are applied by `runAll`/`runChained`, once per request.
+  A `>> {{other.response...}}` path makes `other` a prerequisite that runs first (also through file variables).
+  Cancellation or interruption inside a save or link is not reported as a save error: it stops the session.
+- CLI: a `--report-*` / `--output` file that is the same file as a response saved in this run (symlinks and case aliases
+  included) is not written, an error is printed and the saved response is kept. Corrupt-history warnings go to stderr
+  of the run.
+- Prerequisites: a request that only runs to feed `{{name.response...}}` to the request you asked for (`@import`/chained
+  dependencies) is sent like any other, so its own `>>` and `<>` directives fire too (it saved its `pre.json`). A
+  prerequisite that is reused instead of re-sent does not save or link again.
+- Desktop app and plugin show `Saved to PATH` (or the save/link error) under the status of the response; the desktop
+  app passes a `FileHistoryStore` like the CLI and the plugin, so `<>` links are recorded there too.
+- CLI: `Saved response: PATH` (relative to the `.http` file) on stderr, also with `--quiet`; a failed save prints
+  `Error: Cannot save response to ...` on stderr and makes the exit code 1.
+
+`<> path` links: JetBrains rewrites the `.http` file to add a `<>` line per stored response. This tool deliberately
+never edits your `.http` file. The `<> path` text is kept as written (`RequestTemplate.responseLinks`, the path itself
+is not used); instead, after a run of a request that has a `<>` line, its latest response is recorded in the history
+index (`HistoryStore.recordLinked`), and `ResponseLinks.latest(store, httpFile, request)` returns the latest stored
+response of that request (`HistoryStore.latestLinked`). A request is identified by its `# @name` (duplicate names
+share one link: the newest run wins) or, unnamed, by the line where it starts (so adding lines above it breaks the
+link). Recording is opt-in: `SessionFactory(history = FileHistoryStore())` (or any `HistoryStore`, with an injectable
+root); the CLI and the plugin pass it, so the response of a linked request lands in `.http-history/`. The history keeps
+the newest 50 runs per file, and additionally the newest record of every `<>` key even when it is older than that, so a
+link keeps resolving however often other requests run (at most one extra run folder per distinct linked request; an
+entry whose request lost its `<>` line or was removed stays until you delete it from `.http-history/`). Only a record whose body can still be read
+protects its key from pruning. Entries written
+before keys existed carry no key and are pruned as ordinary runs. Opening the linked response in
+the desktop app or the plugin is not implemented yet.
+
 ### Run history store
 
 `HistoryStore` (port in `core`) remembers past runs of a `.http` file: `record` (a `RunReport` plus the response of
-each request), `list` (newest first), `read`, `readResponse` and `latestResponse` (by request name). It is not yet
-used by the CLI, desktop app or plugin (planned: history browsing and `<>` links). `FileHistoryStore` (`adapters`)
+each request), `list` (newest first), `read`, `readResponse` and `latestResponse` (by request name). Only `<>` links use it
+today (see "Saved responses"); the CLI, desktop app and plugin do not record ordinary runs yet. `FileHistoryStore` (`adapters`)
 keeps it in `.http-history/<file name>/` next to the `.http` file; the folder is injectable
 (`FileHistoryStore.underRoot(dir)` for a shared root, or any `(Path) -> Path`).
 
-Layout: one folder per run, named by its id (`20261106T101500123Z-a1b2c3d4`: UTC time + random), holding `run.json`
+Layout: one folder per run, named by its id (`20261106T101500123Z-n0000-a1b2c3d4`: UTC time, a sequence number within the millisecond so equal-time runs keep their recorded order, random suffix; ids from before the sequence existed stay readable and sort first), holding `run.json`
 (version, id, timestamp, the report in the `JsonRunReport` format, and per response: status, headers, duration,
 body size, `bodyTruncated`) and `<index>.body` (raw bytes). `run.json` is written last; a folder without it is
 incomplete and ignored (removed after an hour). There is no shared index file, so two processes recording at once
@@ -397,4 +479,4 @@ Do not install it next to the bundled HTTP Client plugin of IntelliJ Ultimate, s
 
 ## Not yet implemented
 
-Response handlers, saved responses (`>>`, `>>!`, `<>`, planned as F21), assertion results in the desktop app and plugin (assertions are evaluated and shown by the CLI and reports only), multipart/form bodies and cancel buttons in the UIs.
+Response handlers (`> {% ... %}`, `> file`), opening `<>`-linked responses in the desktop app and plugin, assertion results in the desktop app and plugin (assertions are evaluated and shown by the CLI and reports only), multipart/form bodies and cancel buttons in the UIs.

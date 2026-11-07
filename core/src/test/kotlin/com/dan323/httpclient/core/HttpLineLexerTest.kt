@@ -84,7 +84,7 @@ class HttpLineLexerTest {
         val text = "GET /x\n\n> {%\n  client.log(\"hi\");\n%}\n<> out.json\n> handler.js\nbody"
         assertEquals(
             listOf(METHOD to "GET", URL to "/x", COMMENT to "> {%", COMMENT to "  client.log(\"hi\");", COMMENT to "%}",
-                COMMENT to "<> out.json", COMMENT to "> handler.js", BODY_TEXT to "body"),
+                COMMENT to "<>", FILE_REF to "out.json", COMMENT to "> handler.js", BODY_TEXT to "body"),
             kinds(text),
         )
         assertEquals(listOf(COMMENT to "> {% single %}", BODY_TEXT to "after"), kinds("GET /x\n\n> {% single %}\nafter").drop(2))
