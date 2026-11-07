@@ -21,6 +21,13 @@ class HttpLineLexerTest {
         )
     }
 
+    @Test fun `a rejected protocol word gets no method token, like an unknown method`() {
+        val text = "GRPC localhost:50051/x\nGTE http://h/y\n"
+        val methods = HttpLineLexer.tokenize(text).filter { it.kind == METHOD }
+        assertEquals(emptyList(), methods.map { text.substring(it.start, it.end) })
+        assertEquals(listOf(METHOD to "GET"), kinds("GET http://h/grpc\n").take(1))
+    }
+
     @Test fun commentsBareUrlsAndFileBodies() {
         assertEquals(
             listOf(COMMENT to "// c", URL to "http://h/z", FILE_REF to "< ./f.json"),
