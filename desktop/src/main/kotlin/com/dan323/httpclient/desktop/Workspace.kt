@@ -3,6 +3,7 @@ package com.dan323.httpclient.desktop
 import com.dan323.httpclient.adapters.UpwardEnvironmentLocator
 import com.dan323.httpclient.core.application.EnvironmentChoice
 import com.dan323.httpclient.core.application.environments
+import com.dan323.httpclient.adapters.DefaultTimeout
 import com.dan323.httpclient.adapters.FileAccessPolicy
 import com.dan323.httpclient.adapters.FileHistoryStore
 import com.dan323.httpclient.adapters.SessionFactory
@@ -36,10 +37,11 @@ object Workspace {
  */
 class DesktopRunner(
     private val policy: () -> Result<FileAccessPolicy> = { FileAccessPolicy.load() },
+    private val defaultTimeout: () -> Result<Long> = { DefaultTimeout.load() },
 ) : AutoCloseable {
     // `>> path` saves work through the session; `<> path` links are kept in the file's .http-history, like the CLI and the plugin
     private val factory = SessionFactory(history = FileHistoryStore())
-    private val controller = RunController(UpwardEnvironmentLocator()) { file -> policy().map { factory.create(file, it) } }
+    private val controller = RunController(UpwardEnvironmentLocator()) { file -> policy().mapCatching { factory.create(file, it, defaultTimeoutMillis = defaultTimeout().getOrThrow()) } }
 
     /** Forgets remembered responses, so the next run sends the chained requests again. */
     fun resetChain() = controller.resetChain()

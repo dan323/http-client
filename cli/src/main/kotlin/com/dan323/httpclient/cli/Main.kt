@@ -5,6 +5,8 @@ import com.dan323.httpclient.adapters.AtomicReportWriter
 import com.dan323.httpclient.adapters.JUnitXmlReport
 import com.dan323.httpclient.core.port.out.ReportWriter
 import com.dan323.httpclient.core.application.RunReport
+import com.dan323.httpclient.core.application.RequestTimeouts
+import com.dan323.httpclient.adapters.DefaultTimeout
 import com.dan323.httpclient.adapters.UpwardEnvironmentLocator
 import com.dan323.httpclient.core.application.EnvironmentChoice
 import com.dan323.httpclient.core.application.UnknownEnvironmentException
@@ -28,7 +30,7 @@ import kotlin.system.exitProcess
 
 private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] [--list]
                   [--report-json FILE] [--report-junit FILE] [--allow-file-root DIR]
-                  [--quiet] [--output FILE] [--var NAME=VALUE]
+                  [--quiet] [--output FILE] [--var NAME=VALUE] [--timeout DURATION]
 
   --env NAME       use variables from NAME in http-client.env.json (nearest http-client.env.json, searching
                    upward from the file; http-client.private.env.json beside it is merged)
@@ -45,9 +47,13 @@ private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NA
                    file holds one request; owner-only file; cannot be combined with --list)
   --var N=V        set variable N to V, overriding file and environment variables (repeatable; V may be
                    empty or contain '=')
-                   A summary line ("3 requests, 2 passed, 1 failed in 1.2s") always goes to stderr after a run.
-                   (report/output paths must differ from the .http file and each other;
-                   exit 1 = failed run, 3 = passed but a report/output file is unwritable)"""
+  --timeout D      total time limit for requests without `# @timeout` (headers and body), such as 30, 500ms,
+                   45s or 2m (plain numbers are seconds); default 60s; -Dhttpclient.timeout and HTTPC_TIMEOUT
+                   set it when the option is absent
+
+A summary line ("3 requests, 2 passed, 1 failed in 1.2s") always goes to stderr after a run.
+(report/output paths must differ from the .http file and each other;
+exit 1 = failed run, 3 = passed but a report/output file is unwritable)"""
 
 data class Options(
     val file: Path,
@@ -61,6 +67,8 @@ data class Options(
     val quiet: Boolean = false,
     val output: Path? = null,
     val vars: Map<String, String> = emptyMap(),
+    /** Default total timeout in milliseconds, or null to use `-Dhttpclient.timeout` / `HTTPC_TIMEOUT` / the built-in default. */
+    val timeoutMillis: Long? = null,
 )
 
 /**
@@ -97,6 +105,7 @@ private fun parseArgsUnchecked(args: List<String>, err: PrintStream): Options? {
     var quiet = false
     var output: Path? = null
     val vars = LinkedHashMap<String, String>()
+    var timeoutMillis: Long? = null
     var i = 0
     fun value(): String? = args.getOrNull(++i)?.takeIf { it.isNotEmpty() && !it.startsWith("--") }
     while (i < args.size) {
@@ -119,6 +128,12 @@ private fun parseArgsUnchecked(args: List<String>, err: PrintStream): Options? {
                 if (name in vars) { err.println("httpc: --var: '$name' given more than once"); return null }
                 vars[name] = v
             }
+            "--timeout" -> {
+                if (timeoutMillis != null) return null
+                timeoutMillis = try { RequestTimeouts.parseMillis(value() ?: return null, label = "--timeout") } catch (e: IllegalArgumentException) {
+                    err.println("httpc: ${e.message}"); return null
+                }
+            }
             "--report-json" -> { if (reportJson != null) return null; reportJson = Path.of(value() ?: return null) }
             "--report-junit" -> { if (reportJunit != null) return null; reportJunit = Path.of(value() ?: return null) }
             else -> if (a.startsWith("--") || file != null || a.isEmpty()) return null else file = Path.of(a)
@@ -140,10 +155,10 @@ private fun parseArgsUnchecked(args: List<String>, err: PrintStream): Options? {
     if (output != null && ((reportJson != null && samePath(output, reportJson)) || (reportJunit != null && samePath(output, reportJunit)))) {
         err.println("httpc: --output: same file as a report option"); return null
     }
-    if (list && (quiet || vars.isNotEmpty())) {
-        err.println("httpc: --quiet and --var cannot be combined with --list (nothing is run)"); return null
+    if (list && (quiet || vars.isNotEmpty() || timeoutMillis != null)) {
+        err.println("httpc: --quiet, --var and --timeout cannot be combined with --list (nothing is run)"); return null
     }
-    return Options(input, env, request, list, allowEnv, reportJson, reportJunit, allowFileRoots, quiet, output, vars)
+    return Options(input, env, request, list, allowEnv, reportJson, reportJunit, allowFileRoots, quiet, output, vars, timeoutMillis)
 }
 
 /** True when both paths name the same file: equal after normalisation, or the same existing file (symlinks, hard links). */
@@ -237,12 +252,15 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream, writer: R
         err.println("httpc: --output needs exactly one selected request (${selected.size} would run); pick one with --request")
         return 2
     }
+    val defaultTimeout = opts.timeoutMillis ?: DefaultTimeout.load().getOrElse {
+        return failWithReport(opts, err, writer, it.message ?: "Invalid default timeout")
+    }
     val chosen = withDependencies(requests, selected)
     val started = System.nanoTime()
     // Prerequisites run for their responses only: assertions are evaluated for the selected requests.
     var saveFailed = false
     val outcomes = SessionFactory(history = FileHistoryStore(onWarning = { err.println("warning: $it") })).use { factory ->
-    val session = factory.create(opts.file, FileAccessPolicy(opts.allowFileRoots, FileAccessPolicy.CLI_HINT), opts.allowEnv, "pass --allow-env NAME")
+    val session = factory.create(opts.file, FileAccessPolicy(opts.allowFileRoots, FileAccessPolicy.CLI_HINT), opts.allowEnv, "pass --allow-env NAME", defaultTimeout)
     session.runAll(chosen, variables, assertFor = { r -> selected.any { it === r } }) { outcome ->
         val r = outcome.request
         if (!opts.quiet) out.println("### ${r.name ?: "${r.method} ${r.url}"}")
