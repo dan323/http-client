@@ -62,6 +62,10 @@ class HttpFileParser : ParseHttpFile {
                 lineNo(i),
                 "unknown HTTP method '${kind.word}'" + (HttpLineSyntax.suggestMethod(kind.word)?.let { " (did you mean '$it'?)" } ?: ""),
             )
+            is RequestLineKind.UnsupportedProtocol -> throw HttpParseException(
+                lineNo(i),
+                "${kind.word.uppercase()} requests are not supported (only HTTP methods are sent)",
+            )
             is RequestLineKind.MissingUrl -> throw HttpParseException(lineNo(i), "request line '${kind.word}' has no URL")
         }.let { it.first to it.second.trim() }
         i++

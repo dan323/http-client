@@ -192,9 +192,33 @@ class HttpFileParserTest {
     }
 
     @Test
-    fun `GRAPHQL and WEBSOCKET are accepted methods`() {
-        assertEquals("GRAPHQL", parser.parse("GRAPHQL http://x/g\n").requests.single().method)
-        assertEquals("WEBSOCKET", parser.parse("WEBSOCKET ws://x/g\n").requests.single().method)
+    fun `GRAPHQL WEBSOCKET and GRPC are parse errors naming the line, not sent as HTTP`() {
+        for (word in listOf("GRAPHQL", "WEBSOCKET", "GRPC", "grpc")) {
+            val e = assertFailsWith<HttpParseException> { parser.parse("GET http://a\n###\n# c\n$word http://x/g\n") }
+            assertEquals(4, e.line)
+            assertEquals("Line 4: ${word.uppercase()} requests are not supported (only HTTP methods are sent)", e.message)
+        }
+        val lone = assertFailsWith<HttpParseException> { parser.parse("WEBSOCKET\n") }
+        assertEquals(true, "WEBSOCKET requests are not supported" in lone.message!!)
+    }
+
+    @Test
+    fun `protocol words inside a URL or a body are not rejected`() {
+        val file = parser.parse("GET http://h/grpc\n###\nGET http://h/graphql\n###\nPOST http://h/x\n\ngraphql {{x}}\nwebsocket here\n")
+        assertEquals(3, file.requests.size)
+        assertEquals("http://h/grpc", file.requests[0].url)
+        assertEquals("http://h/graphql", file.requests[1].url)
+        assertEquals("graphql {{x}}\nwebsocket here", (file.requests[2].body as Body.Text).content)
+        // a bare URL (no method) and a scheme that merely starts with the word are still plain GETs
+        val bare = parser.parse("grpc://host/x\n###\nhttp://h/websocket\n").requests
+        assertEquals(listOf("GET", "GET"), bare.map { it.method })
+    }
+
+    @Test
+    fun `a typo of a protocol word is an unknown method and gets no did-you-mean`() {
+        val e = assertFailsWith<HttpParseException> { parser.parse("GRAPHQ http://x\n") }
+        assertEquals(true, e.message!!.startsWith("Line 1:") && "GRAPHQ" in e.message!!)
+        assertEquals(false, "did you mean" in e.message!!)
     }
 
     @Test
