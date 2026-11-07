@@ -1,12 +1,14 @@
 package com.dan323.httpclient.core
 
 import com.dan323.httpclient.core.application.CookieJar
+import com.dan323.httpclient.core.application.PublicSuffixList
 import com.dan323.httpclient.core.domain.Header
 import java.time.Duration
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class CookieJarTest {
     private var now = Instant.parse("2024-06-01T12:00:00Z")
@@ -38,6 +40,21 @@ class CookieJarTest {
         listOf("example.com", "example.co.uk", "me.github.io", "www.ck", "city.kobe.jp", "a.b.example.com").forEach {
             assertEquals(false, CookieJar.isPublicSuffix(it), it)
         }
+    }
+
+    @Test fun publicSuffixListResourceIsLoaded() {
+        // a missing resource makes the lazy load throw instead of silently accepting every domain
+        assertTrue(PublicSuffixList.ruleCount() > 1000, "rules loaded: ${PublicSuffixList.ruleCount()}")
+    }
+
+    @Test fun publicSuffixEdgeInputs() {
+        assertEquals(true, CookieJar.isPublicSuffix("com.")) // trailing dot is ignored
+        assertEquals(false, CookieJar.isPublicSuffix("example.com."))
+        assertEquals(true, CookieJar.isPublicSuffix("")) // a single empty label falls under the implicit `*` rule
+        assertEquals(false, CookieJar.isPublicSuffix("a..com")) // empty middle label is not part of the suffix
+        // input is documented as lowercase: rules are lowercase, so uppercase names do not match them
+        assertEquals(false, CookieJar.isPublicSuffix("CO.UK"))
+        assertEquals(false, CookieJar.isPublicSuffix("EXAMPLE.COM"))
     }
 
     @Test fun rejectsPublicSuffixDomainsBeyondTheOldShortList() {

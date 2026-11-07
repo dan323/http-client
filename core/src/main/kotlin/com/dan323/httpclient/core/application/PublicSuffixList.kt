@@ -9,26 +9,32 @@ package com.dan323.httpclient.core.application
 internal object PublicSuffixList {
     private class Rules(val plain: Set<String>, val wildcardParents: Set<String>, val exceptions: Set<String>)
 
+    private const val RESOURCE = "/com/dan323/httpclient/core/public_suffix_list.txt"
+
     private val rules: Rules by lazy { load() }
 
     private fun load(): Rules {
         val plain = HashSet<String>()
         val wildcards = HashSet<String>()
         val exceptions = HashSet<String>()
-        PublicSuffixList::class.java.getResourceAsStream("/com/dan323/httpclient/core/public_suffix_list.txt")
-            ?.bufferedReader(Charsets.UTF_8)?.useLines { lines ->
-                for (line in lines) {
-                    val rule = line.trim().lowercase()
-                    when {
-                        rule.isEmpty() || rule.startsWith("//") -> {}
-                        rule.startsWith("!") -> exceptions += rule.substring(1)
-                        rule.startsWith("*.") -> wildcards += rule.substring(2)
-                        else -> plain += rule
-                    }
+        val stream = PublicSuffixList::class.java.getResourceAsStream(RESOURCE)
+            ?: error("$RESOURCE is missing from the classpath; cookie Domain checks cannot run without it")
+        stream.bufferedReader(Charsets.UTF_8).useLines { lines ->
+            for (line in lines) {
+                val rule = line.trim().lowercase()
+                when {
+                    rule.isEmpty() || rule.startsWith("//") -> {}
+                    rule.startsWith("!") -> exceptions += rule.substring(1)
+                    rule.startsWith("*.") -> wildcards += rule.substring(2)
+                    else -> plain += rule
                 }
             }
+        }
         return Rules(plain, wildcards, exceptions)
     }
+
+    /** Number of rules loaded from the bundled list; fails if the resource is missing. */
+    fun ruleCount(): Int = rules.let { it.plain.size + it.wildcardParents.size + it.exceptions.size }
 
     /** Number of labels of the public suffix of [labels] (the PSL algorithm; the implicit rule `*` gives 1). */
     private fun suffixLength(labels: List<String>): Int {
