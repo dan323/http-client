@@ -109,7 +109,15 @@ class JdkHttpExecutor(
             throw e.cause ?: e
         }
         val ms = (System.nanoTime() - start) / 1_000_000
-        val headers = resp.headers().map().flatMap { (k, vs) -> vs.map { Header(k, it) } }
+        val headers = responseHeaders(resp.headers().map())
         return HttpResponse(resp.statusCode(), headers, resp.body(), ms)
     }
 }
+
+
+/**
+ * The response headers as a list. HTTP/2 pseudo-headers (`:status`, names starting with `:`) are not headers of the
+ * message and the status is already reported separately, so they are left out.
+ */
+internal fun responseHeaders(map: Map<String, List<String>>): List<Header> =
+    map.filterKeys { !it.startsWith(":") }.flatMap { (k, vs) -> vs.map { Header(k, it) } }
