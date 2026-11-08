@@ -52,12 +52,12 @@ Each remaining task is listed once even when it serves several features. Size: S
 | T18 | **Desktop history and compare:** browse stored responses, diff two | F13 | M | – (T11 done: `HistoryStore` / `FileHistoryStore`) |
 | T19 | **Cancel button:** desktop (and plugin) cancel of the running request; core and the executor already cancel on interrupt | F16 | S | – |
 | T20 | **Environment editor:** write support on the environment port and a UI to edit variables | F17 | M | – |
-| T21 | **Plugin GUI verification:** the sandbox IDE loads without errors; still to check by hand: highlighting, gutter icons, tool window, actions, in a Community IDE | F20, F19, F18 | S | – |
+| T21 | **Plugin GUI verification:** checked by hand on Ultimate 2026.3 (IU-263.7307.200) with the 0.5.0-rc1 zip, see `intellij-plugin/README.md`; still open: a Community install and the 2026.1 baseline (the `Ctrl+Alt+Enter` bug is known) | F20, F19, F18 | S | – |
 | T22 | **Plugin intelligence:** completion, go-to-request, inspections from T13; show assertion results | F18, F14, F1 | L | T21 (T13 done: `VariableAnalysis`) |
 | T23 | **Plugin response panel:** remember the environment across restarts, run all | F19 | M | T21 |
-| T24 | **Packaging in CI** (rest of F20): done in `.github/workflows/release.yml` on tags `v*` (DMG/MSI/DEB best effort, plugin zip, CLI zip/tar); first real tag run unverified | F20 | S | – |
+| T24 | **Packaging in CI** (rest of F20): done in `.github/workflows/release.yml` on tags `v*` (DMG/MSI/DEB best effort, plugin zip, CLI zip/tar); first real run on tag v0.5.0-rc1: all jobs passed | F20 | S | – |
 | T27 | **Plugin: open the linked/stored response** of a request (`<>` link, `ResponseLinks.latest`) in the plugin | F9 | S | T21 |
-| T25 | **Final cross-platform QA and release notes:** manual pass of CLI, desktop (dialogs, MSI) and plugin; fix findings | F20 | M | all |
+| T25 | **Final cross-platform QA and release notes:** Windows MSI and plugin checked by hand on 0.5.0-rc1; CLI zip checked on 0.5.0-rc1 (`--list`, smoke test with a JUnit report); still open: macOS DMG, Linux DEB and the native file dialogs; desktop UI polish (button text, dropdown position, request list highlighting, env file editing) planned after 0.5.0 | F20 | M | all |
 
 ### Feature to task map
 
@@ -84,14 +84,14 @@ Shared work, written once: T13 (F14, F18), T14 (F11, F12, F17), T21 (F18, F19, F
 At most **3 tasks run at the same time**, each in its own worktree with a PR and a review. A wave starts when
 the previous one is merged. Dependencies not listed in a wave are already satisfied.
 
-| Wave | Tasks | Why together |
-|---|---|---|
-| 1 | T21 (plugin GUI check) | Done by hand in a real IDE; its findings may reshape T22/T23 |
-| 2 | T13 (variable analysis), T14 (desktop persistence) | disjoint areas |
-| 3 | T8 (multipart), T19 (cancel button), T23 (plugin panel) | disjoint areas |
-| 4 | T22 (plugin intelligence), T16 (desktop editor), T15 (workspace) | need T13 / T14 |
-| 5 | T17 (desktop extras), T18 (history browser), T20 (environment editor), T24 (packaging), T27 (plugin: open linked response) | up to three at a time |
-| 6 | T25 (QA and release notes) | needs everything |
+| Wave | Tasks                                                                                                                      | Why together                                                 |
+|------|----------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------|
+| 1    | T21 (plugin GUI check)                                                                                                     | Done by hand in a real IDE; its findings may reshape T22/T23 |
+| 2    | T13 (variable analysis), T14 (desktop persistence)                                                                         | disjoint areas                                               |
+| 3    | T8 (multipart), T19 (cancel button), T23 (plugin panel)                                                                    | disjoint areas                                               |
+| 4    | T22 (plugin intelligence), T16 (desktop editor), T15 (workspace)                                                           | need T13 / T14                                               |
+| 5    | T17 (desktop extras), T18 (history browser), T20 (environment editor), T24 (packaging), T27 (plugin: open linked response) | up to three at a time                                        |
+| 6    | T25 (QA and release notes)                                                                                                 | needs everything                                             |
 
 ### Rules for every task
 
@@ -104,5 +104,5 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 ### Risks
 
 - **T21 first on purpose:** the plugin has never been used in a real IDE window. Its findings may reshape T22/T23.
-- **Windows packaging is unverified** until T24/T25: the MSI needs WiX 3.x on a Windows machine.
+- **Windows packaging:** the MSI is built by the release workflow (windows-2022, WiX 3) and was installed and run by hand on 0.5.0-rc1; macOS and Linux installers are untested.
 - **T26 writes files:** `>>` is the first feature that writes next to user data, so T26 must confine paths like reads do and never overwrite without `>>!`.

@@ -21,7 +21,7 @@ sonar {
 
 allprojects {
     group = "com.dan323.httpclient"
-    version = "0.5.0-rc1"
+    version = "0.5.0"
     repositories { mavenCentral() }
 }
 

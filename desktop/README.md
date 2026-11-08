@@ -38,15 +38,20 @@ used automatically.
 
 | OS | Command | Output (under `desktop/build/compose/binaries/main/`) | Extra requirement |
 |---|---|---|---|
-| macOS | `./gradlew :desktop:packageDmg` | `dmg/HTTP Client-1.0.0.dmg` | none |
-| Windows | `gradlew.bat :desktop:packageMsi` | `msi/HTTP Client-1.0.0.msi` | [WiX Toolset 3.x](https://wixtoolset.org/) on `PATH` |
+| macOS | `./gradlew :desktop:packageDmg` | `dmg/HTTP Client-<installer version>.dmg` | none |
+| Windows | `gradlew.bat :desktop:packageMsi` | `msi/HTTP Client-<installer version>.msi` | [WiX Toolset 3.x](https://wixtoolset.org/) on `PATH` |
 | Linux | `./gradlew :desktop:packageDeb` | `deb/…` | `dpkg`/`fakeroot` |
 
 `:desktop:createDistributable` produces an unpacked app image on any OS without extra tools.
 
-Verified: the macOS DMG builds, the app starts, and headless Compose UI tests (`AppUiTest`) click through
-opening requests, choosing an environment, Send with chained prerequisites, error display and the shortcuts.
-Not verified: the native Open…/New… file dialogs, the Windows MSI, and how it looks on screen.
+The installer version is derived from the project version (`0.5.0` becomes `1.5.99`, `0.5.0-rc1` becomes `1.5.1`; see
+`desktop/build.gradle.kts`), so a newer installer upgrades an older one. The runtime in the installers is a jlink-trimmed
+JRE; `./gradlew :desktop:checkRuntimeModules` (run in CI) fails if the app needs a JDK module it lacks.
+
+Verified: headless Compose UI tests (`AppUiTest`) click through opening requests, choosing an environment, Send with
+chained prerequisites, error display and the shortcuts. By hand (release `0.5.0-rc1`): the Windows MSI installs, starts
+and sends requests. The macOS DMG and Linux DEB are built by the release workflow but have not been installed or run.
+Known UI problems are listed in [../docs/known-limitations.md](../docs/known-limitations.md).
 
 ## Layout
 

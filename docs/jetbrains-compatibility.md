@@ -79,9 +79,10 @@ cover it (see "Sources and limits"). Status: **Partial** (accepted with limits),
 
 ## Editor support
 
-Not verified. The plugin loads in an Ultimate sandbox IDE without errors, but highlighting, the run gutter, the tool window
-and the behaviour in a Community IDE are listed as not verified in `intellij-plugin/README.md`, and T21 in
-[PLAN.md](PLAN.md) is open. Completion, navigation and inspections are not available (T16, T22). Do not install the plugin
+Checked by hand on IntelliJ IDEA Ultimate 2026.3 (highlighting, run gutter, tool window, environments, chaining; see
+`intellij-plugin/README.md`); a real Community install and the 2026.1 baseline are not verified. Assertion results are
+not shown, `Ctrl+Alt+Enter` does not work in the default keymap, and completion, navigation and inspections are not
+available (T16, T22). Do not install the plugin
 next to the bundled JetBrains one (both claim `.http`). See [features.md](features.md#intellij-plugin).
 
 ## Deliberate deviations

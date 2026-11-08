@@ -5,17 +5,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-08
+
+The first release with the release workflow: the CLI zip and tar, the IntelliJ plugin zip and the desktop installers are attached to the GitHub release. `0.5.0-rc1` was a pre-release used to test that workflow, the Windows installer and the plugin.
+
 ### Added
 - IntelliJ plugin: its own icon for `.http` files (light and dark variants) and for the plugin listing, instead of a generic server icon.
-
-### Fixed
-- HTTP/2 pseudo-headers (`:status`) are no longer listed among the response headers in any front end, report or saved response; the status was already shown separately.
-
-## [0.5.0-rc1] - 2026-11-07
-
-Release candidate: published as a GitHub pre-release to test the release workflow, the installers and the IntelliJ plugin (T21, T25) before 0.5.0.
-
-### Added
 - Desktop installers: the bundled runtime now includes `java.net.http` (without it the installed app could not send requests), and `./gradlew :desktop:checkRuntimeModules` (run in CI) fails when the app needs a JDK module the runtime lacks.
 - Distribution (G9, T24): `.github/workflows/release.yml` runs on a tag `v*` (or manually for an existing tag), checks the tag against the project version, builds the CLI distribution (`./gradlew :cli:distZip` / `distTar`, `httpc-<version>.zip|tar`), the IntelliJ plugin zip and, best effort, the desktop installers (DMG on macOS, MSI on Windows, DEB on Linux), and attaches them to the GitHub release. Nothing is published to other channels (Homebrew, Scoop, winget, JetBrains Marketplace are listed as follow-ups in `docs/getting-started.md`).
 - `docs/getting-started.md` (how to install each piece from the release assets; usage stays in `docs/features.md`) and `examples/smoke-test.http` with `examples/http-client.env.json`, linked from the README.
@@ -23,6 +18,9 @@ Release candidate: published as a GitHub pre-release to test the release workflo
 ### Changed
 - Cookie domain checks use the Public Suffix List (G8): a `Set-Cookie` `Domain` attribute that is a public suffix (`com`, `co.uk`, `github.io`, wildcard and exception rules included) is rejected unless it equals the request host, replacing the single-label check and the short built-in two-label list. The list ships as a resource in `core` (`public_suffix_list.txt`, version recorded on its first line; update procedure in `docs/features.md`), so `core` still has no third-party dependencies.
 - Desktop installer version is derived from the project version (`0.5.0-rc1` -> `1.5.1`, `0.5.0` -> `1.5.99`) instead of the constant `1.0.0`, so a newer installer upgrades an older one.
+
+### Fixed
+- HTTP/2 pseudo-headers (`:status`) are no longer listed among the response headers in any front end, report or saved response; the status was already shown separately.
 
 ## [0.4.0] - 2026-11-07
 

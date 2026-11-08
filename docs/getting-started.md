@@ -45,7 +45,7 @@ jobs:
 
 ## IntelliJ plugin
 
-*Settings > Plugins > gear icon > Install Plugin from Disk...*, pick the plugin zip and restart the IDE. Usage: [IntelliJ plugin](features.md#intellij-plugin). Details and limits (the plugin is not yet verified in a real IDE): [intellij-plugin/README.md](../intellij-plugin/README.md).
+*Settings > Plugins > gear icon > Install Plugin from Disk...*, pick the plugin zip and restart the IDE. Usage: [IntelliJ plugin](features.md#intellij-plugin). It needs IntelliJ IDEA 2026.1 or newer (build 261+), and the "HTTP Client" plugin bundled with Ultimate should be disabled. Details and limits: [intellij-plugin/README.md](../intellij-plugin/README.md).
 
 ## Desktop app
 
@@ -60,7 +60,7 @@ Run the installer for your OS and start "HTTP Client". The installers are built 
 Releases only attach files to GitHub; nothing is published to other channels. Possible next steps, each needing an account or a decision by the maintainer:
 
 - Homebrew tap or cask, Scoop bucket, winget manifest for the CLI and the desktop app.
-- JetBrains Marketplace listing for the plugin (needs a vendor account, a signing certificate and a Marketplace token; the plugin should first be verified in a real IDE, plan task T21).
+- JetBrains Marketplace listing for the plugin (needs a vendor account, a signing certificate and a Marketplace token; the plugin should first be verified in a Community install and on the 2026.1 baseline, plan task T21).
 - Code signing and notarization of the macOS and Windows installers.
 - A GitHub Action wrapper (`uses: dan323/http-client@v1`) that downloads `httpc`.
 - An SDKMAN or Docker image of the CLI.
