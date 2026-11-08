@@ -21,6 +21,8 @@ It runs on Windows, macOS and Linux and reuses `core` and `adapters` unchanged; 
   content type, with **Body** and **Headers** tabs. JSON bodies are shown as a syntax-colored tree: click a
   `{` / `[` line to collapse or expand it. **Raw** shows the body exactly as received; **Copy** copies what the
   current tab shows. A failing request shows its error and does not stop the rest.
+- Assertion results (`# @assert`) appear under the status line: a summary (`Assertions: 2 passed, 1 failed`) and a
+  green `PASS` / red `FAIL ... -- reason` line for each; a failed request notes how many assertions were not run.
 
 See [../docs/features.md](../docs/features.md) for the `.http` syntax, variables and chaining.
 
@@ -69,7 +71,7 @@ because installers require a major version of at least 1; its major is the proje
 
 ## Not yet implemented
 
-Request history, saving responses, showing assertion results, a cancel button, and persisting the window,
+Request history, saving responses, a cancel button, and persisting the window,
 last file and selected environment between sessions.
 
 `{{$env.NAME}}` reads nothing by default: allow names with `-Dhttpclient.allowEnv=NAME,NAME` (JVM option) or the environment variable `HTTPC_ALLOW_ENV=NAME,NAME`; see [docs/features.md](../docs/features.md).

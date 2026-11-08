@@ -1,5 +1,6 @@
 package com.dan323.httpclient.viewmodel
 
+import com.dan323.httpclient.core.application.AssertionResult
 import com.dan323.httpclient.core.application.RunOutcome
 import com.dan323.httpclient.core.domain.Header
 import com.dan323.httpclient.core.domain.HttpResponse
@@ -90,5 +91,37 @@ class OutcomeDisplayTest {
         )
         assertNull(failed.savedLabel)
         assertEquals(200, failed.status)
+    }
+
+    @Test fun assertionLinesAndSummary() {
+        val r = req("GET http://h/\n")
+        val results = listOf(
+            AssertionResult("status == 200", true, "200", "200", "ok"),
+            AssertionResult("body.id == 1", false, "1", "2", "expected 1, got 2"),
+            AssertionResult("body.x exists", true, null, null, "ok"),
+        )
+        val d = RunOutcome.Success(r, HttpResponse(200, emptyList(), ByteArray(0), 1), results).display() as OutcomeDisplay.Response
+        assertEquals(listOf("PASS status == 200", "FAIL body.id == 1 -- expected 1, got 2", "PASS body.x exists"), d.assertions.map { it.label })
+        assertEquals("Assertions: 2 passed, 1 failed", d.assertionSummary)
+        assertTrue(d.hasFailedAssertions)
+    }
+
+    @Test fun failedAssertionWithoutDetailHasNoDanglingSeparator() {
+        assertEquals("FAIL a == 1", OutcomeDisplay.AssertionLine("a == 1", false, null).label)
+        assertEquals("FAIL a == 1", OutcomeDisplay.AssertionLine("a == 1", false, "  ").label)
+    }
+
+    @Test fun noAssertionsMeansNoSummary() {
+        val d = ok("GET http://h/\n", 200, "")
+        assertNull(d.assertionSummary)
+        assertFalse(d.hasFailedAssertions)
+    }
+
+    @Test fun failureReportsAssertionsNotRun() {
+        val r = req("GET http://h/\n")
+        fun err(n: Int) = RunOutcome.Failure(r, "boom", n).display() as OutcomeDisplay.Error
+        assertNull(err(0).assertionsNotRunLabel)
+        assertEquals("1 assertion not run", err(1).assertionsNotRunLabel)
+        assertEquals("3 assertions not run", err(3).assertionsNotRunLabel)
     }
 }

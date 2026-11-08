@@ -32,7 +32,6 @@ We do not try to match either there; we win on plain files, no proprietary colle
 | Multipart and form bodies, file uploads                                                        | T8                    |
 | Variable completion, diagnostics and find in the editors (the analysis in `core` is done, T13) | T16, T22              |
 | Response history browser and compare (saved responses `>>` / `<>` are done, T26)               | T18                   |
-| Assertion results in the desktop and plugin panels                                             | T17, T22              |
 | Run all, remember environment in the plugin                                                    | T23                   |
 | Cancel button                                                                                  | T19                   |
 | Installers and plugin zip built in CI (release workflow done; T25 QA of the assets remains)    | T25                   |
