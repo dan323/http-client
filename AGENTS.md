@@ -35,3 +35,4 @@ Tests use `kotlin("test")` on JUnit Platform. There is no linter.
 
 - `master` is protected: work on a branch and open a PR. The checks `test` (ubuntu, windows, macos), `plugin` and `quality` must pass.
 - Run the full tests locally before pushing.
+- GitHub Actions in `.github/workflows` are pinned to a full commit SHA with the version in a comment (`uses: actions/checkout@<sha> # v7`); keep that form when adding or bumping one.
