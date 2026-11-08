@@ -4,10 +4,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -47,6 +49,9 @@ import java.awt.FileDialog
 import java.awt.Frame
 import java.nio.file.Path
 
+/** Tight horizontal padding so the three buttons under the request list fit the 300 dp column. */
+private val CompactButtonPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+
 internal val mono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp)
 
 @Composable
@@ -74,20 +79,20 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
                         .padding(8.dp),
                 ) {
                     Text(r.name ?: "Request ${i + 1}", fontWeight = FontWeight.SemiBold)
-                    Text("${r.method} ${r.url}", style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                    Text(requestSummary(r.method, r.url, if (dark) HighlightPalette.Dark else HighlightPalette.Light), style = MaterialTheme.typography.bodySmall, maxLines = 1)
                 }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(enabled = state.file != null && !state.running, onClick = { scope.launch(Dispatchers.IO) { state.run(all = false) } }) {
-                Text(if (state.running) "Running…" else "Send")
+            Button(enabled = state.file != null && !state.running, contentPadding = CompactButtonPadding, onClick = { scope.launch(Dispatchers.IO) { state.run(all = false) } }) {
+                Text(if (state.running) "Running…" else "Send", maxLines = 1)
             }
-            OutlinedButton(enabled = state.file != null && !state.running, onClick = { scope.launch(Dispatchers.IO) { state.run(all = true) } }) {
-                Text("Send all")
+            OutlinedButton(enabled = state.file != null && !state.running, contentPadding = CompactButtonPadding, onClick = { scope.launch(Dispatchers.IO) { state.run(all = true) } }) {
+                Text("Send all", maxLines = 1)
             }
             // Responses of earlier requests (e.g. a login token) are remembered between runs; this forgets them.
-            OutlinedButton(enabled = state.file != null && !state.running, onClick = { state.resetChain() }) {
-                Text("Forget responses")
+            OutlinedButton(enabled = state.file != null && !state.running, contentPadding = CompactButtonPadding, onClick = { state.resetChain() }) {
+                Text("Reset chain", maxLines = 1)
             }
         }
     }
@@ -126,13 +131,16 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
 @Composable
 private fun RecentFilesMenu(state: AppState) {
     var open by remember { mutableStateOf(false) }
-    OutlinedButton(enabled = !state.running && state.recentFiles.isNotEmpty(), onClick = { open = true }) { Text("Recent files") }
-    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-        state.recentFiles.forEach { path ->
-            DropdownMenuItem(
-                text = { Column { Text(path.fileName.toString()); Text(path.parent?.toString() ?: "", style = MaterialTheme.typography.bodySmall) } },
-                onClick = { open = false; state.openRecent(path) },
-            )
+    // The menu is a sibling of the button inside one Box, so it anchors directly under the button.
+    Box {
+        OutlinedButton(enabled = !state.running && state.recentFiles.isNotEmpty(), onClick = { open = true }) { Text("Recent files") }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            state.recentFiles.forEach { path ->
+                DropdownMenuItem(
+                    text = { Column { Text(path.fileName.toString()); Text(path.parent?.toString() ?: "", style = MaterialTheme.typography.bodySmall) } },
+                    onClick = { open = false; state.openRecent(path) },
+                )
+            }
         }
     }
 }
@@ -140,13 +148,17 @@ private fun RecentFilesMenu(state: AppState) {
 @Composable
 private fun EnvironmentPicker(state: AppState) {
     var open by remember { mutableStateOf(false) }
-    OutlinedButton(enabled = state.file != null, onClick = { open = true }) {
-        Text("Environment: ${state.environment ?: "none"}")
-    }
-    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-        DropdownMenuItem(text = { Text("none") }, onClick = { state.environment = null; open = false })
-        state.environments.forEach { name ->
-            DropdownMenuItem(text = { Text(name) }, onClick = { state.environment = name; open = false })
+    // The menu is a sibling of the button inside one Box, so it anchors directly under the button
+    // (a DropdownMenu directly in a Column is positioned relative to the whole column).
+    Box {
+        OutlinedButton(enabled = state.file != null, onClick = { open = true }) {
+            Text("Environment: ${state.environment ?: "none"}")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text("none") }, onClick = { state.environment = null; open = false })
+            state.environments.forEach { name ->
+                DropdownMenuItem(text = { Text(name) }, onClick = { state.environment = name; open = false })
+            }
         }
     }
 }

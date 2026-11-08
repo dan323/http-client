@@ -9,6 +9,7 @@ import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import com.dan323.httpclient.core.application.HttpLineLexer
 import com.dan323.httpclient.core.application.HttpTokenKind
 
@@ -48,4 +49,11 @@ fun highlight(text: String, palette: HighlightPalette): AnnotatedString = buildA
 /** Colors the text as it is typed; the text itself is unchanged so offsets map one to one. */
 class HttpVisualTransformation(private val palette: HighlightPalette) : VisualTransformation {
     override fun filter(text: AnnotatedString) = TransformedText(highlight(text.text, palette), OffsetMapping.Identity)
+}
+
+/** `METHOD url` for the request list, with the method coloured like in the editor. */
+fun requestSummary(method: String, url: String, palette: HighlightPalette): AnnotatedString = buildAnnotatedString {
+    withStyle(palette.styleOf(HttpTokenKind.METHOD)!!) { append(method) }
+    append(" ")
+    append(url)
 }
