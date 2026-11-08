@@ -17,7 +17,7 @@ Related: [competitive-gaps.md](competitive-gaps.md) (what to add), [PLAN.md](PLA
 ## Front ends
 
 - **Plugin:** the VFS listener (forget on delete/move), the gutter icon, and the tool window are not tested without an IDE. The sandbox IDE only loads without errors (T21 in PLAN.md).
-- **Plugin, known bug (not a release blocker):** the shortcut `Ctrl+Alt+Enter` for *Run HTTP Request* does not work: in the editor it is already bound to the built-in *Insert line above*, which wins, so the key inserts a new line. Use the gutter run icon or *Run HTTP Request* in the editor context menu until another shortcut is chosen. Found while verifying the plugin (T21).
+- **Plugin, known bug (not a release blocker):** in the default keymap the shortcut `Ctrl+Alt+Enter` for *Run HTTP Request* does not work: it is also bound to the built-in *Insert line above*, which wins, so the key inserts a new line. Use the gutter run icon next to the request, or put the caret in the request and use *Run HTTP Request* in the editor context menu. You can also free the keys by removing or changing the *Insert Line Above* binding in *Settings > Keymap* (not tried), or assign another shortcut to *Run HTTP Request* there; the plugin's default will change in a later release. Found while verifying the plugin (T21).
 - **Desktop and plugin:** no UI for the `$env` and file-root allowlists (system property / environment variable only).
 
 ## Mock server (test fixture, low priority)

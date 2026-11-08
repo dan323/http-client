@@ -531,7 +531,7 @@ A standalone window for Windows, macOS and Linux: file editor, request list, env
 
 Works in any IntelliJ-based IDE, including Community (it depends only on the platform module).
 
-- Open a `.http` file, put the caret in a request and use the green gutter icon or *Run HTTP Request* in the editor context menu. (The shortcut **Ctrl+Alt+Enter** is registered but does not work yet: the editor's *Insert line above* takes it; see [known limitations](known-limitations.md).)
+- Open a `.http` file, click the green gutter icon next to the request you want to run (the icon runs its own request wherever the caret is), or put the caret in a request and use *Run HTTP Request* in the editor context menu. (In the default keymap the shortcut **Ctrl+Alt+Enter** does not run it: the editor's *Insert line above* uses the same keys and wins; see [known limitations](known-limitations.md).)
 - *Select HTTP Environment* in the context menu picks the environment from `http-client.env.json`.
 - Results appear in the **HTTP Response** tool window. Chained prerequisites run first, as in the CLI.
 
