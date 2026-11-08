@@ -63,10 +63,12 @@ class ResponseToolWindowFactory : ToolWindowFactory, DumbAware {
         // Enabled only while a request runs (what the desktop app does too, see RunControls); the same action is in the title bar.
         val cancel = JButton(RunControls.CANCEL_LABEL, AllIcons.Actions.Suspend).apply {
             toolTipText = "Stop the running request; responses that already arrived stay"
-            isEnabled = service.isRunning
+            isEnabled = false
             addActionListener { service.cancel() }
         }
+        // Subscribe first, then read the current state: a run that starts in between is not missed.
         service.onRunning(toolWindow.disposable) { running -> SwingUtilities.invokeLater { cancel.isEnabled = RunControls(running).canCancel } }
+        SwingUtilities.invokeLater { cancel.isEnabled = RunControls(service.isRunning).canCancel }
         ActionManager.getInstance().getAction("httpclient.CancelRequest")?.let { toolWindow.setTitleActions(listOf(it)) }
         val top = JPanel(BorderLayout(8, 0)).apply {
             border = BorderFactory.createEmptyBorder(4, 8, 4, 8)

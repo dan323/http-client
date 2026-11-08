@@ -42,6 +42,9 @@ class ClientState(locator: EnvironmentLocator, maxSessions: Int = 16, newSession
     private val running = AtomicBoolean(false)
     private val cancellation = RunCancellation()
     private val runListeners = mutableListOf<(Boolean) -> Unit>()
+    // Makes "start (claim, forget an old cancel, tell listeners)", "end (release, tell listeners)" and "cancel" one step
+    // each: a cancel cannot be erased by a starting run, and a finishing run's `false` cannot arrive after a newer `true`.
+    private val runLock = Any()
     // Text last run per file, least recently used first, bounded like the sessions; the file evicted here also loses its
     // sessions (see [rememberText]), so the two caches never disagree about a file.
     private val lastTexts = object : LinkedHashMap<Path, String>(16, 0.75f, true) {
@@ -71,9 +74,27 @@ class ClientState(locator: EnvironmentLocator, maxSessions: Int = 16, newSession
 
     private fun notifyRunning(value: Boolean) = synchronized(runListeners) { runListeners.toList() }.forEach { it(value) }
 
+    /** Claims the run guard and tells listeners; false when a run is in progress. Releases the guard if a listener throws. */
+    private fun begin(): Boolean = synchronized(runLock) {
+        if (!running.compareAndSet(false, true)) return false
+        cancellation.reset()
+        try {
+            notifyRunning(true)
+        } catch (e: Throwable) {
+            running.set(false)
+            throw e
+        }
+        true
+    }
+
+    private fun end() = synchronized(runLock) {
+        running.set(false)
+        notifyRunning(false)
+    }
+
     /** Stops the running request, if any; its report then reads `Cancelled`. Safe from any thread. */
     fun cancel() {
-        if (running.get()) cancellation.cancel()
+        synchronized(runLock) { if (running.get()) cancellation.cancel() }
     }
 
     /** Called with every new report, from the running thread. Returns the function that unregisters it. */
@@ -108,9 +129,7 @@ class ClientState(locator: EnvironmentLocator, maxSessions: Int = 16, newSession
      * its remembered responses are dropped first (the requests they came from may have changed).
      */
     fun run(file: Path, text: String, caretLine: Int): Boolean {
-        if (!running.compareAndSet(false, true)) return false
-        cancellation.reset()
-        notifyRunning(true)
+        if (!begin()) return false
         try {
             val abs = file.toAbsolutePath()
             val (previous, dropped) = synchronized(lastTexts) {
@@ -141,8 +160,7 @@ class ClientState(locator: EnvironmentLocator, maxSessions: Int = 16, newSession
             }
             return true
         } finally {
-            running.set(false)
-            notifyRunning(false)
+            end()
         }
     }
 }

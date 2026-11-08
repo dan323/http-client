@@ -19,6 +19,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -115,6 +116,35 @@ class ClientStateTest {
         gate = null
         assertTrue(s.run(file, text, 5))
         assertEquals(listOf("http://h/login", "http://h/login", "http://h/me"), sent.toList())
+    }
+
+    @Test fun aCancelRightAfterTheRunStartsIsNotErased() {
+        val s = state()
+        s.environmentChoice = dev
+        s.onRunning { if (it) s.cancel() }   // the cancel lands between the run being claimed and its request being sent
+        assertTrue(s.run(file, text, 5))
+        assertEquals(emptyList(), sent.toList())
+        assertEquals("Cancelled", s.lastReport.message)
+        assertFalse(s.isRunning)
+    }
+
+    @Test fun aListenerThatThrowsOnStartDoesNotLeaveTheRunGuardSet() {
+        val s = state()
+        s.environmentChoice = dev
+        val remove = s.onRunning { if (it) error("boom") }
+        assertFailsWith<IllegalStateException> { s.run(file, text, 5) }
+        assertFalse(s.isRunning)
+        remove()
+        assertTrue(s.run(file, text, 5))
+    }
+
+    @Test fun runningNotificationsArriveInTransitionOrder() {
+        val s = state()
+        s.environmentChoice = dev
+        val seen = java.util.Collections.synchronizedList(mutableListOf<Boolean>())
+        s.onRunning { seen += it }
+        repeat(20) { s.run(file, text, 5) }
+        assertEquals(List(20) { listOf(true, false) }.flatten(), seen.toList())
     }
 
     @Test fun editingTheFileDropsItsRememberedResponses() {
