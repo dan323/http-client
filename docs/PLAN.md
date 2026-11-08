@@ -10,7 +10,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 
 | ID | Feature | Area | Status |
 |---|---|---|---|
-| F1 | Response assertions (`# @assert ...`) and a test-runner mode with pass/fail results | core, CLI, UIs | partial: engine, CLI and reports done; desktop and plugin do not show assertion results |
+| F1 | Response assertions (`# @assert ...`) and a test-runner mode with pass/fail results | core, CLI, UIs | done (the plugin panel is unverified by hand, see T21) |
 | F2 | File variables (`@host = localhost`) and request settings (`# @timeout`, `# @no-redirect`, `# @no-cookie-jar`, `# @proxy`) | core | done |
 | F3 | Auth helpers (Basic encoding; Bearer needs none) | core | done |
 | F4 | Multipart and form bodies, file uploads | core | open |
@@ -48,12 +48,12 @@ Each remaining task is listed once even when it serves several features. Size: S
 | T8 | **Multipart and form bodies** in parser and executor, with file parts (file reads go through the confined `FileReader`) | F4 | M | – |
 | T15 | **Desktop workspace:** several open files (tabs) and a folder view | F12 | L | – |
 | T16 | **Desktop editor intelligence:** variable completion, diagnostics from T13, find/replace | F14 | L | – (T13 done: `VariableAnalysis`) |
-| T17 | **Desktop response extras:** body search, save to file, image/HTML preview; assertion results (F1) are done, the rest is open | F15, F1 | M | – |
+| T17 | **Desktop response extras:** body search, save to file, image/HTML preview | F15 | M | – |
 | T18 | **Desktop history and compare:** browse stored responses, diff two | F13 | M | – (T11 done: `HistoryStore` / `FileHistoryStore`) |
 | T19 | **Cancel button:** desktop (and plugin) cancel of the running request; core and the executor already cancel on interrupt | F16 | S | – |
 | T20 | **Environment editor:** write support on the environment port and a UI to edit variables | F17 | M | – |
 | T21 | **Plugin GUI verification:** checked by hand on Ultimate 2026.3 (IU-263.7307.200) with the 0.5.0-rc1 zip, see `intellij-plugin/README.md`; still open: a Community install and the 2026.1 baseline (the `Ctrl+Alt+R` run shortcut is still to be tried in an IDE) | F20, F19, F18 | S | – |
-| T22 | **Plugin intelligence:** completion, go-to-request, inspections from T13; assertion results are done (unverified by hand in the IDE) | F18, F14, F1 | L | T21 (T13 done: `VariableAnalysis`) |
+| T22 | **Plugin intelligence:** completion, go-to-request, inspections from T13 | F18, F14 | L | T21 (T13 done: `VariableAnalysis`) |
 | T23 | **Plugin response panel:** remember the environment across restarts, run all | F19 | M | T21 |
 | T24 | **Packaging in CI** (rest of F20): done in `.github/workflows/release.yml` on tags `v*` (DMG/MSI/DEB best effort, plugin zip, CLI zip/tar); first real run on tag v0.5.0-rc1: all jobs passed | F20 | S | – |
 | T27 | **Plugin: open the linked/stored response** of a request (`<>` link, `ResponseLinks.latest`) in the plugin | F9 | S | T21 |
@@ -63,7 +63,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 
 | Feature | Open tasks |
 |---|---|
-| F1 | T17, T22 |
 | F4 | T8 |
 | F9 | T18, T27 |
 | F11 | T14 |
