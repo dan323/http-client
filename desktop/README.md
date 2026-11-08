@@ -11,11 +11,11 @@ It runs on Windows, macOS and Linux and reuses `core` and `adapters` unchanged; 
   comments, `###` separators, `< file` bodies; light and dark palettes). **Save** writes it back; running a request saves first.
 - The app remembers the last file, its environment, the window geometry and the 10 most recent files (**Recent files**) in `settings.json` in the user config folder; see [../docs/features.md](../docs/features.md#desktop-app) for the location and failure behaviour. Only paths, names and geometry are stored.
 - Shortcuts: **Ctrl/Cmd+S** saves, **Ctrl/Cmd+Enter** sends the selected request.
-- The left list shows the requests in the file. **Send** runs the selected one together with the
+- The left list shows the requests in the file, with each method coloured as in the editor. **Send** runs the selected one together with the
   requests it chains on (`{{login.response.body.$.token}}`); **Send all** runs every request in order.
 - **Environment** picks a set of variables from the nearest `http-client.env.json` (and the `http-client.private.env.json` beside it),
   searching upward from the file's folder like the CLI and the plugin. The default is "none" (variables from the file only); a name that no longer exists is an error.
-- Responses of earlier requests (a login) are remembered per file and environment, so **Send** does not resend them; **Forget responses** clears them.
+- Responses of earlier requests (a login) are remembered per file and environment, so **Send** does not resend them; **Reset chain** clears them.
 - While a request runs, editing, saving, opening and creating files are disabled; a run saves the file first and a save error stops it.
 - The right pane shows each response: a colored status badge (2xx green, 3xx orange, 4xx red), time, size and
   content type, with **Body** and **Headers** tabs. JSON bodies are shown as a syntax-colored tree: click a
