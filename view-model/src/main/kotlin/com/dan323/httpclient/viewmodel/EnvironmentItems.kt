@@ -1,8 +1,8 @@
-package com.dan323.httpclient.intellij
+package com.dan323.httpclient.viewmodel
 
 import com.dan323.httpclient.core.application.EnvironmentChoice
 
-/** Label of the "no environment" entry, used by both the tool-window combo and the popup action. */
+/** Label of the "no environment" entry, used by both the editor-header combo and the popup action. */
 const val NONE_LABEL = "(none)"
 
 /** One selectable entry: what is shown and the choice it stands for. Entries are matched by index or identity, never by label. */

@@ -1,4 +1,4 @@
-package com.dan323.httpclient.intellij
+package com.dan323.httpclient.viewmodel
 
 import com.dan323.httpclient.core.application.EnvironmentChoice
 import kotlin.test.Test

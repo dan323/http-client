@@ -10,6 +10,8 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.dan323.httpclient.core.port.out.EnvironmentFileException
+import com.dan323.httpclient.viewmodel.environmentItems
+import com.dan323.httpclient.viewmodel.selectedItem
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.openapi.ui.MessageType
