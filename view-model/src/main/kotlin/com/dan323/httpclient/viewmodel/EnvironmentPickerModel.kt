@@ -4,7 +4,10 @@ import com.dan323.httpclient.core.application.EnvironmentChoice
 import com.dan323.httpclient.core.port.out.EnvironmentFileException
 
 /** What an environment picker shows: its [items], which one is [selected], and an optional tooltip [hint]. */
-data class EnvironmentPickerState(val items: List<EnvironmentItem>, val selected: Int, val hint: String?)
+data class EnvironmentPickerState(val items: List<EnvironmentItem>, val selected: Int, val hint: String?) {
+    /** The entries' labels, in order, for a combo box. */
+    val labels: List<String> get() = items.map { it.label }
+}
 
 /**
  * UI-toolkit-free logic of an environment picker (the combo in the header of an IDE editor). Everything the outside
@@ -37,7 +40,7 @@ class EnvironmentPickerModel(
 
     /** Starts following choice changes made elsewhere and loads the first list. */
     fun start() {
-        unsubscribe = subscribe { ui { if (!disposed && current.items.getOrNull(current.selected)?.choice != getChoice()) reload() } }
+        unsubscribe = subscribe { ui { if (!disposed && current.items[current.selected].choice != getChoice()) reload() } }
         reload()
     }
 
@@ -76,4 +79,27 @@ class EnvironmentPickerModel(
         unsubscribe?.invoke()
         unsubscribe = null
     }
+}
+
+/**
+ * Keeps at most one running [EnvironmentPickerModel] for a UI component that is attached to and detached from a
+ * window repeatedly: [attach] replaces the previous model (disposing it), [detach] disposes it. Events arriving
+ * while detached are ignored.
+ */
+class EnvironmentPickerHost(private val create: () -> EnvironmentPickerModel) {
+    private var model: EnvironmentPickerModel? = null
+
+    fun attach() {
+        model?.dispose()
+        model = create().also { it.start() }
+    }
+
+    fun detach() {
+        model?.dispose()
+        model = null
+    }
+
+    fun select(index: Int) { model?.select(index) }
+
+    fun reload() { model?.reload() }
 }

@@ -1,8 +1,7 @@
 package com.dan323.httpclient.intellij
 
+import com.dan323.httpclient.viewmodel.EnvironmentPickerHost
 import com.dan323.httpclient.viewmodel.EnvironmentPickerModel
-import com.dan323.httpclient.viewmodel.EnvironmentPickerState
-import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.project.DumbAware
@@ -23,70 +22,44 @@ import javax.swing.event.PopupMenuListener
 /**
  * Puts the environment picker in the header of every `.http` editor, like JetBrains' HTTP Client. The choice lives in
  * [HttpClientService] (per project, until the IDE restarts), so picking it in one file applies to runs from all files
- * and every open header follows it. The logic is [EnvironmentPickerModel] (in `view-model`, unit tested); this is the
- * Swing glue only.
+ * and every open header follows it. All logic is in `view-model` ([EnvironmentPickerModel], [EnvironmentPickerHost],
+ * unit tested); this file is Swing/IDE glue only and is not covered by tests (it needs an IDE).
  */
 class EnvironmentEditorHeaderProvider : EditorNotificationProvider, DumbAware {
-    override fun collectNotificationData(project: Project, file: VirtualFile): Function<in FileEditor, out JComponent?>? {
-        if (file.extension != "http" || !file.isInLocalFileSystem) return null
-        return Function { editor -> EnvironmentHeaderPanel(project, editor, file) }
-    }
+    override fun collectNotificationData(project: Project, file: VirtualFile): Function<in FileEditor, out JComponent?>? =
+        if (file.extension != "http" || !file.isInLocalFileSystem) null else Function { editor -> EnvironmentHeaderPanel(project, editor, file) }
 }
 
-private class EnvironmentHeaderPanel(private val project: Project, private val editor: FileEditor, private val file: VirtualFile) :
-    EditorNotificationPanel(editor, Status.Info) {
+private class EnvironmentHeaderPanel(project: Project, editor: FileEditor, file: VirtualFile) : EditorNotificationPanel(editor, Status.Info) {
     private val service = project.getService(HttpClientService::class.java)
     private val combo = JComboBox<String>()
-    private var model: EnvironmentPickerModel? = null
-    private var scope: Disposable? = null
+    // A new model per time the panel is shown; its choice listener is removed when the panel is hidden or replaced.
+    private val host = EnvironmentPickerHost {
+        val scope = Disposer.newDisposable(editor, "EnvironmentHeaderPanel")
+        EnvironmentPickerModel(
+            { service.environments(Path.of(file.path)).map { it.name } }, { service.environmentChoice }, { service.environmentChoice = it },
+            { listener -> service.onEnvironmentChoice(scope, listener); { Disposer.dispose(scope) } },
+            { ApplicationManager.getApplication().executeOnPooledThread(it) }, { SwingUtilities.invokeLater(it) },
+        ) { state ->
+            combo.model = DefaultComboBoxModel(state.labels.toTypedArray())
+            combo.selectedIndex = state.selected
+            combo.toolTipText = state.hint
+        }
+    }
 
     init {
         text("Environment:")
         add(combo)
-        combo.addActionListener { model?.select(combo.selectedIndex) }
-        // Re-read the env file whenever the list is about to open (mouse or keyboard), so an edited
-        // http-client.env.json shows up without reopening the file.
+        combo.addActionListener { host.select(combo.selectedIndex) }
+        // Re-read the env file whenever the list is about to open (mouse or keyboard).
         combo.addPopupMenuListener(object : PopupMenuListener {
-            override fun popupMenuWillBecomeVisible(e: PopupMenuEvent?) { model?.reload() }
-            override fun popupMenuWillBecomeInvisible(e: PopupMenuEvent?) {}
-            override fun popupMenuCanceled(e: PopupMenuEvent?) {}
+            override fun popupMenuWillBecomeVisible(e: PopupMenuEvent?) = host.reload()
+            override fun popupMenuWillBecomeInvisible(e: PopupMenuEvent?) = Unit
+            override fun popupMenuCanceled(e: PopupMenuEvent?) = Unit
         })
     }
 
-    // The choice listener lives exactly as long as this panel is shown: a superseded panel is removed from the editor,
-    // so it stops listening (and reloading) instead of lingering until the editor closes.
-    override fun addNotify() {
-        super.addNotify()
-        stop()
-        val s = Disposer.newDisposable(editor, "EnvironmentHeaderPanel")
-        scope = s
-        model = EnvironmentPickerModel(
-            loadNames = { service.environments(Path.of(file.path)).map { it.name } },
-            getChoice = { service.environmentChoice },
-            setChoice = { service.environmentChoice = it },
-            // Unregistered when [s] is disposed (by stop()), so the returned remover has nothing left to do.
-            subscribe = { listener -> service.onEnvironmentChoice(s, listener); {} },
-            background = { ApplicationManager.getApplication().executeOnPooledThread(it) },
-            ui = { SwingUtilities.invokeLater(it) },
-            render = ::show,
-        ).also { it.start() }
-    }
+    override fun addNotify() { super.addNotify(); host.attach() }
 
-    override fun removeNotify() {
-        stop()
-        super.removeNotify()
-    }
-
-    private fun stop() {
-        model?.dispose()
-        model = null
-        scope?.let { Disposer.dispose(it) }
-        scope = null
-    }
-
-    private fun show(state: EnvironmentPickerState) {
-        combo.model = DefaultComboBoxModel(state.items.map { it.label }.toTypedArray())
-        combo.selectedIndex = state.selected
-        combo.toolTipText = state.hint
-    }
+    override fun removeNotify() { host.detach(); super.removeNotify() }
 }
