@@ -40,7 +40,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dan323.httpclient.core.application.RunOutcome
@@ -153,7 +152,7 @@ private fun EnvironmentPicker(state: AppState) {
     // (a DropdownMenu directly in a Column is positioned relative to the whole column).
     Box {
         OutlinedButton(enabled = state.file != null, onClick = { open = true }) {
-            Text("Environment: ${state.environment ?: "none"}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("Environment: ${state.environment ?: "none"}")
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(text = { Text("none") }, onClick = { state.environment = null; open = false })
