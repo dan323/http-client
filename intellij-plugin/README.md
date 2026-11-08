@@ -16,7 +16,7 @@ It depends only on `com.intellij.modules.platform`, so it is meant to work in Co
   no longer exists is an error. The choice is kept per project until the IDE restarts.
 - Responses of earlier requests (a login) are remembered per file and environment; any edit to the file, or deleting or moving it,
   drops them, and **Reset chain** in the tool window forgets them all. One request runs at a time.
-- **HTTP Response** tool window (with the **Reset chain** button) with status, timing, headers and the body (JSON pretty-printed).
+- **HTTP Response** tool window (with the **Reset chain** button) with status, timing, assertion results (`# @assert`: a summary and a PASS/FAIL line each; unverified by hand in an IDE), headers and the body (JSON pretty-printed).
 
 See [../docs/features.md](../docs/features.md) for the `.http` syntax, variables and chaining.
 
@@ -71,13 +71,13 @@ error), chaining, session reuse and its reset on edit and **Reset chain**, error
 running" balloon, and the reset of the environment choice on restart. Requests also run, so the IDE's
 `kotlinx-serialization` is compatible with what `adapters` was compiled against.
 
-Known problems: assertion results are not shown (T22). The default shortcut `Ctrl+Alt+R` has not been tried in a running IDE yet
+Known problems: the default shortcut `Ctrl+Alt+R` has not been tried in a running IDE yet
 (see [known limitations](../docs/known-limitations.md)).
 
 Not verified: a real Community install, and the 2026.1 baseline (build 261, the `since-build`) itself: the plugin
 was run on 2026.3 only. It does not load in 2025.3 (build 253) by design.
 
-The VFS listener, gutter icon and tool window are not covered by tests (they need a running IDE). No completion or navigation for `{{variables}}` yet. Assertion results are not shown (the CLI and reports show them).
+The VFS listener, gutter icon and tool window are not covered by tests (they need a running IDE). No completion or navigation for `{{variables}}` yet. The assertion rendering is plain text in the tool window and was not run in an IDE.
 
 `{{$env.NAME}}` reads nothing by default: allow names with `-Dhttpclient.allowEnv=NAME,NAME` (JVM option) or the environment variable `HTTPC_ALLOW_ENV=NAME,NAME`; see [docs/features.md](../docs/features.md).
 

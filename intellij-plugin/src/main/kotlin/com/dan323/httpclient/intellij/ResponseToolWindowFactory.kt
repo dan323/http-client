@@ -82,7 +82,9 @@ private fun StyledDocument.addSection(s: Section) {
         }
         is OutcomeDisplay.Error -> {
             add(d.summary + "\n", bold = true)
-            add("  Error: ${d.message}\n\n", bad, bold = true)
+            add("  Error: ${d.message}\n", bad, bold = true)
+            d.assertionsNotRunLabel?.let { add("  $it\n", muted) }
+            add("\n")
         }
         is OutcomeDisplay.Response -> {
             add(d.summary + "\n", bold = true)
@@ -90,6 +92,10 @@ private fun StyledDocument.addSection(s: Section) {
             add("  ${d.statusLabel}", color, bold = true)
             add("   ${d.durationLabel}\n", muted)
             d.notices.forEach { add("  ${it.text}\n", if (it.isError) bad else muted) }
+            d.assertionSummary?.let { summary ->
+                add("  $summary\n", if (d.hasFailedAssertions) bad else ok, bold = true)
+                d.assertions.forEach { add("    ${it.label}\n", if (it.passed) ok else bad) }
+            }
             d.headers.forEach { (k, v) -> add("  $k", keyColor); add(": ", muted); add("$v\n") }
             add("\n")
             addJson(d.prettyBody)

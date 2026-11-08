@@ -163,7 +163,10 @@ private fun OutcomeHeader(outcome: OutcomeDisplay, ui: OutcomeUi?) {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(outcome.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
         when (outcome) {
-            is OutcomeDisplay.Error -> Text("Error: ${outcome.message}", color = MaterialTheme.colorScheme.error)
+            is OutcomeDisplay.Error -> {
+                Text("Error: ${outcome.message}", color = MaterialTheme.colorScheme.error)
+                outcome.assertionsNotRunLabel?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline) }
+            }
             is OutcomeDisplay.Reused -> Text("Reused earlier response (not sent again)", style = MaterialTheme.typography.bodySmall)
             is OutcomeDisplay.Response -> {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -175,6 +178,7 @@ private fun OutcomeHeader(outcome: OutcomeDisplay, ui: OutcomeUi?) {
                 outcome.notices.forEach {
                     Text(it.text, style = MaterialTheme.typography.bodySmall, color = if (it.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline)
                 }
+                AssertionResults(outcome)
                 if (ui != null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         FilterChip(ui.tab == Tab.BODY, { ui.tab = Tab.BODY }, label = { Text("Body") })
@@ -191,6 +195,27 @@ private fun OutcomeHeader(outcome: OutcomeDisplay, ui: OutcomeUi?) {
         }
     }
 }
+
+/** The summary line and one PASS/FAIL line per assertion; nothing when the request has no assertions. */
+@Composable
+private fun AssertionResults(response: OutcomeDisplay.Response) {
+    val summary = response.assertionSummary ?: return
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            summary, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall,
+            color = if (response.hasFailedAssertions) MaterialTheme.colorScheme.error else PassColor,
+        )
+        SelectionContainer {
+            Column {
+                response.assertions.forEach {
+                    Text(it.label, style = mono, color = if (it.passed) PassColor else MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+}
+
+private val PassColor = Color(0xFF2E7D32)
 
 @Composable
 private fun StatusBadge(response: OutcomeDisplay.Response) {

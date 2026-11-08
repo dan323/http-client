@@ -5,6 +5,9 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Assertion results in the desktop response pane and the plugin's "HTTP Response" tool window (T17, T22): a `Assertions: N passed, M failed` summary and a PASS/FAIL line per `# @assert`, and `K assertions not run` for a failed request. The formatting lives in `view-model` (`OutcomeDisplay.Response.assertions` / `assertionSummary`, `OutcomeDisplay.Error.assertionsNotRunLabel`) with unit tests; the desktop pane has a headless UI test. The plugin rendering was not checked by hand in an IDE.
+
 ### Changed
 - Docs: `docs/features.md` is the user reference again (with a table of contents); implementation and security detail (class names, atomic-write mechanics, residual races, history layout, Public Suffix List update procedure) moved to the new `docs/design-notes.md`, same section names. Docs only; no behaviour change.
 - Desktop: the **Forget responses** button is now **Reset chain** (the name the IntelliJ plugin uses) and the buttons under the request list are compact so the label fits.

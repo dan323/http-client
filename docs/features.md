@@ -153,6 +153,7 @@ GET {{base}}/items/1
 - `{{variables}}` and `{{name.response...}}` are substituted before evaluating, as in request text. An undefined one makes the assertion fail as invalid ("Undefined variable: x"). Resolved values are never shown: a failing comparison reports "expected value contains substitutions, not shown".
 - A malformed assertion (including a bare `# @assert`) fails with an "invalid assertion" message. A trailing ` # comment` is stripped (only a `#` preceded by whitespace and outside quotes, so `== "x #y"` is safe). `# @assert` lines must sit before the request line. Failure messages show at most 200 characters of the actual value.
 - With `--request`, only the requested request's assertions are evaluated; its prerequisites run for their responses and are not asserted.
+- The desktop app and the IntelliJ plugin show the results under the status line of a response: `Assertions: N passed, M failed` and one `PASS ...` / `FAIL ... -- message` line per assertion (green / red). A request that failed shows `K assertions not run` next to its error. When running one request with its prerequisites, only the selected request's assertions are shown. The plugin's display has not been checked by hand in an IDE.
 
 ### Run reports
 
@@ -324,4 +325,4 @@ Do not install it next to the bundled HTTP Client plugin of IntelliJ Ultimate, s
 
 ## Not yet implemented
 
-Response handlers (`> {% ... %}`, `> file`), opening `<>`-linked responses in the desktop app and plugin, assertion results in the desktop app and plugin (assertions are evaluated and shown by the CLI and reports only), multipart/form bodies and cancel buttons in the UIs.
+Response handlers (`> {% ... %}`, `> file`), opening `<>`-linked responses in the desktop app and plugin, multipart/form bodies and cancel buttons in the UIs.

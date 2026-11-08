@@ -11,6 +11,10 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
+import com.dan323.httpclient.core.application.AssertionResult
+import com.dan323.httpclient.core.application.HttpFileParser
+import com.dan323.httpclient.core.application.RunOutcome
+import com.dan323.httpclient.core.domain.HttpResponse
 import com.dan323.httpclient.mock.MockServer
 import java.nio.file.Files
 import kotlin.test.Test
@@ -134,5 +138,22 @@ class AppUiTest {
             waitForIdle()
             onNodeWithText("\"authenticated\": true", substring = true).assertExists()
         } finally { server.stop() }
+    }
+
+    @Test fun assertionResultsAreShownUnderTheResponse() = runComposeUiTest {
+        val req = HttpFileParser().parse("# @assert status == 200\n# @assert body.id == 1\nGET http://h/a\n\n###\n# @assert status == 200\nGET http://h/b\n").requests
+        val ok = RunOutcome.Success(
+            req[0], HttpResponse(200, emptyList(), "{}".toByteArray(), 5),
+            listOf(
+                AssertionResult("status == 200", true, "200", "200", "ok"),
+                AssertionResult("body.id == 1", false, "1", "2", "expected 1, got 2"),
+            ),
+        )
+        val failed = RunOutcome.Failure(req[1], "connection refused", assertionsNotRun = 1)
+        setContent { ResponsePane(listOf(ok, failed)) }
+        waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("Assertions: 1 passed, 1 failed").fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("PASS status == 200").assertExists()
+        onNodeWithText("FAIL body.id == 1 -- expected 1, got 2").assertExists()
+        onNodeWithText("1 assertion not run").assertExists()
     }
 }

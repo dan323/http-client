@@ -20,7 +20,7 @@ Related: [competitive-gaps.md](competitive-gaps.md) (what to add), [PLAN.md](PLA
 - **Plugin, run shortcut (not yet tried in an IDE):** the default shortcut of *Run HTTP Request* is `Ctrl+Alt+R`, chosen because no editor action uses it in the default keymap (checked in the IntelliJ IDEA 2024.3 keymap file only). Other plugins or a custom keymap can still conflict: the gutter run icon and the editor context menu always work, and the shortcut can be changed in *Settings > Keymap*.
 - **Desktop:** there is no way to edit `http-client.env.json` in the app (in IntelliJ the file is just another editor tab); open it in another editor.
 - **Desktop installers:** the macOS DMG and Linux DEB are built by the release workflow but have not been installed or run by anyone; the installers are unsigned.
-- **Desktop and plugin:** assertion results are not shown (only the CLI prints them; T17, T22).
+- **Plugin:** the assertion results in the "HTTP Response" tool window (T22) are implemented but have not been checked by hand in an IDE.
 - **Desktop and plugin:** no UI for the `$env` and file-root allowlists (system property / environment variable only).
 
 ## Mock server (test fixture, low priority)

@@ -82,7 +82,7 @@ cover it (see "Sources and limits"). Status: **Partial** (accepted with limits),
 
 Checked by hand on IntelliJ IDEA Ultimate 2026.3 (highlighting, run gutter, tool window, environments, chaining; see
 `intellij-plugin/README.md`); a real Community install and the 2026.1 baseline are not verified. Assertion results are
-not shown, the run shortcut `Ctrl+Alt+R` is not yet tried in a running IDE, and completion, navigation and inspections are not
+shown in the tool window but not checked by hand, the run shortcut `Ctrl+Alt+R` is not yet tried in a running IDE, and completion, navigation and inspections are not
 available (T16, T22). Do not install the plugin
 next to the bundled JetBrains one (both claim `.http`). See [features.md](features.md#intellij-plugin).
 
