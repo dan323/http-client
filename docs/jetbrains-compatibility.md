@@ -79,9 +79,10 @@ cover it (see "Sources and limits"). Status: **Partial** (accepted with limits),
 
 ## Editor support
 
-Not verified. The plugin loads in an Ultimate sandbox IDE without errors, but highlighting, the run gutter, the tool window
-and the behaviour in a Community IDE are listed as not verified in `intellij-plugin/README.md`, and T21 in
-[PLAN.md](PLAN.md) is open. Completion, navigation and inspections are not available (T16, T22). Do not install the plugin
+Checked by hand on IntelliJ IDEA Ultimate 2026.3 (highlighting, run gutter, tool window, environments, chaining; see
+`intellij-plugin/README.md`); a real Community install and the 2026.1 baseline are not verified. Assertion results are
+not shown, `Ctrl+Alt+Enter` does not work in the default keymap, and completion, navigation and inspections are not
+available (T16, T22). Do not install the plugin
 next to the bundled JetBrains one (both claim `.http`). See [features.md](features.md#intellij-plugin).
 
 ## Deliberate deviations
@@ -110,5 +111,5 @@ Checked in November 2026.
 
 - **Our side** was checked against [features.md](features.md), [known-limitations.md](known-limitations.md), [PLAN.md](PLAN.md) and the code (`HttpFileParser`, `HttpLineSyntax`, `VariableResolver`, `JsonEnvironmentRepository`, `RedirectFollower`).
 - **The JetBrains side** was summarised from the official pages: [editor](https://www.jetbrains.com/help/idea/http-client-in-product-code-editor.html), [syntax](https://www.jetbrains.com/help/idea/exploring-http-syntax.html), [variables](https://www.jetbrains.com/help/idea/http-client-variables.html), [response handling](https://www.jetbrains.com/help/idea/http-response-handling-examples.html), [reference](https://www.jetbrains.com/help/idea/http-client-reference.html) and [CLI](https://www.jetbrains.com/help/idea/http-client-cli.html).
-- Page fetches return a machine summary, so details can be missed. Not covered: `<@`, `# @use-os-credentials`, `$processEnv`, `$datetime`, `$shared`, auth variables, response references and the dedicated OAuth 2.0 pages. Those rows are marked "unverified" or phrased from what the fetched pages said. The editor behaviour of our plugin is not verified either.
+- Page fetches return a machine summary, so details can be missed. Not covered: `<@`, `# @use-os-credentials`, `$processEnv`, `$datetime`, `$shared`, auth variables, response references and the dedicated OAuth 2.0 pages. Those rows are marked "unverified" or phrased from what the fetched pages said. The editor behaviour of our plugin was checked by hand only on IntelliJ IDEA Ultimate 2026.3; a real Community install and the 2026.1 baseline are not verified.
 - JetBrains changes the product often; re-check a row before moving files between tools.

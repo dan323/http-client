@@ -62,14 +62,19 @@ Verified (T21, IntelliJ IDEA Ultimate 2026.1.5 as the build target, `since-build
   `verifyPluginProjectConfiguration` still warns about the stdlib; the suggested
   `kotlin.stdlib.default.dependency=false` is a global property that would break the other modules, so it is not set.
 
-Not verified (the sandbox IDE exited by itself after about 16 seconds in the agent environment, with no
-visible window or interaction):
+Verified by hand (T21) with the release zip of `0.5.0-rc1` installed from disk in IntelliJ IDEA Ultimate
+2026.3 (build `IU-263.7307.200`), with Ultimate's bundled HTTP Client plugin disabled: highlighting (comments,
+methods, URLs, variables), the gutter run icon, *Run HTTP Request* in the context menu, the "HTTP Response" tool
+window with a pretty-printed JSON body, the environment picker (including "(none)" and the undefined-variable
+error), chaining, session reuse and its reset on edit and **Reset chain**, error display, the "request already
+running" balloon, and the reset of the environment choice on restart. Requests also run, so the IDE's
+`kotlinx-serialization` is compatible with what `adapters` was compiled against.
 
-- Highlighting colors, gutter run icons, the "HTTP Response" tool window and the run/environment actions.
-- Behavior in a real Community edition. The sandbox is Ultimate, which also bundles an HTTP Client plugin that
-  claims `*.http`; test with that plugin disabled and in an actual Community install.
-- Whether the IDE's serialization version is binary compatible with what `adapters` was compiled against
-  (1.9.0) when a request actually runs.
+Known problems: `Ctrl+Alt+Enter` does not run the request in the default keymap (see
+[known limitations](../docs/known-limitations.md)); assertion results are not shown (T22).
+
+Not verified: a real Community install, and the 2026.1 baseline (build 261, the `since-build`) itself: the plugin
+was run on 2026.3 only. It does not load in 2025.3 (build 253) by design.
 
 The VFS listener, gutter icon and tool window are not covered by tests (they need a running IDE). No completion or navigation for `{{variables}}` yet. Assertion results are not shown (the CLI and reports show them).
 
