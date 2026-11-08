@@ -313,7 +313,7 @@ Works in any IntelliJ-based IDE, including Community (it depends only on the pla
 - *Select HTTP Environment* in the context menu picks the environment from `http-client.env.json`.
 - Results appear in the **HTTP Response** tool window. Chained prerequisites run first, as in the CLI.
 
-- The environment choice is explicit and starts as "(none)" (variables from the file only); pick `dev` etc. in the *Select HTTP Environment* popup or the picker in the tool window. A name that no longer exists is an error, never another environment. The choice is kept per project until the IDE restarts.
+- The environment choice is explicit and starts as "(none)" (variables from the file only); pick `dev` etc. in the *Select HTTP Environment* popup or the environment picker in the header of the `.http` editor (as in JetBrains' HTTP Client; it applies to runs from every file). A name that no longer exists is an error, never another environment. The choice is kept per project until the IDE restarts.
 - `.http` files get syntax highlighting (methods, URLs, header names, `{{variables}}`, comments, `###` separators, `< file` bodies).
 - A green run icon in the gutter on each request line runs that request.
 - JSON response bodies are pretty-printed.
