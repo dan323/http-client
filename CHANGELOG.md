@@ -6,10 +6,12 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Desktop quick wins: **Esc** cancels the running request (only while one runs), a small spinner shows beside the buttons while a request runs, and **Reset chain** shows a transient `Chain reset` notice (`AppState.notice`, as the plugin reports it). Headless UI and state tests cover them; how it looks on screen was not checked by hand.
 - Cancel button (T19, F16): the desktop app has **Cancel** next to **Send** and the plugin's "HTTP Response" tool window has a **Cancel** button and a title-bar action, both enabled only while a request runs. Cancelling interrupts the running thread, so the executor cancels the in-flight request; the UI shows `Cancelled` (with how many requests had finished, whose results stay) instead of an error. `RunController` drops the session of a cancelled run, so the cancelled request is never remembered as a reused response (the chain is sent again next time). Shared logic in `view-model`: `RunCancellation` (cancel before or during the send, no leaked interrupt flag on pooled threads), `RunControls` (what is enabled while running, the "Running..." label) and `cancelledLabel`. The plugin part is unverified by hand in an IDE.
 - Assertion results in the desktop response pane and the plugin's "HTTP Response" tool window (T17, T22): a `Assertions: N passed, M failed` summary and a PASS/FAIL line per `# @assert`, and `K assertions not run` for a failed request. The formatting lives in `view-model` (`OutcomeDisplay.Response.assertions` / `assertionSummary`, `OutcomeDisplay.Error.assertionsNotRunLabel`) with unit tests; the desktop pane has a headless UI test. The plugin rendering was not checked by hand in an IDE.
 
 ### Changed
+- Desktop README: the "Not yet implemented" list no longer claims that persisting the window, last file and environment is missing (it has been implemented).
 - Docs: `docs/features.md` is the user reference again (with a table of contents); implementation and security detail (class names, atomic-write mechanics, residual races, history layout, Public Suffix List update procedure) moved to the new `docs/design-notes.md`, same section names. Docs only; no behaviour change.
 - Desktop: the **Forget responses** button is now **Reset chain** (the name the IntelliJ plugin uses) and the buttons under the request list are compact so the label fits.
 - Desktop: the request list shows the HTTP method in the editor's method colour and bold.

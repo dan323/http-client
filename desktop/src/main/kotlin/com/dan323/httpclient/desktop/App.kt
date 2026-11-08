@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -24,19 +25,23 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -45,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import com.dan323.httpclient.core.application.RunOutcome
 import com.dan323.httpclient.viewmodel.RunControls
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.awt.FileDialog
 import java.awt.Frame
@@ -52,6 +58,9 @@ import java.nio.file.Path
 
 /** Tight horizontal padding so the three buttons under the request list fit the 300 dp column. */
 private val CompactButtonPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+
+/** How long the transient notice (e.g. "Chain reset") stays visible. */
+private const val NOTICE_MILLIS = 4_000L
 
 internal val mono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp)
 
@@ -85,7 +94,7 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             }
         }
         val controls = state.controls
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(enabled = controls.canSend, contentPadding = CompactButtonPadding, onClick = { scope.launch(Dispatchers.IO) { state.run(all = false) } }) {
                 Text(controls.sendLabel, maxLines = 1)
             }
@@ -98,8 +107,20 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             }
         }
         // Responses of earlier requests (e.g. a login token) are remembered between runs; this forgets them.
-        OutlinedButton(enabled = controls.canSend, contentPadding = CompactButtonPadding, onClick = { state.resetChain() }) {
-            Text("Reset chain", maxLines = 1)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(enabled = controls.canSend, contentPadding = CompactButtonPadding, onClick = { state.resetChain() }) {
+                Text("Reset chain", maxLines = 1)
+            }
+            // While a request runs the spinner sits next to the buttons; otherwise the short confirmation of Reset chain.
+            if (state.running) {
+                CircularProgressIndicator(Modifier.size(20.dp).testTag("run-progress"), strokeWidth = 2.dp)
+            } else {
+                val notice = state.notice
+                if (notice != null) {
+                    LaunchedEffect(notice) { delay(NOTICE_MILLIS); state.clearNotice() }
+                    Text(notice, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                }
+            }
         }
     }
 

@@ -143,6 +143,20 @@ class AppStateTest {
         }
     }
 
+    @Test fun resetChainSetsATransientNoticeClearedByTheNextRunOrClearNotice() {
+        AppState().use { state ->
+            state.open(slowFile("notice.http"))
+            assertEquals(null, state.notice)
+            state.resetChain()
+            assertEquals("Chain reset", state.notice)
+            state.clearNotice()
+            assertEquals(null, state.notice)
+            state.resetChain()
+            state.open(slowFile("notice2.http"))
+            assertEquals(null, state.notice)
+        }
+    }
+
     @Test fun simultaneousRunsExecuteOnce() {
         AppState().use { state ->
             state.open(slowFile("race.http"))

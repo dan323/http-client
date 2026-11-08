@@ -75,13 +75,18 @@ fun AppRoot(state: AppState, parent: Frame? = null) {
     val scope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
     // Own the focus by default so the shortcuts work even when no field is focused.
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    // Also when a run starts: a click on Send or Cancel can take the focus away, and Esc (cancel) must still arrive; editing is disabled while running anyway.
+    LaunchedEffect(state.running) { runCatching { focus.requestFocus() } }
     Surface(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxSize().focusRequester(focus).focusable().onPreviewKeyEvent { e ->
-                // Ctrl/Cmd+S saves, Ctrl/Cmd+Enter sends the selected request.
+                // Ctrl/Cmd+S saves, Ctrl/Cmd+Enter sends the selected request, Escape cancels the running one.
                 val command = e.isCtrlPressed || e.isMetaPressed
-                if (e.type != KeyEventType.KeyDown || !command) false
+                if (e.type == KeyEventType.KeyDown && e.key == Key.Escape) {
+                    // Only while a run is active; otherwise Escape stays free for menus and fields.
+                    if (state.running) { state.cancel(); true } else false
+                }
+                else if (e.type != KeyEventType.KeyDown || !command) false
                 else when (e.key) {
                     Key.S -> { state.save(); true }
                     Key.Enter -> { if (!state.running) scope.launch(Dispatchers.IO) { state.run(all = false) }; true }
