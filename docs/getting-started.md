@@ -45,7 +45,7 @@ jobs:
 
 ## IntelliJ plugin
 
-*Settings > Plugins > gear icon > Install Plugin from Disk...*, pick the plugin zip and restart the IDE. Usage: [IntelliJ plugin](features.md#intellij-plugin). It needs IntelliJ IDEA 2026.1 or newer (build 261+), and the "HTTP Client" plugin bundled with Ultimate should be disabled. Details and limits: [intellij-plugin/README.md](../intellij-plugin/README.md).
+*Settings > Plugins > gear icon > Install Plugin from Disk...*, pick the plugin zip and restart the IDE. Usage: [IntelliJ plugin](features.md#intellij-plugin). It needs an IntelliJ-based IDE of version 2026.1 or newer (build 261+; only IntelliJ IDEA Ultimate 2026.3 was tried by hand), and the "HTTP Client" plugin bundled with Ultimate should be disabled. Details and limits: [intellij-plugin/README.md](../intellij-plugin/README.md).
 
 ## Desktop app
 

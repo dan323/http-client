@@ -45,8 +45,10 @@ used automatically.
 `:desktop:createDistributable` produces an unpacked app image on any OS without extra tools.
 
 The installer version is derived from the project version (`0.5.0` becomes `1.5.99`, `0.5.0-rc1` becomes `1.5.1`; see
-`desktop/build.gradle.kts`), so a newer installer upgrades an older one. The runtime in the installers is a jlink-trimmed
-JRE; `./gradlew :desktop:checkRuntimeModules` (run in CI) fails if the app needs a JDK module it lacks.
+`desktop/build.gradle.kts`), so a newer installer upgrades an older one (one exception: `0.5.1-rc99` and `0.5.1` both map to `1.5.199`, so the final installer would not count as an upgrade of the rc99 one). The runtime in the installers is a jlink-trimmed
+JRE; `./gradlew :desktop:checkRuntimeModules` (run in CI) fails if the image lacks a module reported by `jdeps`.
+Modules loaded only through reflection or `ServiceLoader` may not be detected; add those to `extraRuntimeModules` in
+`desktop/build.gradle.kts` when found.
 
 Verified: headless Compose UI tests (`AppUiTest`) click through opening requests, choosing an environment, Send with
 chained prerequisites, error display and the shortcuts. By hand (release `0.5.0-rc1`): the Windows MSI installs, starts

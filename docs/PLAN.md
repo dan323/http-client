@@ -29,7 +29,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F17 | Edit environments in the UI | desktop | open |
 | F18 | Plugin: completion, navigation, inspections | plugin | open |
 | F19 | Plugin: richer response panel, remember environment, run all | plugin | partial: shared view-model, run guard, reset chain done; remember environment across restarts and run all open |
-| F20 | Verification and release: plugin tried in a real IDE, CI on macOS/Windows/Linux, installers | all | partial: tests on all three OS and plugin build in CI; GUI of the plugin, installers in CI and cross-platform QA open |
+| F20 | Verification and release: plugin tried in a real IDE, CI on macOS/Windows/Linux, installers | all | partial: tests on all three OS, plugin build and best-effort installer packaging (T24) in CI; plugin checked by hand on Ultimate 2026.3 (T21); Community install, 2026.1 baseline and macOS/Linux installer QA open |
 
 **Later / out of scope for now:** GraphQL, WebSocket, gRPC, full OAuth2 flows, Postman/curl import, team sync.
 
@@ -75,7 +75,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 | F17 | T20 |
 | F18 | T13, T21, T22 |
 | F19 | T21, T23 |
-| F20 | T21, T24, T25 |
+| F20 | T25 (T21, T24 done) |
 
 Shared work, written once: T13 (F14, F18), T14 (F11, F12, F17), T21 (F18, F19, F20).
 
@@ -86,11 +86,11 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 
 | Wave | Tasks                                                                                                                      | Why together                                                 |
 |------|----------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------|
-| 1    | T21 (plugin GUI check)                                                                                                     | Done by hand in a real IDE; its findings may reshape T22/T23 |
+| 1    | T21 (plugin GUI check)                                                                                                     | Done on Ultimate 2026.3 (Community and 2026.1 baseline still open); its findings may reshape T22/T23 |
 | 2    | T13 (variable analysis), T14 (desktop persistence)                                                                         | disjoint areas                                               |
 | 3    | T8 (multipart), T19 (cancel button), T23 (plugin panel)                                                                    | disjoint areas                                               |
 | 4    | T22 (plugin intelligence), T16 (desktop editor), T15 (workspace)                                                           | need T13 / T14                                               |
-| 5    | T17 (desktop extras), T18 (history browser), T20 (environment editor), T24 (packaging), T27 (plugin: open linked response) | up to three at a time                                        |
+| 5    | T17 (desktop extras), T18 (history browser), T20 (environment editor), T27 (plugin: open linked response) | up to three at a time                                        |
 | 6    | T25 (QA and release notes)                                                                                                 | needs everything                                             |
 
 ### Rules for every task
@@ -103,6 +103,6 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 
 ### Risks
 
-- **T21 first on purpose:** the plugin has never been used in a real IDE window. Its findings may reshape T22/T23.
+- **T21 first on purpose:** the plugin was first used in a real IDE (Ultimate 2026.3) for 0.5.0-rc1; a Community install and the 2026.1 baseline are still unchecked. The findings may reshape T22/T23.
 - **Windows packaging:** the MSI is built by the release workflow (windows-2022, WiX 3) and was installed and run by hand on 0.5.0-rc1; macOS and Linux installers are untested.
 - **T26 writes files:** `>>` is the first feature that writes next to user data, so T26 must confine paths like reads do and never overwrite without `>>!`.

@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [0.5.0] - 2026-11-08
 
-The first release with the release workflow: the CLI zip and tar, the IntelliJ plugin zip and the desktop installers are attached to the GitHub release. `0.5.0-rc1` was a pre-release used to test that workflow, the Windows installer and the plugin.
+The first release with the release workflow: the CLI zip and tar and the IntelliJ plugin zip are attached to the GitHub release. Desktop installers are built and attached on a best-effort basis. `0.5.0-rc1` was a pre-release used to test that workflow, the Windows installer and the plugin.
 
 ### Added
 - IntelliJ plugin: its own icon for `.http` files (light and dark variants) and for the plugin listing, instead of a generic server icon.
