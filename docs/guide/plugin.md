@@ -22,7 +22,7 @@ The plugin needs IDE version 2026.1 or newer. It has been tried by hand on Intel
 1. Open or create a file ending in `.http`. Methods, URLs, headers, variables and comments are highlighted.
 2. Click the green run icon in the gutter next to a request. The icon runs its own request wherever the caret is.
 3. Or put the caret in a request, right-click and choose **Run HTTP Request**. The shortcut is **Ctrl+Alt+R**.
-4. The **HTTP Response** tool window opens at the bottom with the status, headers and body. JSON bodies are pretty-printed. If the file has `# @assert` lines, their results are listed too.
+4. Before the first run the **HTTP Response** tool window explains these ways to run a request. After a run it opens at the bottom with the status, headers and body. JSON bodies are pretty-printed. If the file has `# @assert` lines, their results are listed too.
 
 The file is saved before the request runs. Only one request runs at a time; starting another shows a balloon and does nothing.
 

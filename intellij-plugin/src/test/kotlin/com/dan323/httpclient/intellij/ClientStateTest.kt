@@ -12,6 +12,7 @@ import com.dan323.httpclient.core.port.out.EnvironmentRepository
 import com.dan323.httpclient.core.port.out.FileReader
 import com.dan323.httpclient.core.port.out.HttpExecutor
 import com.dan323.httpclient.core.port.out.JsonExtractor
+import com.dan323.httpclient.viewmodel.OutcomeDisplay
 import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -39,6 +40,14 @@ class ClientStateTest {
     private val file = Path.of("a.http").toAbsolutePath()
     private val text = "# @name login\nGET {{base}}/login\n\n###\n# @name me\nGET {{base}}/me\nX: {{login.response.body.\$.token}}\n"
     private val dev = EnvironmentChoice.Named("dev")
+
+    @Test fun freshStateHasAnEmptyReportAndAnyContentMakesItNonEmpty() {
+        assertTrue(state().lastReport.isEmpty)
+        assertTrue(Report().isEmpty)
+        assertFalse(Report(message = "m").isEmpty)
+        assertFalse(Report(environment = "dev").isEmpty)
+        assertFalse(Report(sections = listOf(Section(OutcomeDisplay.Reused("t", "s")))).isEmpty)
+    }
 
     @Test fun defaultChoiceIsNoneAndNeverSilentlyChanges() {
         val s = state()
