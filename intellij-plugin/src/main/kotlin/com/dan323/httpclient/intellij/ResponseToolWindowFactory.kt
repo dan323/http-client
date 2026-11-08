@@ -1,11 +1,15 @@
 package com.dan323.httpclient.intellij
 
 import com.dan323.httpclient.viewmodel.JsonPart
+import com.dan323.httpclient.viewmodel.RunControls
 import com.dan323.httpclient.viewmodel.StatusClass
 import com.dan323.httpclient.viewmodel.OutcomeDisplay
 import com.dan323.httpclient.viewmodel.jsonSpans
+import com.intellij.icons.AllIcons
+import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.editor.colors.EditorFontType
+import com.intellij.openapi.keymap.KeymapUtil
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
@@ -15,6 +19,7 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.content.ContentFactory
 import java.awt.BorderLayout
 import java.awt.Color
+import java.awt.FlowLayout
 import javax.swing.BorderFactory
 import javax.swing.JButton
 import javax.swing.JPanel
@@ -42,6 +47,7 @@ class ResponseToolWindowFactory : ToolWindowFactory, DumbAware {
         fun render(report: Report) {
             val doc = pane.styledDocument
             doc.remove(0, doc.length)
+            if (report.isEmpty) doc.add(emptyStateHint(), muted)
             report.message?.let { doc.add("$it\n", muted) }
             report.environment?.let { doc.add("Environment: $it\n\n", muted) }
             report.sections.forEach { doc.addSection(it) }
@@ -50,13 +56,23 @@ class ResponseToolWindowFactory : ToolWindowFactory, DumbAware {
         render(service.lastReport)
         service.onReport(toolWindow.disposable) { r -> SwingUtilities.invokeLater { render(r) } }
 
-        val reset = JButton("Reset chain").apply {
+        val reset = JButton("Reset chain", AllIcons.Actions.Refresh).apply {
             toolTipText = "Forget remembered responses (e.g. an expired login) so chained requests run again"
             addActionListener { service.resetChain() }
         }
+        // Enabled only while a request runs (what the desktop app does too, see RunControls); the same action is in the title bar.
+        val cancel = JButton(RunControls.CANCEL_LABEL, AllIcons.Actions.Suspend).apply {
+            toolTipText = "Stop the running request; responses that already arrived stay"
+            isEnabled = false
+            addActionListener { service.cancel() }
+        }
+        // Subscribe first, then read the current state: a run that starts in between is not missed.
+        service.onRunning(toolWindow.disposable) { running -> SwingUtilities.invokeLater { cancel.isEnabled = RunControls(running).canCancel } }
+        SwingUtilities.invokeLater { cancel.isEnabled = RunControls(service.isRunning).canCancel }
+        ActionManager.getInstance().getAction("httpclient.CancelRequest")?.let { toolWindow.setTitleActions(listOf(it)) }
         val top = JPanel(BorderLayout(8, 0)).apply {
             border = BorderFactory.createEmptyBorder(4, 8, 4, 8)
-            add(reset, BorderLayout.WEST)
+            add(JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply { add(reset); add(cancel) }, BorderLayout.WEST)
         }
         val panel = JPanel(BorderLayout()).apply {
             add(top, BorderLayout.NORTH)
@@ -64,6 +80,14 @@ class ResponseToolWindowFactory : ToolWindowFactory, DumbAware {
         }
         toolWindow.contentManager.addContent(ContentFactory.getInstance().createContent(panel, "", false))
     }
+}
+
+/** How to run a request. The shortcut is read from the keymap (it follows the user's binding) so it is written only in plugin.xml. */
+private fun emptyStateHint(): String {
+    val shortcut = KeymapUtil.getFirstKeyboardShortcutText("httpclient.RunRequest")
+    val keys = if (shortcut.isEmpty()) "" else ", or press $shortcut"
+    return "No request has run yet. In a .http file, click the green run icon in the gutter next to a request,\n" +
+        "or right-click inside it and choose Run HTTP Request$keys.\n"
 }
 
 private fun attrs(color: Color? = null, bold: Boolean = false) = SimpleAttributeSet().apply {

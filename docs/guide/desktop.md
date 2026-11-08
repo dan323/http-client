@@ -32,6 +32,7 @@ The app reopens the last file, its environment and the window position the next 
 2. Press **Send**, or **Ctrl+Enter** (**Cmd+Enter** on macOS). The file is saved first.
 3. Read the **Response**: status, time and size, then **Headers** and **Body**. Switch the body between **Pretty** and **Raw**, and use **Copy** to put it on the clipboard.
 4. If the file has `# @assert` lines, each result is shown as PASS or FAIL under the status line.
+5. While a request runs, a small spinner shows under the request list. To stop a request that is taking too long, press **Cancel** (next to **Send**; it is enabled only while a request runs) or **Esc**. The response area shows **Cancelled** instead of an error, and results that had already arrived stay.
 
 Errors (an undefined variable, a connection failure, a parse problem) are shown in the response area instead of a response.
 
@@ -39,7 +40,7 @@ Errors (an undefined variable, a connection failure, a parse problem) are shown 
 
 When a request uses {% raw %}`{{login.response.body.token}}`{% endraw %}, **Send** first runs the `login` request, then yours. Responses already received are reused, so the login is not sent again the next time; the viewer marks those as "Reused earlier response (not sent again)".
 
-- **Reset chain** forgets the remembered responses, so the next **Send** runs the whole chain again.
+- **Reset chain** forgets the remembered responses, so the next **Send** runs the whole chain again. `Chain reset` appears beside the button for a few seconds to confirm it.
 - **Send all** runs every request in the file, always sending them again.
 
 Only one run happens at a time. While it runs, editing, saving, opening and creating files are disabled.

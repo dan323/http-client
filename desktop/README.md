@@ -10,12 +10,13 @@ It runs on Windows, macOS and Linux and reuses `core` and `adapters` unchanged; 
   The text is editable in the middle pane with syntax highlighting (methods, URLs, header names, `{{variables}}`,
   comments, `###` separators, `< file` bodies; light and dark palettes). **Save** writes it back; running a request saves first.
 - The app remembers the last file, its environment, the window geometry and the 10 most recent files (**Recent files**) in `settings.json` in the user config folder; see [../docs/features.md](../docs/features.md#desktop-app) for the location and failure behaviour. Only paths, names and geometry are stored.
-- Shortcuts: **Ctrl/Cmd+S** saves, **Ctrl/Cmd+Enter** sends the selected request.
+- Shortcuts: **Ctrl/Cmd+S** saves, **Ctrl/Cmd+Enter** sends the selected request, **Esc** cancels the running request (ignored when none runs).
 - The left list shows the requests in the file, with each method coloured as in the editor. **Send** runs the selected one together with the
   requests it chains on (`{{login.response.body.$.token}}`); **Send all** runs every request in order.
 - **Environment** picks a set of variables from the nearest `http-client.env.json` (and the `http-client.private.env.json` beside it),
   searching upward from the file's folder like the CLI and the plugin. The default is "none" (variables from the file only); a name that no longer exists is an error.
-- Responses of earlier requests (a login) are remembered per file and environment, so **Send** does not resend them; **Reset chain** clears them.
+- Responses of earlier requests (a login) are remembered per file and environment, so **Send** does not resend them; **Reset chain** clears them and briefly shows `Chain reset` beside the button.
+- **Cancel** (next to **Send**, enabled only while a request runs) stops it: the response pane shows `Cancelled` instead of an error, responses that already arrived stay, and the cancelled request is not remembered, so the next run sends the chain again. A small spinner beside the buttons shows while a request runs.
 - While a request runs, editing, saving, opening and creating files are disabled; a run saves the file first and a save error stops it.
 - The right pane shows each response: a colored status badge (2xx green, 3xx orange, 4xx red), time, size and
   content type, with **Body** and **Headers** tabs. JSON bodies are shown as a syntax-colored tree: click a
@@ -71,8 +72,7 @@ because installers require a major version of at least 1; its major is the proje
 
 ## Not yet implemented
 
-Request history, saving responses, a cancel button, and persisting the window,
-last file and selected environment between sessions.
+A browsable request history, and opening `<>`-linked responses.
 
 `{{$env.NAME}}` reads nothing by default: allow names with `-Dhttpclient.allowEnv=NAME,NAME` (JVM option) or the environment variable `HTTPC_ALLOW_ENV=NAME,NAME`; see [docs/features.md](../docs/features.md).
 

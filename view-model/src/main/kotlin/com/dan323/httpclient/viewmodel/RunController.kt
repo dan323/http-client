@@ -11,6 +11,7 @@ import com.dan323.httpclient.core.domain.RequestTemplate
 import com.dan323.httpclient.core.port.out.EnvironmentFileException
 import com.dan323.httpclient.core.port.out.EnvironmentLocator
 import java.nio.file.Path
+import java.util.concurrent.CancellationException
 import java.util.concurrent.ConcurrentHashMap
 
 /** The request starting at or before 0-based [line]; null when [line] is above the first request. */
@@ -77,6 +78,14 @@ class RunController(
     /** Number of cached sessions (for tests and diagnostics). */
     val cachedSessions: Int get() = synchronized(acquireLock) { sessions.size }
 
+    /**
+     * A cancelled run drops its session, so the cancelled request is never remembered as a reused response (not even
+     * when its response arrived just before the cancel). Requests that completed earlier in that session are sent again.
+     */
+    private fun forgetCancelled(key: SessionKey, session: RequestSession) {
+        synchronized(acquireLock) { if (sessions[key] === session) sessions.remove(key) }
+    }
+
     fun run(
         file: Path,
         text: String,
@@ -126,6 +135,12 @@ class RunController(
             val outcomes = if (current == null) session.runAll(requests, variables, onOutcome = onOutcome)
             else session.runChained(requests, current, variables, onReused, onOutcome)
             return RunResult.Completed(env?.name, outcomes)
+        } catch (e: CancellationException) {
+            forgetCancelled(key, session)
+            throw e
+        } catch (e: InterruptedException) {
+            forgetCancelled(key, session)
+            throw e
         } finally {
             synchronized(acquireLock) { running.compute(key) { _, n -> if (n == null || n <= 1) null else n - 1 } }
         }

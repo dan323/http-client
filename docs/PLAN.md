@@ -25,7 +25,6 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F13 | Desktop: history browser and response comparison | desktop | open |
 | F14 | Editor intelligence: variable completion, undefined-variable and bad-reference diagnostics, find | desktop, plugin | open |
 | F15 | Desktop response extras: search in body, save to file, image/HTML preview | desktop | open |
-| F16 | Cancel a running request | core, desktop | partial: interrupting the calling thread cancels the request (core, adapters); no cancel button yet |
 | F17 | Edit environments in the UI | desktop | open |
 | F18 | Plugin: completion, navigation, inspections | plugin | open |
 | F19 | Plugin: richer response panel, remember environment, run all | plugin | partial: shared view-model, run guard, reset chain done; remember environment across restarts and run all open |
@@ -51,7 +50,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 | T16 | **Desktop editor intelligence:** variable completion, diagnostics from T13, find/replace | F14 | L | – (T13 done: `VariableAnalysis`) |
 | T17 | **Desktop response extras:** body search, save to file, image/HTML preview | F15 | M | – |
 | T18 | **Desktop history and compare:** browse stored responses, diff two | F13 | M | – (T11 done: `HistoryStore` / `FileHistoryStore`) |
-| T19 | **Cancel button:** desktop (and plugin) cancel of the running request; core and the executor already cancel on interrupt | F16 | S | – |
 | T20 | **Environment editor:** write support on the environment port and a UI to edit variables | F17 | M | – |
 | T21 | **Plugin GUI verification:** checked by hand on Ultimate 2026.3 (IU-263.7307.200) with the 0.5.0-rc1 zip, see `intellij-plugin/README.md`; still open: a Community install and the 2026.1 baseline (the `Ctrl+Alt+R` run shortcut is still to be tried in an IDE) | F20, F19, F18 | S | – |
 | T22 | **Plugin intelligence:** completion, go-to-request, inspections from T13 | F18, F14 | L | T21 (T13 done: `VariableAnalysis`) |
@@ -75,7 +73,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 | F13 | T18 |
 | F14 | T13, T16, T22 |
 | F15 | T17 |
-| F16 | T19 |
 | F17 | T20 |
 | F18 | T13, T21, T22 |
 | F19 | T21, T23 |
@@ -93,7 +90,7 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 |------|----------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------|
 | 1    | T21 (plugin GUI check)                                                                                                     | Done on Ultimate 2026.3 (Community and 2026.1 baseline still open); its findings may reshape T22/T23 |
 | 2    | T13 (variable analysis), T14 (desktop persistence)                                                                         | disjoint areas                                               |
-| 3    | T8 (multipart), T19 (cancel button), T23 (plugin panel)                                                                    | disjoint areas                                               |
+| 3    | T8 (multipart), T23 (plugin panel)                                                                  | disjoint areas                                               |
 | 4    | T22 (plugin intelligence), T16 (desktop editor), T15 (workspace)                                                           | need T13 / T14                                               |
 | 5    | T17 (desktop extras), T18 (history browser), T20 (environment editor), T27 (plugin: open linked response) | up to three at a time                                        |
 | 6    | T25 (QA and release notes)                                                                                                 | needs everything                                             |

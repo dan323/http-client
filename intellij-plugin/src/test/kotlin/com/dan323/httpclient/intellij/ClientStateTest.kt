@@ -12,12 +12,14 @@ import com.dan323.httpclient.core.port.out.EnvironmentRepository
 import com.dan323.httpclient.core.port.out.FileReader
 import com.dan323.httpclient.core.port.out.HttpExecutor
 import com.dan323.httpclient.core.port.out.JsonExtractor
+import com.dan323.httpclient.viewmodel.OutcomeDisplay
 import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -39,6 +41,14 @@ class ClientStateTest {
     private val file = Path.of("a.http").toAbsolutePath()
     private val text = "# @name login\nGET {{base}}/login\n\n###\n# @name me\nGET {{base}}/me\nX: {{login.response.body.\$.token}}\n"
     private val dev = EnvironmentChoice.Named("dev")
+
+    @Test fun freshStateHasAnEmptyReportAndAnyContentMakesItNonEmpty() {
+        assertTrue(state().lastReport.isEmpty)
+        assertTrue(Report().isEmpty)
+        assertFalse(Report(message = "m").isEmpty)
+        assertFalse(Report(environment = "dev").isEmpty)
+        assertFalse(Report(sections = listOf(Section(OutcomeDisplay.Reused("t", "s")))).isEmpty)
+    }
 
     @Test fun defaultChoiceIsNoneAndNeverSilentlyChanges() {
         val s = state()
@@ -85,6 +95,56 @@ class ClientStateTest {
         assertFalse(s.isRunning)
         assertEquals(listOf("http://x/slow"), sent.toList())
         assertTrue(s.run(file, "GET http://x/other\n", 0))
+    }
+
+    @Test fun cancelStopsTheRunReportsCancelledAndAllowsTheNextRun() {
+        val s = state()
+        s.environmentChoice = dev
+        val running = mutableListOf<Boolean>()
+        s.onRunning { running += it }
+        s.cancel()   // nothing running: ignored
+        gate = CountDownLatch(1); entered = CountDownLatch(1)
+        val t = thread { s.run(file, text, 5) }
+        assertTrue(entered!!.await(10, TimeUnit.SECONDS))
+        s.cancel()
+        t.join(10_000)
+        assertFalse(t.isAlive)
+        assertFalse(s.isRunning)
+        assertEquals(listOf(true, false), running.toList())
+        assertEquals("Cancelled", s.lastReport.message)
+        assertEquals(0, s.cachedSessions)   // the cancelled request is not remembered
+        gate = null
+        assertTrue(s.run(file, text, 5))
+        assertEquals(listOf("http://h/login", "http://h/login", "http://h/me"), sent.toList())
+    }
+
+    @Test fun aCancelRightAfterTheRunStartsIsNotErased() {
+        val s = state()
+        s.environmentChoice = dev
+        s.onRunning { if (it) s.cancel() }   // the cancel lands between the run being claimed and its request being sent
+        assertTrue(s.run(file, text, 5))
+        assertEquals(emptyList(), sent.toList())
+        assertEquals("Cancelled", s.lastReport.message)
+        assertFalse(s.isRunning)
+    }
+
+    @Test fun aListenerThatThrowsOnStartDoesNotLeaveTheRunGuardSet() {
+        val s = state()
+        s.environmentChoice = dev
+        val remove = s.onRunning { if (it) error("boom") }
+        assertFailsWith<IllegalStateException> { s.run(file, text, 5) }
+        assertFalse(s.isRunning)
+        remove()
+        assertTrue(s.run(file, text, 5))
+    }
+
+    @Test fun runningNotificationsArriveInTransitionOrder() {
+        val s = state()
+        s.environmentChoice = dev
+        val seen = java.util.Collections.synchronizedList(mutableListOf<Boolean>())
+        s.onRunning { seen += it }
+        repeat(20) { s.run(file, text, 5) }
+        assertEquals(List(20) { listOf(true, false) }.flatten(), seen.toList())
     }
 
     @Test fun editingTheFileDropsItsRememberedResponses() {
