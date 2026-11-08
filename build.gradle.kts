@@ -12,6 +12,9 @@ sonar {
         property("sonar.projectKey", "dan323_http-client")
         property("sonar.organization", "dan323")
         property("sonar.host.url", "https://sonarcloud.io")
+        // The plugin is not in the merged JaCoCo report (its tests need an IDE), so it is excluded from coverage
+        // only; analysis for bugs and smells still covers it.
+        property("sonar.coverage.exclusions", "intellij-plugin/**")
         property(
             "sonar.coverage.jacoco.xmlReportPaths",
             layout.projectDirectory.file("quality-reports/build/reports/jacoco/testCodeCoverageReport/testCodeCoverageReport.xml").asFile.absolutePath,

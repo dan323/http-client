@@ -1,6 +1,5 @@
 package com.dan323.httpclient.intellij
 
-import com.dan323.httpclient.viewmodel.EnvironmentPickerHost
 import com.dan323.httpclient.viewmodel.EnvironmentPickerModel
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileEditor.FileEditor
@@ -22,26 +21,28 @@ import javax.swing.event.PopupMenuListener
 /**
  * Puts the environment picker in the header of every `.http` editor, like JetBrains' HTTP Client. The choice lives in
  * [HttpClientService] (per project, until the IDE restarts), so picking it in one file applies to runs from all files
- * and every open header follows it. All logic is in `view-model` ([EnvironmentPickerModel], [EnvironmentPickerHost],
- * unit tested); this file is Swing/IDE glue only and is not covered by tests (it needs an IDE).
+ * and every open header follows it. All logic is in `view-model` ([EnvironmentPickerModel], unit
+ * tested); this file is Swing/IDE glue only.
  */
 class EnvironmentEditorHeaderProvider : EditorNotificationProvider, DumbAware {
     override fun collectNotificationData(project: Project, file: VirtualFile): Function<in FileEditor, out JComponent?>? =
         if (file.extension != "http" || !file.isInLocalFileSystem) null else Function { editor -> EnvironmentHeaderPanel(project, editor, file) }
 }
 
-private class EnvironmentHeaderPanel(project: Project, editor: FileEditor, file: VirtualFile) : EditorNotificationPanel(editor, Status.Info) {
+private class EnvironmentHeaderPanel(project: Project, private val editor: FileEditor, private val file: VirtualFile) : EditorNotificationPanel(editor, Status.Info) {
     private val service = project.getService(HttpClientService::class.java)
     private val combo = JComboBox<String>()
-    // A new model per time the panel is shown; its choice listener is removed when the panel is hidden or replaced.
-    private val host = EnvironmentPickerHost {
+    private var model: EnvironmentPickerModel? = null
+
+    // A new model each time the panel is shown; its choice listener is removed when the panel is hidden or replaced.
+    private fun newModel(): EnvironmentPickerModel {
         val scope = Disposer.newDisposable(editor, "EnvironmentHeaderPanel")
-        EnvironmentPickerModel(
+        return EnvironmentPickerModel(
             { service.environments(Path.of(file.path)).map { it.name } }, { service.environmentChoice }, { service.environmentChoice = it },
             { listener -> service.onEnvironmentChoice(scope, listener); { Disposer.dispose(scope) } },
             { ApplicationManager.getApplication().executeOnPooledThread(it) }, { SwingUtilities.invokeLater(it) },
         ) { state ->
-            combo.model = DefaultComboBoxModel(state.labels.toTypedArray())
+            combo.model = DefaultComboBoxModel(state.items.map { it.label }.toTypedArray())
             combo.selectedIndex = state.selected
             combo.toolTipText = state.hint
         }
@@ -50,16 +51,24 @@ private class EnvironmentHeaderPanel(project: Project, editor: FileEditor, file:
     init {
         text("Environment:")
         add(combo)
-        combo.addActionListener { host.select(combo.selectedIndex) }
+        combo.addActionListener { model?.select(combo.selectedIndex) }
         // Re-read the env file whenever the list is about to open (mouse or keyboard).
         combo.addPopupMenuListener(object : PopupMenuListener {
-            override fun popupMenuWillBecomeVisible(e: PopupMenuEvent?) = host.reload()
+            override fun popupMenuWillBecomeVisible(e: PopupMenuEvent?) { model?.reload() }
             override fun popupMenuWillBecomeInvisible(e: PopupMenuEvent?) = Unit
             override fun popupMenuCanceled(e: PopupMenuEvent?) = Unit
         })
     }
 
-    override fun addNotify() { super.addNotify(); host.attach() }
+    override fun addNotify() {
+        super.addNotify()
+        model?.dispose()
+        model = newModel().also { it.start() }
+    }
 
-    override fun removeNotify() { host.detach(); super.removeNotify() }
+    override fun removeNotify() {
+        model?.dispose()
+        model = null
+        super.removeNotify()
+    }
 }

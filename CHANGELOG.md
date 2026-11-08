@@ -10,6 +10,7 @@ All notable changes to this project are documented here. The format follows
 - Desktop: the **Forget responses** button is now **Reset chain** (the name the IntelliJ plugin uses) and the buttons under the request list are compact so the label fits.
 - Desktop: the request list shows the HTTP method in the editor's method colour and bold.
 - IntelliJ plugin: the environment picker moved from the "HTTP Response" tool window to the header of `.http` editors, as in JetBrains' HTTP Client. The choice is still per project until the IDE restarts and applies to runs from every file. The tool window keeps the response and **Reset chain**.
+- SonarCloud: `intellij-plugin/**` is excluded from the coverage requirement (its tests need an IDE and are not in the JaCoCo report); other analysis still covers it.
 
 ### Fixed
 - Desktop: the environment dropdown (and the recent files menu) opens directly under its button instead of far from it.

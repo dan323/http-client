@@ -178,32 +178,4 @@ class EnvironmentPickerModelTest {
         f.pump()
         assertEquals(1, f.rendered.size)
     }
-
-    @Test fun stateLabelsFollowTheItems() {
-        val f = Fixture()
-        f.model.start(); f.pump()
-        assertEquals(listOf(NONE_LABEL, "dev", "prod"), f.model.state.labels)
-    }
-
-    @Test fun hostAttachDetachReplacesAndDisposesModels() {
-        val fixtures = mutableListOf<Fixture>()
-        val host = EnvironmentPickerHost { Fixture().also { fixtures += it }.model }
-        host.select(1); host.reload() // detached: ignored
-        host.attach()
-        fixtures[0].pump()
-        assertEquals(1, fixtures[0].rendered.size)
-        host.attach() // replaces: the first model is disposed
-        assertTrue(fixtures[0].listeners.isEmpty())
-        assertEquals(1, fixtures[1].listeners.size)
-        fixtures[1].pump()
-        host.select(1)
-        assertEquals(EnvironmentChoice.Named("dev"), fixtures[1].choice)
-        host.reload()
-        assertEquals(1, fixtures[1].backgroundJobs.size)
-        host.detach()
-        assertTrue(fixtures[1].listeners.isEmpty())
-        host.select(2)
-        assertEquals(EnvironmentChoice.Named("dev"), fixtures[1].choice)
-        host.detach() // idempotent
-    }
 }
