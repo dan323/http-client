@@ -4,6 +4,29 @@ A Postman-style HTTP client that implements a practical subset of the JetBrains 
 For where this project differs from the JetBrains HTTP Client, see [jetbrains-compatibility.md](jetbrains-compatibility.md).
 Front ends: the `httpc` command line, a desktop app and an IntelliJ plugin, all built on the same `core` and `adapters`.
 
+## Contents
+
+- [`.http` files](#http-files)
+- [Variables](#variables)
+  - [Environments](#environments)
+  - [File variables](#file-variables)
+  - [Editor diagnostics (analysis)](#editor-diagnostics-analysis)
+  - [Request settings](#request-settings)
+  - [Cookie jar](#cookie-jar)
+  - [Assertions](#assertions)
+  - [Run reports](#run-reports)
+  - [Saved responses](#saved-responses)
+  - [Run history store](#run-history-store)
+  - [Authorization shortcuts](#authorization-shortcuts)
+  - [Dynamic variables](#dynamic-variables)
+- [Request chaining](#request-chaining)
+- [Command line](#command-line)
+- [Desktop app](#desktop-app)
+- [IntelliJ plugin](#intellij-plugin)
+- [Not yet implemented](#not-yet-implemented)
+
+Implementation and security details that a user does not need to write or read a `.http` file are in [design-notes.md](design-notes.md), which has the same section names.
+
 ## `.http` files
 
 Requests are separated by `###`.
@@ -24,8 +47,10 @@ GET {{base}}/me
 - A bare URL (no method) means `GET`. A trailing `HTTP/1.1` is ignored. An unknown method (`GTE http://x`) is a parse error naming the line, with a "did you mean" hint for a one-letter typo; a method with no URL is also an error. `GRAPHQL`, `WEBSOCKET` and `GRPC` (request types of the JetBrains format that are not supported) are also a parse error naming the line ("GRPC requests are not supported (only HTTP methods are sent)"), so the file does not run and nothing is sent as plain HTTP. Indented `?a=1` / `&b=2` lines after the request line extend the URL, and an indented header line without `:` continues the previous header value. `> handler`, `>> file` and `<> file` lines count only when they come after the body; earlier ones are body text. `<@ path` reads the file but does not substitute variables inside it (warning).
 - Headers follow the request line; a header line without `:` is a parse error naming the line. A blank line starts the body.
 - A body consisting only of `< ./path` (note the space; `<html>` is plain text) is read from that file, relative to the `.http` file.
-  - **Security note (deviates from JetBrains, which does not confine):** `< path` and `<@ path` may only read files inside the `.http` file's folder, checked after `..` normalisation and after resolving symlinks (a symlink pointing out of the folder is rejected, as are absolute paths elsewhere). A rejected read fails that request with an error naming the path and how to allow it; no file contents are included. To allow more directories: CLI `--allow-file-root DIR` (repeatable); desktop app and IDE plugin `-Dhttpclient.allowFileRoots=DIR` or environment variable `HTTPC_ALLOW_FILE_ROOTS=DIR`, several separated by the platform path separator (`:`, or `;` on Windows). Roots from the property/env var must be absolute (a leading `~` is expanded); relative roots, empty values (also `--allow-file-root ""`), unparsable paths and filesystem roots such as `/` or `C:\` are rejected with an error naming the entry (shown as a failed request in the desktop app, in the tool window in the IDE, and as a usage error in the CLI); a root equal to your home directory only prints a warning. In the IDE the environment variable `HTTPC_ALLOW_FILE_ROOTS` is the practical choice (the property needs VM options). Residual risk: the file is opened without following a final symlink and re-verified, but someone with write access inside an allowed folder could still race the check by swapping a parent directory for a symlink.
+  - **Security note (deviates from JetBrains, which does not confine):** `< path` and `<@ path` may only read files inside the `.http` file's folder, checked after `..` normalisation and after resolving symlinks (a symlink pointing out of the folder is rejected, as are absolute paths elsewhere). A rejected read fails that request with an error naming the path and how to allow it; no file contents are included. To allow more directories: CLI `--allow-file-root DIR` (repeatable); desktop app and IDE plugin `-Dhttpclient.allowFileRoots=DIR` or environment variable `HTTPC_ALLOW_FILE_ROOTS=DIR`, several separated by the platform path separator (`:`, or `;` on Windows). Roots from the property/env var must be absolute (a leading `~` is expanded); relative roots, empty values (also `--allow-file-root ""`), unparsable paths and filesystem roots such as `/` or `C:\` are rejected with an error naming the entry (shown as a failed request in the desktop app, in the tool window in the IDE, and as a usage error in the CLI); a root equal to your home directory only prints a warning. In the IDE the environment variable `HTTPC_ALLOW_FILE_ROOTS` is the practical choice (the property needs VM options).
 - Response handlers (`> {% ... %}`, `> file`) are not supported: they are not sent as body, and the parser reports a warning per ignored line (`HttpFile.warnings`; the CLI prints them on stderr). `>> file`, `>>! file` and `<> file` are supported, see "Saved responses".
+
+Implementation and security details: [design notes, .http files](design-notes.md#http-files).
 
 ## Variables
 
@@ -75,17 +100,7 @@ GET {{host}}/users/{{user}}
 
 ### Editor diagnostics (analysis)
 
-`VariableAnalysis` (`core`, pure and IO-free) checks the `{{...}}` of a `.http` text without running anything, for the
-editors (desktop and plugin use it in later tasks). `VariableAnalysis.analyze(text, environmentNames)` takes the
-text and the *names* of the available environment variables (values never enter the analysis; pass the union of
-all environments for a lenient editor, nothing for "no environment") and offers:
-
-- `diagnostics`: `Diagnostic(code, severity, message, range)`; `range` is a `SourceRange` in UTF-16 chars (offset, length,
-  0-based line and column; tabs and CRLF count as in the text). Messages name variables and requests, never values.
-- `knownVariablesAt(offset)`: file variables defined above, environment variables, `name.response.` prefixes of the
-  requests above, and the dynamic variable templates (`$uuid`, `$timestamp`, `$random.integer(from, to)`, `$env.NAME`, ...).
-- `findUsages(name)`, `findVariableUsages`, `findRequestUsages`, `occurrenceAt(offset)`: every use, `@x =` definition,
-  `# @name` declaration and `{{name.response...}}` prefix, each range covering exactly the name (for rename).
+Diagnostics for the `{{...}}` of a `.http` text, computed without running anything, for the editors (desktop and plugin use them in later tasks). Messages name variables and requests, never values.
 
 | Code | Severity | Meaning |
 |---|---|---|
@@ -107,7 +122,7 @@ rest do not change), so completion, find-usages and the other diagnostics keep w
 request that failed has no `name.response.` prefix and its references are not scanned. Only a file with more than 50 bad
 lines is reported as parse errors alone.
 
-It follows the run-time rules: the same reference pattern and lookup order as `VariableResolver` (a file variable
+It follows the run-time rules: the same reference pattern and lookup order (a file variable
 beats the environment in request text, and in a value only when defined above it; a variable naming itself reads the
 environment), and a response reference needs an earlier request with that name. Scanned: request line and query
 lines, header values (not names), body text, the *path* of a `< path` body (not the file), the path of a `>> path` / `>>! path` save (a `<>` link path is not resolved, so it is not scanned), file variable values,
@@ -116,27 +131,30 @@ lines, header values (not names), body text, the *path* of a `< path` body (not 
 Not decidable statically, so never flagged: whether `body.$.x` finds anything, and `$env.X` / `$processEnv X`
 (allow-list and value are run-time matters). Duplicate request names resolve to the latest response at run time. A
 response reference inside a file variable value is only checked for an existing request name, because the request that
-uses the variable is not known. Analysis time is linear in the text size.
+uses the variable is not known.
+
+Implementation and security details: [design notes, Editor diagnostics](design-notes.md#editor-diagnostics-analysis).
 
 ### Request settings
 
 `# @setting [value]` (or `// @setting`) lines before a request line attach settings to it: for example
-`# @timeout 5`, `# @no-redirect`, `# @no-cookie-jar`. The parser records them on the request
-(`RequestTemplate.settings`); the following are honoured per request by the executor (carried as `HttpRequest.options`):
+`# @timeout 5`, `# @no-redirect`, `# @no-cookie-jar`. The following are honoured per request:
 
-- `# @timeout 5`: maximum time for the whole exchange, response headers and body; on expiry the request is cancelled and fails with a timeout. Without `@timeout` the default total timeout applies: 60 s, or the CLI `--timeout`, or the system property `httpclient.timeout` / environment variable `HTTPC_TIMEOUT` (same duration format; the desktop app and the plugin read the property and the variable; a bad value is reported when a request runs, never replaced by the default). The client also has a 30 s connect timeout. There is no way to disable the limit: use a long `@timeout` for slow endpoints. Interrupting the calling thread cancels the in-flight request and fails with a `CancellationException` (the interrupt flag is kept). A whole, positive number: plain numbers are seconds, or add `ms`, `s` or `m` (any case, `@timeout 500ms`). Decimals (`1.5s`), `0`, negatives and values that overflow are rejected. May use `{{vars}}`.
+- `# @timeout 5`: maximum time for the whole exchange, response headers and body; on expiry the request is cancelled and fails with a timeout. Without `@timeout` the default total timeout applies: 60 s, or the CLI `--timeout`, or the system property `httpclient.timeout` / environment variable `HTTPC_TIMEOUT` (same duration format; the desktop app and the plugin read the property and the variable; a bad value is reported when a request runs, never replaced by the default). The client also has a 30 s connect timeout. There is no way to disable the limit: use a long `@timeout` for slow endpoints. A whole, positive number: plain numbers are seconds, or add `ms`, `s` or `m` (any case, `@timeout 500ms`). Decimals (`1.5s`), `0`, negatives and values that overflow are rejected. May use `{{vars}}`.
 - `# @no-redirect`: do not follow HTTP redirects (the 3xx response is returned). An optional value `true` (default) or `false` (`# @no-redirect false` keeps redirects); it may use `{{vars}}`; any other value is an error.
 - `# @proxy host:port`: send the request through that HTTP proxy. Forms: `host`, `host:port`, `http://host:port`, IPv6 as `[::1]:8080`; the port defaults to 80. Only plain HTTP proxies are supported: other schemes (`https://`, `socks://`) and credentials (`user:pass@host`) are rejected. May use `{{vars}}`.
 
-The JDK client controls `Host`, `Content-Length`, `Connection`, `Expect` and `Upgrade` itself, so user-set headers with these names are dropped silently. With the session cookie jar on (the default), redirects are followed by the session (also without a jar, see Redirects below): an explicit `Cookie`, `Authorization` or `Proxy-Authorization` header is dropped when a redirect leaves the origin (scheme, host, port) but kept on same-origin hops, where the jar also adds its matching cookies, and `@timeout` is one deadline across all hops. With `@no-cookie-jar` redirects are followed the same way, only without reading or storing cookies: the JDK client is never left to follow redirects, so the credential handling is the same on every JDK.
+The JDK client controls `Host`, `Content-Length`, `Connection`, `Expect` and `Upgrade` itself, so user-set headers with these names are dropped silently. With the session cookie jar on (the default), redirects are followed by the session (also without a jar, see Redirects below): an explicit `Cookie`, `Authorization` or `Proxy-Authorization` header is dropped when a redirect leaves the origin (scheme, host, port) but kept on same-origin hops, where the jar also adds its matching cookies, and `@timeout` is one deadline across all hops. With `@no-cookie-jar` redirects are followed the same way, only without reading or storing cookies.
 
-Setting names are case-insensitive and unknown ones are ignored. Invalid values (including a blank `@proxy`) fail when the request is resolved with an `Invalid @timeout` / `@proxy` / `@no-redirect` error, before anything is sent. `JdkHttpExecutor` sends with `Redirect.NEVER` clients (redirects are followed by `RedirectFollower`), reusing one derived client per proxy when the injected client needs one or a request names an `@proxy`, and copies the injected client's connect timeout, SSL, authenticator, cookie handler, executor and HTTP version; request priority cannot be copied.
+Setting names are case-insensitive and unknown ones are ignored. Invalid values (including a blank `@proxy`) fail when the request is resolved with an `Invalid @timeout` / `@proxy` / `@no-redirect` error, before anything is sent.
 
 - `# @no-cookie-jar`: do not use the cookie jar for this request (see below). Same optional `true`/`false` value as `@no-redirect`.
 
+Implementation and security details: [design notes, Request settings](design-notes.md#request-settings).
+
 ### Cookie jar
 
-Each `RequestSession` (one CLI run; in the desktop app and plugin one per file, environment and loaded variables, kept by the shared `RunController` so when you send one request, the named requests it chains on that already ran in the session, such as a login, are not sent again until the environment file changes or the chain is reset; the selected request itself, and every request of Send all, always run again) owns an in-memory `CookieJar` in `core`. `Set-Cookie` headers
+Each session (one CLI run; in the desktop app and plugin one per file, environment and loaded variables, so when you send one request, the named requests it chains on that already ran in the session, such as a login, are not sent again until the environment file changes or the chain is reset; the selected request itself, and every request of Send all, always run again) owns an in-memory cookie jar. `Set-Cookie` headers
 of a response are stored, and later requests in the same session to a matching host and path get a `Cookie` header, so a login
 request followed by an authenticated one just works. Sessions never share cookies and nothing is persisted to disk.
 Supported: `Domain` (host-only when absent; a host cannot set cookies for an unrelated domain, and a `Domain` that is a
@@ -150,22 +168,16 @@ Redirects: when the jar is in use, the session follows redirects itself, one hop
 any), so `Set-Cookie` on a `302` (the `POST /login` -> `302` flow) is stored and the `Cookie` header is recomputed for every hop's
 URL. Up to 10 hops, then an error. `# @no-redirect` returns the first response (its cookies are still stored). 301/302 on `POST`
 and 303 switch to `GET` without body; 307/308 keep method and body. An explicit `Cookie`, `Authorization` or
-`Proxy-Authorization` request header is dropped when a redirect leaves the origin (scheme, host, port). The JDK
-client is never asked to follow redirects (its forwarding of such headers varies by JDK version; `JdkHttpExecutor` itself follows
-through the same code), so this holds on every JDK. With `@no-cookie-jar` the jar is only skipped (nothing read or stored) and explicit
+`Proxy-Authorization` request header is dropped when a redirect leaves the origin (scheme, host, port). With `@no-cookie-jar` the jar is only skipped (nothing read or stored) and explicit
 credential headers are kept on same-origin hops. Only these three headers are stripped: other custom headers such as `X-API-Key` still cross origins on a redirect, so do not put a secret in one if the server may redirect elsewhere. 307/308 re-send the request body to the new origin (as the JDK and curl do). The reported duration is the sum of all hops.
 
-Public Suffix List: `core` stays free of third-party libraries, so the list is a bundled classpath resource,
-`core/src/main/resources/com/dan323/httpclient/core/public_suffix_list.txt` (ICANN and private sections, rules only; the first
-line records the list version and commit), read by `PublicSuffixList` (wildcard and exception rules supported; a name with no
-matching rule counts as a one-label suffix, as in the PSL algorithm). The list is a snapshot and goes stale as registries change;
-to update it, download `https://publicsuffix.org/list/public_suffix_list.dat`, drop comment lines (`//`), blank lines and
-anything after whitespace, put a header line with the new `VERSION` and `COMMIT` on top, replace the file and run `./gradlew :core:test`.
+The Public Suffix List used for the `Domain` check is a bundled snapshot that goes stale as registries change; the update procedure is in the design notes.
 
 Limitations: a `Cookie` header written in the request is sent as is (the jar adds nothing); an IP host only matches exactly; `Secure` cookies are neither accepted from nor sent over plain http (no localhost exception),
 and a plain-http response cannot overwrite a `Secure` cookie; a cookie over 4096 bytes is ignored, at most 50 per domain and
-3000 in total (oldest first evicted); no SameSite handling. `@no-cookie-jar` cannot disable a `CookieHandler` configured
-on an `HttpClient` injected into `JdkHttpExecutor` (that handler still sends and stores on its own).
+3000 in total (oldest first evicted); no SameSite handling.
+
+Implementation and security details: [design notes, Cookie jar](design-notes.md#cookie-jar).
 
 ### Assertions
 
@@ -208,23 +220,13 @@ GET {{base}}/items/1
 - When an assertion uses `{{variables}}` its resolved values are never shown: a failing comparison reports
   "expected value contains substitutions, not shown", while an invalid one (bad regex, non-numeric `<`, unknown
   operator) keeps its reason with the values left out.
-- `RequestSession` is safe for concurrent use: runs are serialised (one request at a time per session) and
-  interrupting the running thread stops `runAll` without sending the queued requests.
-- `RequestSession.runAll` evaluates them and attaches one `AssertionResult` (passed, expected, actual, message) each to
-  `RunOutcome.Success.assertions`. A request that throws reports `RunOutcome.Failure.assertionsNotRun`.
-  `runChained` (single-request runs) evaluates only the requested request; its prerequisites run for their responses
-  and their assertions are neither evaluated nor reported. Reused dependencies are not re-asserted.
+- With `--request`, only the requested request's assertions are evaluated; its prerequisites run for their responses and their assertions are neither evaluated nor reported. Reused dependencies are not re-asserted. A request that fails to complete has its assertions reported as not run. Requests run one at a time per session, and interrupting the run stops Send all without sending the queued requests.
+
+Implementation and security details: [design notes, Assertions](design-notes.md#assertions).
 
 ### Run reports
 
-`RunReport.from(outcomes)` (in `core`) builds a pure summary of a run: one entry per request (name, method, URL as
-written in the file, status, duration, assertion results, assertions not run, error, optional `httpError`) plus totals
-and an overall pass/fail. A request passes when it completed and all its assertions passed; when the run is built with
-`failOnHttpError` (CLI `--fail-on-http-error`) it also needs a status below 400, otherwise the entry carries
-`httpError` (`"HTTP 503"`). Exporters, both in `adapters`:
-`JUnitXmlReport` (plain string building with XML escaping; illegal XML characters are dropped) and `JsonRunReport`
-(kotlinx-serialization, also parses a report back). Files are written through the `ReportWriter` port (`core`),
-implemented by `AtomicReportWriter` (`adapters`).
+A run report summarises a run: one entry per request (name, method, URL as written in the file, status, duration, assertion results, assertions not run, error, optional `httpError`) plus totals and an overall pass/fail. A request passes when it completed and all its assertions passed; when the run uses `--fail-on-http-error` it also needs a status below 400, otherwise the entry carries `httpError` (`"HTTP 503"`). Formats: JUnit XML and JSON.
 
 The CLI writes them with `--report-json FILE` and `--report-junit FILE`. Option values must be non-empty and not
 start with `--`. These are usage errors (exit 2, nothing is run or written): repeating an option, giving both reports
@@ -235,7 +237,7 @@ and files are written atomically (temp file + move), each report independently. 
 Exit codes, by precedence: 2 usage; 1 the run failed (request error, failed assertion, an HTTP error status with
 `--fail-on-http-error`, or the run could not start),
 even if a report could not be written (the write error is still printed); 3 the run passed but a report could not
-be written; 0 otherwise. The pass/fail decision is `RunReport.passed`. If the run cannot start (missing file,
+be written; 0 otherwise. If the run cannot start (missing file,
 unknown environment or request, unexpected exception) a report with a
 single failed `httpc` entry is still written so CI finds a file. Console output is unchanged.
 
@@ -249,13 +251,14 @@ file name, so duplicate or unnamed requests stay distinct and stable. Prerequisi
 failed; in JSON they are always listed with `"prerequisite": true`. An empty run reports `tests="0"`. Tabs and line
 breaks in attributes are written as character references.
 
-JSON: an entry's optional `httpError` is set with `--fail-on-http-error` (see below). Top-level `version` (currently 1); `JsonRunReport.parse` rejects a newer version. `passed` and `totals` (and each
-entry's `passed`) are derived: written for consumers, ignored and recomputed by `parse`.
+JSON: an entry's optional `httpError` is set with `--fail-on-http-error` (see below). Top-level `version` (currently 1). `passed` and `totals` (and each entry's `passed`) are derived values written for consumers.
 
 Caveats: by default a response with an HTTP error status (4xx/5xx) that has no failed assertion counts as passed (only
 transport errors and failed assertions fail a run), so a green report does not mean "no 5xx"; run with
 `--fail-on-http-error` to fail on them (below). Reports contain URLs as written in the file
 and error messages, which may include secrets (tokens in query strings); treat them as sensitive CI artifacts.
+
+Implementation and security details: [design notes, Run reports](design-notes.md#run-reports).
 
 ### Saved responses
 
@@ -286,31 +289,21 @@ GET {{host}}/orders/1
   platform, so a project shared between systems does not save files another system cannot hold: reserved device names
   (`CON`, `PRN`, `AUX`, `NUL`, `COM0-9`, `LPT0-9`, also with an extension), a segment ending in a dot or a space, and
   the characters `< > : " | ? *` and control characters (which also rules out `file.txt:stream`).
-- Confinement is the one of `< path` bodies (`FileAccessPolicy`: the `.http` file's folder plus the allowlist): `..`
+- Confinement is the one of `< path` bodies (the `.http` file's folder plus the allowlist): `..`
   out of the allowed folders, absolute paths (`/x`, `\x`, `C:\x`), symlinks leading out, a final symlink, a folder,
   the `.http` file itself and (for `>>!`) a read-only file are refused. Missing parent folders are created, only
   inside the allowed roots. Files are written atomically, owner-only on POSIX (an overwritten file keeps its
   permissions), byte for byte (no charset conversion); an empty body gives an empty file. Concurrent saves of the same
-  name end up in different files (`>>`). The port is `ResponseSaver` (`core`), `LocalResponseSaver` (`adapters`).
+  name end up in different files (`>>`).
 - A save happens after the assertions are evaluated, also when they failed, but not when the request itself failed.
-  A rejected or failed save fails only the save: the request's result stays, `RunOutcome.Success.saveError` holds the
-  message (names the path, hides substituted values, never contains the body) and `savedTo` the path written.
-  Paths are not part of reports. The path shown after a successful save (`savedTo`, the CLI line) follows the same rule
+  A rejected or failed save fails only the save: the request's result stays, the error message names the path, hides substituted values and never contains the body.
+  Paths are not part of reports. The path shown after a successful save (the CLI line) follows the same rule
   as error messages: values substituted into `{{variables}}` (3 characters or more) come back as `{{name}}`, so
   `>> out/{{token}}.json` prints `out/{{token}}.json`, never the token. The file on disk has the real name.
-- The temp file (random name, owner-only) is written in the final, already verified folder; `>>!` is one atomic rename
-  inside that folder, and `>>` hard-links the finished temp file to the first free name (a link fails if the name exists,
-  so nothing is clobbered and no empty or partial file is ever visible), then removes the temp name (without hard links a
-  plain move without replace is used). Right before publishing, the folder's real path must still be the verified one
-  and the temp file must be in it. If a folder was swapped for a symlink after validation, the source (named by its random
-  temp name) does not exist at the new location, so the rename/link fails and nothing outside is touched, also for `>>!`.
-  Residual race (same family as `< path` reads; the JDK has no openat): an attacker who can write inside the allowed
-  folders, can observe the random temp name and swaps the folder in the microseconds between the last check and the
-  syscall, while placing a file of that name at the new location, can still make one save land outside; that is detected
-  afterwards, a `>>` file is removed, a `>>!` replacement cannot be restored and the error says so.
+- Files are published atomically: `>>` never clobbers an existing file and no empty or partial file is ever visible. A save whose folder was swapped for a symlink after validation fails without touching anything outside the allowed folders.
 - The path is validated exactly as written: leading or trailing whitespace is refused (never trimmed into a different
   path).
-- Bare `RequestSession.run` does not save or link; `>>`/`>>!`/`<>` are applied by `runAll`/`runChained`, once per request.
+- `>>`/`>>!`/`<>` are applied once per request run.
   A `>> {{other.response...}}` path makes `other` a prerequisite that runs first (also through file variables).
   Cancellation or interruption inside a save or link is not reported as a save error: it stops the session.
 - CLI: a `--report-*` / `--output` file that is the same file as a response saved in this run (symlinks and case aliases
@@ -319,50 +312,24 @@ GET {{host}}/orders/1
 - Prerequisites: a request that only runs to feed `{{name.response...}}` to the request you asked for (`@import`/chained
   dependencies) is sent like any other, so its own `>>` and `<>` directives fire too (it saved its `pre.json`). A
   prerequisite that is reused instead of re-sent does not save or link again.
-- Desktop app and plugin show `Saved to PATH` (or the save/link error) under the status of the response; the desktop
-  app passes a `FileHistoryStore` like the CLI and the plugin, so `<>` links are recorded there too.
+- Desktop app and plugin show `Saved to PATH` (or the save/link error) under the status of the response; the desktop app records `<>` links like the CLI and the plugin.
 - CLI: `Saved response: PATH` (relative to the `.http` file) on stderr, also with `--quiet`; a failed save prints
   `Error: Cannot save response to ...` on stderr and makes the exit code 1.
 
-`<> path` links: JetBrains rewrites the `.http` file to add a `<>` line per stored response. This tool deliberately
-never edits your `.http` file. The `<> path` text is kept as written (`RequestTemplate.responseLinks`, the path itself
-is not used); instead, after a run of a request that has a `<>` line, its latest response is recorded in the history
-index (`HistoryStore.recordLinked`), and `ResponseLinks.latest(store, httpFile, request)` returns the latest stored
-response of that request (`HistoryStore.latestLinked`). A request is identified by its `# @name` (duplicate names
-share one link: the newest run wins) or, unnamed, by the line where it starts (so adding lines above it breaks the
-link). Recording is opt-in: `SessionFactory(history = FileHistoryStore())` (or any `HistoryStore`, with an injectable
-root); the CLI and the plugin pass it, so the response of a linked request lands in `.http-history/`. The history keeps
-the newest 50 runs per file, and additionally the newest record of every `<>` key even when it is older than that, so a
-link keeps resolving however often other requests run (at most one extra run folder per distinct linked request; an
-entry whose request lost its `<>` line or was removed stays until you delete it from `.http-history/`). Only a record whose body can still be read
-protects its key from pruning. Entries written
-before keys existed carry no key and are pruned as ordinary runs. Opening the linked response in
-the desktop app or the plugin is not implemented yet.
+`<> path` links: JetBrains rewrites the `.http` file to add a `<>` line per stored response. This tool deliberately never edits your `.http` file. The `<> path` text is kept as written but the path itself is not used; instead, after a run of a request that has a `<>` line, its latest response is recorded in the history (`.http-history/`, see below). A request is identified by its `# @name` (duplicate names share one link: the newest run wins) or, unnamed, by the line where it starts (so adding lines above it breaks the link). The history keeps the newest 50 runs per file, and additionally the newest record of every `<>` key even when it is older than that, so a link keeps resolving however often other requests run; an entry whose request lost its `<>` line or was removed stays until you delete it from `.http-history/`. Opening the linked response in the desktop app or the plugin is not implemented yet.
+
+Implementation and security details: [design notes, Saved responses](design-notes.md#saved-responses).
 
 ### Run history store
 
-`HistoryStore` (port in `core`) remembers past runs of a `.http` file: `record` (a `RunReport` plus the response of
-each request), `list` (newest first), `read`, `readResponse` and `latestResponse` (by request name). Only `<>` links use it
-today (see "Saved responses"); the CLI, desktop app and plugin do not record ordinary runs yet. `FileHistoryStore` (`adapters`)
-keeps it in `.http-history/<file name>/` next to the `.http` file; the folder is injectable
-(`FileHistoryStore.underRoot(dir)` for a shared root, or any `(Path) -> Path`).
+Past runs of a `.http` file can be remembered in `.http-history/<file name>/` next to the `.http` file. Only `<>` links use it today (see "Saved responses"); the CLI, desktop app and plugin do not record ordinary runs yet.
 
-Layout: one folder per run, named by its id (`20261106T101500123Z-n0000-a1b2c3d4`: UTC time, a sequence number within the millisecond so equal-time runs keep their recorded order, random suffix; ids from before the sequence existed stay readable and sort first), holding `run.json`
-(version, id, timestamp, the report in the `JsonRunReport` format, and per response: status, headers, duration,
-body size, `bodyTruncated`) and `<index>.body` (raw bytes). `run.json` is written last; a folder without it is
-incomplete and ignored (removed after an hour). There is no shared index file, so two processes recording at once
-cannot lose each other's runs; all files are written atomically.
+- Retention: the newest 50 runs per file are kept; older ones are deleted when recording.
+- Bodies are stored in full up to 5 MB; larger ones are cut and marked as truncated.
+- Only the history folder is written. Corrupt, foreign or newer-version entries are skipped with a warning, never fatal.
+- Secrets: stored responses are raw (tokens, cookies, personal data). Add `.http-history/` to your `.gitignore` (this repository does) and never share the folder.
 
-- Retention: the newest 50 runs per file are kept (`maxRuns`); older ones are deleted when recording.
-- Bodies are stored in full up to 5 MB (`maxBodyBytes`); larger ones are cut, with `bodyTruncated = true` and the real
-  size in `originalBodySize`.
-- Confinement: only the history folder is written. Body files are named by index, never by request name; the `.http`
-  file name used as folder name is sanitized (separators, Windows-illegal characters, `.`/`..`, reserved names such
-  as `CON`, trailing dots, length over 80); run ids are validated before use; symlinked entries are not followed.
-- Corrupt, foreign or newer-version entries are skipped with a warning, never fatal.
-- Secrets: stored responses are raw (tokens, cookies, personal data). On POSIX, folders are `rwx------` and files
-  `rw-------` from creation (Windows uses the default ACLs). Add `.http-history/` to your `.gitignore` (this repository
-  does) and never share the folder.
+Implementation and security details: [design notes, Run history store](design-notes.md#run-history-store).
 
 ### Authorization shortcuts
 
@@ -426,16 +393,12 @@ More (names modelled on the JetBrains HTTP Client and Postman; see the notes bel
   - Desktop app and IntelliJ plugin (no UI for this yet): the system property `-Dhttpclient.allowEnv=NAME,NAME`
     (for the IDE add it under Help | Edit Custom VM Options) and/or (the two lists are merged) the environment
     variable `HTTPC_ALLOW_ENV=NAME,NAME` of the process that starts the app/IDE. Restart to apply.
-  - Library users: `SystemEnvironmentVariables(setOf("NAME"))` from `adapters`; `core` callers that pass nothing
-    see no variables (the `EnvironmentVariables` port).
   - Environment variables of a GUI-launched IDE may differ from your shell.
 - Values read through `$env` are used exactly where you write them and are inserted as plain text (they are not
   scanned for `{{...}}` again). The desktop/plugin reports and CLI output show the request as written in the
   file (with `{{$env.X}}` unresolved), not the resolved request, and error messages name the variable, never its
   value. The server's response may of course echo what you sent.
-- **Randomness and what is ours.** `$uuid`, `$random.uuid` and the `$random.*` family use a cryptographically strong
-  generator (`SecureRandom`), which is stronger than we know JetBrains to guarantee; this was our choice, not
-  something taken from JetBrains. The offset syntax (`1 d`, `-2 h`, units `ms s m h d w M y`) is also our own design,
+- **Randomness and what is ours.** `$uuid`, `$random.uuid` and the `$random.*` family use a cryptographically strong generator (our choice, not something taken from JetBrains). The offset syntax (`1 d`, `-2 h`, units `ms s m h d w M y`) is also our own design,
   loosely inspired by JetBrains' `$timestamp`/`$isoTimestamp` offsets, and may not match it exactly.
   `$random.float` is printed as plain decimal, never as `1.0E10`.
 - Naming: to our knowledge the JetBrains HTTP Client reads process environment with `{{$processEnv NAME}}`;
@@ -444,7 +407,8 @@ More (names modelled on the JetBrains HTTP Client and Postman; see the notes bel
   does not exist, so a file using `$processEnv` there will not need `--allow-env` but will here.
 - Only `$` followed by a letter starts a dynamic variable; `{{$ x}}`, `{{$x := 1}}` and references split over
   several lines are left untouched, as before.
-- For tests, `DynamicVariables(random, clock, env)` makes randomness, time and environment injectable.
+
+Implementation and security details: [design notes, Dynamic variables](design-notes.md#dynamic-variables).
 
 ## Request chaining
 
@@ -461,7 +425,7 @@ Requests run in file order. Once a **named** request has run, later requests can
 | `{{page.response.body.//a/@href}}` | XPath over an XML body (also `body.xpath:count(//a)`) |
 | `{{page.response.body.regex:id=(\d+)}}` | regex over the body: group 1 if present, else the whole match |
 
-The same expressions (via `ResponseExtractor` in `core`) are what assertions use (see Assertions).
+The same expressions are what assertions use (see Assertions).
 
 The body is decoded with the `charset` of the response's `Content-Type` (UTF-8 when absent or unknown). XPath is
 evaluated with secure processing (no DOCTYPE, no external access, no extension functions) and stops after 2 seconds,
@@ -475,6 +439,8 @@ values: a value that appears in an error text (for example the resolved URL in a
 
 Supported JSONPath subset: `$`, `.key`, `['key']`, `[index]`. Objects and arrays are returned as JSON text.
 Referencing a request that has not run, or a path that does not exist, is an error.
+
+Implementation and security details: [design notes, Request chaining](design-notes.md#request-chaining).
 
 ## Command line
 
@@ -505,9 +471,9 @@ A total line `Assertions: N passed, M failed, K not run` follows the run. With `
 
 **`--quiet`:** nothing per request is printed on stdout (no `###` heading, status, headers, body, `PASS`, `NOT RUN` or the `Assertions:` total). Failed assertions are printed to stderr as `FAIL ...`, request errors as `Error: ...`, and the summary line still appears, so a quiet run says what failed. Exit codes are unchanged.
 
-**`--fail-on-http-error`:** by default an HTTP error status is not a failure: a `404` or `503` response without a failed assertion exits `0`. With the option, any selected request answering status >= 400 fails the run (exit `1`, same as a failed assertion), even if its assertions pass. Each one is printed to stderr as `FAIL HTTP 503 from <request name or METHOD url> (--fail-on-http-error)`, also with `--quiet`. Like assertions, it applies to the selected requests only: prerequisites that run just to feed `{{name.response...}}` chaining are not judged (with `--request X`, a 404 from a prerequisite does not fail the run; without `--request` every request is selected). Redirects (3xx) are not errors. In reports the entry fails: JSON gets an optional `httpError` string (`"HTTP 503"`, `null` otherwise; reports without the field still parse) and `passed: false`; JUnit XML gets a `failure` with `type="HttpStatusFailure"` and a message such as `HTTP 503 from GET http://host/path`, next to the `AssertionFailure` one when assertions failed too. The decision is `RunReport.from(outcomes, failOnHttpError = true)` in `core`. Usage error (exit `2`) with `--list`.
+**`--fail-on-http-error`:** by default an HTTP error status is not a failure: a `404` or `503` response without a failed assertion exits `0`. With the option, any selected request answering status >= 400 fails the run (exit `1`, same as a failed assertion), even if its assertions pass. Each one is printed to stderr as `FAIL HTTP 503 from <request name or METHOD url> (--fail-on-http-error)`, also with `--quiet`. Like assertions, it applies to the selected requests only: prerequisites that run just to feed `{{name.response...}}` chaining are not judged (with `--request X`, a 404 from a prerequisite does not fail the run; without `--request` every request is selected). Redirects (3xx) are not errors. In reports the entry fails: JSON gets an optional `httpError` string (`"HTTP 503"`, `null` otherwise; reports without the field still parse) and `passed: false`; JUnit XML gets a `failure` with `type="HttpStatusFailure"` and a message such as `HTTP 503 from GET http://host/path`, next to the `AssertionFailure` one when assertions failed too. Usage error (exit `2`) with `--list`.
 
-**`--output FILE`:** after the run, the body of the selected request's response is written to `FILE` as the raw bytes received, byte for byte, with no decoding: images, PDFs and archives are saved intact, and a text response in a non-UTF-8 charset (e.g. ISO-8859-1) keeps its original encoding instead of being transcoded to UTF-8 (versions before this wrote decoded UTF-8). The client does not decompress, so a `Content-Encoding: gzip` / `br` response is saved still compressed, exactly as received. It needs exactly one selected request: use `--request`, or a file with one request; otherwise it is a usage error (exit `2`, discovered before anything is sent). Prerequisites are never written. Nothing is written when that request fails. It goes through the `OutputWriter` port (bytes) and `AtomicReportWriter`, which also implements `ReportWriter` for reports: parent folders are created, the write is atomic and a new file is owner-only (`rw-------`, POSIX) because bodies may contain secrets. `FILE` must differ from the input `.http` file and from the report paths (also through `..`, symlinks or case-only differences) and cannot be repeated or combined with `--list`. An unwritable output counts like an unwritable report (exit `3` on a passed run, `1` on a failed one).
+**`--output FILE`:** after the run, the body of the selected request's response is written to `FILE` as the raw bytes received, byte for byte, with no decoding: images, PDFs and archives are saved intact, and a text response in a non-UTF-8 charset (e.g. ISO-8859-1) keeps its original encoding instead of being transcoded to UTF-8 (versions before this wrote decoded UTF-8). The client does not decompress, so a `Content-Encoding: gzip` / `br` response is saved still compressed, exactly as received. It needs exactly one selected request: use `--request`, or a file with one request; otherwise it is a usage error (exit `2`, discovered before anything is sent). Prerequisites are never written. Nothing is written when that request fails. Parent folders are created, the write is atomic and a new file is owner-only (`rw-------`, POSIX) because bodies may contain secrets. `FILE` must differ from the input `.http` file and from the report paths (also through `..`, symlinks or case-only differences) and cannot be repeated or combined with `--list`. An unwritable output counts like an unwritable report (exit `3` on a passed run, `1` on a failed one).
 
 **`--var NAME=VALUE`:** the name is everything before the first `=` and must be non-empty without whitespace or braces; the value may be empty or contain `=`. Repeating a name is a usage error. Precedence: `--var` beats file variables (`@name = value` lines), which beat the environment file. The resolver prefers file variables over the variable map, so the CLI removes the overridden names from the file variables first; other file variables that mention them then see the `--var` value. Values are treated like any resolved variable: they are replaced by `{{name}}` in failure messages, and usage errors never echo the value. `--quiet` and `--var` cannot be combined with `--list`.
 
@@ -518,6 +484,8 @@ Run with `./gradlew :cli:run --args="requests.http --env dev"`, or build a launc
 
 `--request` also runs the named requests the selected one reads responses from (transitively), in file order, so chaining keeps working.
 
+Implementation and security details: [design notes, Command line](design-notes.md#command-line).
+
 ## Desktop app
 
 A standalone window for Windows, macOS and Linux: file editor, request list, environment picker, and a response viewer. See [desktop/README.md](../desktop/README.md).
@@ -525,7 +493,9 @@ A standalone window for Windows, macOS and Linux: file editor, request list, env
 - The environment choice is explicit: "none" (default; variables from the file only) or a name from the nearest `http-client.env.json`. A name that vanished is reported as an error, never replaced.
 - One session is kept per file, environment and loaded variables, so **Send** on a chained request does not resend a login that already ran (reused prerequisites are not listed). Editing the text does not drop it; changing the environment file does. **Forget responses** drops all sessions so the next Send reruns the chain. **Send all** and the selected request always run again.
 - Only one run at a time: while it runs, editing, saving, opening and creating files are refused. A run first saves the file; a save error stops the run and stays visible.
-- **Remembered between runs** (`settings.json` in the user config folder: `$XDG_CONFIG_HOME/http-client` or `~/.config/http-client` on Linux, `~/Library/Application Support/http-client` on macOS, `%APPDATA%\http-client` on Windows): the last opened file, the last environment per file (by real path), the window size, position and maximized state, and the 10 most recent files (**Recent files** button, most recent first, no duplicates). Only paths, names and geometry are stored, never variable values or secrets. On start the last file and its environment are reopened; a file that no longer exists, or an environment name that vanished, is skipped without an error, and a vanished recent file is removed from the list when clicked. A saved window position is used only if it is visible on a current screen (with no screen information it is dropped and the platform places the window), sizes are clamped to the screen; a maximized or fullscreen window is stored as the maximized flag (restored maximized) and keeps the last normal size, and the bogus (-32000, -32000) position Windows reports for a minimized window is ignored. Sizes and positions are device-independent pixels compared with AWT screen bounds: exact on single-DPI setups, not verified on mixed-DPI multi-monitor setups. Entries for files that are missing at start (deleted, or on an absent drive) are hidden from the **Recent files** list but stay stored (the list is still capped at 10), and the remembered environments are capped at the 50 most recently used files. Changes are saved in the background (debounced), saves are serialised so the newest state is always written last, and closing the window flushes them (waiting at most 2 s for a save in flight); a quit that bypasses the window close (macOS Cmd+Q, OS shutdown) can lose changes from the last 500 ms. The file is written atomically and owner-only on POSIX (a config folder created by the app is owner-only too); unknown fields are ignored. A corrupt, empty, foreign or newer-version file is ignored (defaults used, a warning shown) and is not overwritten silently: the next save first copies it to `settings.json.corrupt` (then `.corrupt-1`, `.corrupt-2`, ...; an existing backup is never overwritten and the newest 5 are kept). A file that cannot be read because of an I/O error (locked, permissions, flaky drive) is not treated as corrupt: it is never backed up or replaced, saving is skipped (and reported once) until it can be read again, and then the stored and in-memory settings are merged. A config folder that cannot be written is reported once on stderr and the app keeps working. Two app instances do not merge: the last one to save wins. A file given on the command line wins over the remembered one.
+- **Remembered between runs** (`settings.json` in the user config folder: `$XDG_CONFIG_HOME/http-client` or `~/.config/http-client` on Linux, `~/Library/Application Support/http-client` on macOS, `%APPDATA%\http-client` on Windows): the last opened file, the last environment per file (by real path), the window size, position and maximized state, and the 10 most recent files (**Recent files** button, most recent first, no duplicates). Only paths, names and geometry are stored, never variable values or secrets. On start the last file and its environment are reopened; a file that no longer exists, or an environment name that vanished, is skipped without an error, and a vanished recent file is removed from the list when clicked. A saved window position is used only if it is visible on a current screen (with no screen information it is dropped and the platform places the window), sizes are clamped to the screen; a maximized or fullscreen window is stored as the maximized flag (restored maximized) and keeps the last normal size, and the bogus (-32000, -32000) position Windows reports for a minimized window is ignored. Entries for files that are missing at start (deleted, or on an absent drive) are hidden from the **Recent files** list but stay stored (the list is still capped at 10), and the remembered environments are capped at the 50 most recently used files. Changes are saved in the background and flushed when the window closes; a quit that bypasses the window close (macOS Cmd+Q, OS shutdown) can lose changes from the last 500 ms. The file is owner-only on POSIX (a config folder created by the app is owner-only too). A corrupt, empty, foreign or newer-version file is ignored (defaults used, a warning shown) and is not overwritten silently: the next save first copies it to `settings.json.corrupt`. A file that cannot be read because of an I/O error (locked, permissions, flaky drive) is not treated as corrupt: it is never backed up or replaced, saving is skipped (and reported once) until it can be read again, and then the stored and in-memory settings are merged. A config folder that cannot be written is reported once on stderr and the app keeps working. Two app instances do not merge: the last one to save wins. A file given on the command line wins over the remembered one.
+
+Implementation and security details: [design notes, Desktop app](design-notes.md#desktop-app).
 
 ## IntelliJ plugin
 
