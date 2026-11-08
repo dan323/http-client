@@ -2,7 +2,7 @@
 
 SonarCloud analyses the code and shows coverage on every pull request. The analysis runs in the `quality` job of
 [ci.yml](../.github/workflows/ci.yml), right after `:quality-reports:qualityReports` has written the merged JaCoCo
-report, and is configured by [sonar-project.properties](../sonar-project.properties).
+report, and runs `./gradlew sonar` with the Sonar Gradle plugin, configured in the `sonar` block of [build.gradle.kts](../build.gradle.kts) (the plugin finds the sources, classes and libraries of each module itself).
 
 Why not SonarCloud's "Automatic Analysis": it analyses the sources without running the build, so it has no coverage
 data. The two modes cannot be active together; Automatic Analysis must be off for the project.

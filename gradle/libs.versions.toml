@@ -15,3 +15,4 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
 intellij-platform = { id = "org.jetbrains.intellij.platform", version.ref = "intellij-platform" }
 pitest = { id = "info.solidsoft.pitest", version.ref = "pitest-plugin" }
+sonarqube = { id = "org.sonarqube", version = "7.5.0.8588" }

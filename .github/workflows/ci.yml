@@ -122,11 +122,11 @@ jobs:
       - name: Quality reports
         if: needs.changes.outputs.code == 'true'
         run: xvfb-run -a ./gradlew :quality-reports:qualityReports --console=plain
-      # Analysis with coverage (sonar-project.properties). Skipped when the token is missing, for example on pull
+      # Analysis with coverage (the `sonar` block in build.gradle.kts). Skipped when the token is missing, for example on pull
       # requests from forks, where GitHub does not pass secrets.
       - name: SonarCloud analysis
         if: needs.changes.outputs.code == 'true' && env.SONAR_TOKEN != ''
-        uses: SonarSource/sonarqube-scan-action@v8
+        run: ./gradlew sonar --console=plain
       - name: Upload quality reports
         if: always() && needs.changes.outputs.code == 'true'
         uses: actions/upload-artifact@v7
