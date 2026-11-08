@@ -24,7 +24,7 @@
         <action id="httpclient.RunRequest" class="com.dan323.httpclient.intellij.RunRequestAction"
                 text="Run HTTP Request" description="Run the request at the caret">
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
-            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt ENTER"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt R"/>
         </action>
         <action id="httpclient.SelectEnvironment" class="com.dan323.httpclient.intellij.SelectEnvironmentAction"
                 text="Select HTTP Environment" description="Choose the environment for HTTP requests">
