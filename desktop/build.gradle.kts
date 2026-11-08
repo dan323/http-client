@@ -36,8 +36,10 @@ val installerVersion: String = run {
     val match = Regex("""0\.(\d+)\.(\d+)(?:-rc(\d+))?""").matchEntire(project.version.toString())
         ?: error("Cannot derive an installer version from '${project.version}': expected 0.MINOR.PATCH or 0.MINOR.PATCH-rcN")
     val (minor, patch, rc) = match.destructured
+    // A release candidate is at most 98, so the final release (99) always has a higher installer version than any rc.
+    require(rc.isEmpty() || rc.toInt() in 1..98) { "Release candidate number in '${project.version}' must be 1..98" }
     val candidate = rc.ifEmpty { "99" }.toInt()
-    require(candidate in 1..99 && patch.toInt() * 100 + candidate <= 65535) { "Version '${project.version}' is out of range for an installer" }
+    require(patch.toInt() * 100 + candidate <= 65535) { "Version '${project.version}' is out of range for an installer" }
     "1.$minor.${patch.toInt() * 100 + candidate}"
 }
 
