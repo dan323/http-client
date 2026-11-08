@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Desktop: the **Forget responses** button is now **Reset chain** (the name the IntelliJ plugin uses) and the buttons under the request list are compact so the label fits.
+- Desktop: the request list shows the HTTP method in the editor's method colour and bold.
+
+### Fixed
+- Desktop: the environment dropdown (and the recent files menu) opens directly under its button instead of far from it.
+
 ## [0.5.0] - 2026-11-08
 
 The first release with the release workflow: the CLI zip and tar and the IntelliJ plugin zip are attached to the GitHub release. Desktop installers are built and attached on a best-effort basis. `0.5.0-rc1` was a pre-release used to test that workflow, the Windows installer and the plugin.
