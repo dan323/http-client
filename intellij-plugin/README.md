@@ -9,7 +9,7 @@ It depends only on `com.intellij.modules.platform`, so it is meant to work in Co
 - `.http` file type with syntax highlighting (methods, URLs, header names, `{{variables}}`, comments,
   `###` separators, `< file` bodies).
 - Green run icon in the gutter on each request line.
-- **Run HTTP Request** (`Ctrl+Alt+Enter`, or the editor context menu) runs the request at the caret,
+- **Run HTTP Request** (editor context menu; the shortcut `Ctrl+Alt+Enter` is registered but does not work yet, see [known limitations](../docs/known-limitations.md)) runs the request at the caret,
   plus any requests it chains on (`{{login.response.body.$.token}}`).
 - **Select HTTP Environment** (editor context menu, or the picker in the tool window) picks variables from the nearest
   `http-client.env.json`, searching upward from the file. The default is "(none)" (variables from the file only); a name that
