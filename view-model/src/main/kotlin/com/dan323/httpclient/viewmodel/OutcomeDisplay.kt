@@ -74,7 +74,8 @@ sealed interface OutcomeDisplay {
     /** One evaluated assertion: [text] as written in the file; [detail] is the failure reason, null when it passed. */
     data class AssertionLine(val text: String, val passed: Boolean, val detail: String?) {
         /** `PASS body.id == 1`, `FAIL status == 200 -- expected 200, got 404`. */
-        val label: String get() = if (passed) "PASS $text" else "FAIL $text -- $detail"
+        val label: String
+            get() = if (passed) "PASS $text" else "FAIL $text" + (detail?.takeIf { it.isNotBlank() }?.let { " -- $it" } ?: "")
     }
 
     data class Error(

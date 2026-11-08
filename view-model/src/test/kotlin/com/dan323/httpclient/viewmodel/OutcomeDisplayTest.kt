@@ -106,6 +106,11 @@ class OutcomeDisplayTest {
         assertTrue(d.hasFailedAssertions)
     }
 
+    @Test fun failedAssertionWithoutDetailHasNoDanglingSeparator() {
+        assertEquals("FAIL a == 1", OutcomeDisplay.AssertionLine("a == 1", false, null).label)
+        assertEquals("FAIL a == 1", OutcomeDisplay.AssertionLine("a == 1", false, "  ").label)
+    }
+
     @Test fun noAssertionsMeansNoSummary() {
         val d = ok("GET http://h/\n", 200, "")
         assertNull(d.assertionSummary)
