@@ -5,6 +5,9 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- IntelliJ plugin: its own icon for `.http` files (light and dark variants) and for the plugin listing, instead of a generic server icon.
+
 ## [0.5.0-rc1] - 2026-11-07
 
 Release candidate: published as a GitHub pre-release to test the release workflow, the installers and the IntelliJ plugin (T21, T25) before 0.5.0.
