@@ -44,8 +44,8 @@ used automatically.
 
 `:desktop:createDistributable` produces an unpacked app image on any OS without extra tools.
 
-The installer version is derived from the project version (`0.5.0` becomes `1.5.99`, `0.5.0-rc1` becomes `1.5.1`; see
-`desktop/build.gradle.kts`), so a newer installer upgrades an older one (one exception: `0.5.1-rc99` and `0.5.1` both map to `1.5.199`, so the final installer would not count as an upgrade of the rc99 one). The runtime in the installers is a jlink-trimmed
+The installer version is derived from the project version (`0.5.0` becomes `1.5.99`, `0.5.0-rc1` becomes `1.5.1`, `1.0.0` becomes `2.0.99`; the major is shifted by one; see
+`desktop/build.gradle.kts`), so a newer installer upgrades an older one. The runtime in the installers is a jlink-trimmed
 JRE; `./gradlew :desktop:checkRuntimeModules` (run in CI) fails if the image lacks a module reported by `jdeps`.
 Modules loaded only through reflection or `ServiceLoader` may not be detected; add those to `extraRuntimeModules` in
 `desktop/build.gradle.kts` when found.
@@ -65,7 +65,7 @@ Known UI problems are listed in [../docs/known-limitations.md](../docs/known-lim
 - `SyntaxHighlighting.kt` — colors tokens from `core`'s shared `HttpLineLexer`.
 
 The installer version (`packageVersion` in `build.gradle.kts`) is separate from the project version,
-because installers require a major version of at least 1.
+because installers require a major version of at least 1; its major is the project's major plus one.
 
 ## Not yet implemented
 
