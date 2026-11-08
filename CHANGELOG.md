@@ -13,6 +13,7 @@ All notable changes to this project are documented here. The format follows
 - SonarCloud: `intellij-plugin/**` is excluded from the coverage requirement (its tests need an IDE and are not in the JaCoCo report); other analysis still covers it.
 
 ### Fixed
+- IntelliJ plugin: the default shortcut of **Run HTTP Request** is now `Ctrl+Alt+R`. `Ctrl+Alt+Enter` never ran the request in the default keymap because the built-in *Insert line above* (and *Quick action popup*) own it. Not yet tried in a running IDE.
 - Desktop: the environment dropdown (and the recent files menu) opens directly under its button instead of far from it.
 
 ## [0.5.0] - 2026-11-08

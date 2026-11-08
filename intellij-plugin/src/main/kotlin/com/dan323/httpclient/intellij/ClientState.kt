@@ -28,7 +28,7 @@ class ClientState(locator: EnvironmentLocator, maxSessions: Int = 16, newSession
             field = value
             synchronized(choiceListeners) { choiceListeners.toList() }.forEach { it() }
         }
-    @Volatile var lastReport: Report = Report(message = "Run a request with Ctrl+Alt+Enter.")
+    @Volatile var lastReport: Report = Report(message = "Run a request with Ctrl+Alt+R.")
         private set
     private val choiceListeners = mutableListOf<() -> Unit>()
     private val listeners = mutableListOf<(Report) -> Unit>()

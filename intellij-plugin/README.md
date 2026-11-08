@@ -9,7 +9,7 @@ It depends only on `com.intellij.modules.platform`, so it is meant to work in Co
 - `.http` file type with syntax highlighting (methods, URLs, header names, `{{variables}}`, comments,
   `###` separators, `< file` bodies).
 - Green run icon in the gutter on each request line.
-- **Run HTTP Request** (editor context menu; the shortcut `Ctrl+Alt+Enter` does not work in the default keymap, see [known limitations](../docs/known-limitations.md) for the cause and workarounds) runs the request at the caret,
+- **Run HTTP Request** (editor context menu, or `Ctrl+Alt+R`; the earlier default `Ctrl+Alt+Enter` clashed with the built-in *Insert line above*, see [known limitations](../docs/known-limitations.md)) runs the request at the caret,
   plus any requests it chains on (`{{login.response.body.$.token}}`).
 - **Select HTTP Environment** (the picker in the header of every `.http` editor, or the editor context menu) picks variables from the nearest
   `http-client.env.json`, searching upward from the file. The default is "(none)" (variables from the file only); a name that
@@ -71,8 +71,9 @@ error), chaining, session reuse and its reset on edit and **Reset chain**, error
 running" balloon, and the reset of the environment choice on restart. Requests also run, so the IDE's
 `kotlinx-serialization` is compatible with what `adapters` was compiled against.
 
-Known problems: `Ctrl+Alt+Enter` does not run the request in the default keymap (see
-[known limitations](../docs/known-limitations.md)); assertion results are not shown (T22).
+Known problems: assertion results are not shown (T22). The default shortcut was changed from `Ctrl+Alt+Enter`
+(clashed with *Insert line above*) to `Ctrl+Alt+R`; this change has not been tried in a running IDE yet
+(see [known limitations](../docs/known-limitations.md)).
 
 Not verified: a real Community install, and the 2026.1 baseline (build 261, the `since-build`) itself: the plugin
 was run on 2026.3 only. It does not load in 2025.3 (build 253) by design.
