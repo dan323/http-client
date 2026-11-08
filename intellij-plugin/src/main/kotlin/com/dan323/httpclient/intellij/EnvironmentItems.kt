@@ -30,3 +30,8 @@ fun selectedIndex(items: List<EnvironmentItem>, current: EnvironmentChoice): Int
 /** The entry that shows [current]. */
 fun selectedItem(items: List<EnvironmentItem>, current: EnvironmentChoice): EnvironmentItem =
     items[selectedIndex(items, current)]
+
+/** Tooltip for the picker: the read error when there is one, else a warning when [current] is not among [names]. */
+fun environmentHint(names: List<String>?, current: EnvironmentChoice, error: String? = null): String? =
+    error ?: if (names != null && current is EnvironmentChoice.Named && current.name !in names)
+        "'${current.name}' is not defined for this file; running will fail until you pick another" else null

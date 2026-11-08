@@ -36,4 +36,16 @@ class EnvironmentItemsTest {
         val cur = EnvironmentChoice.Named("dev")
         assertEquals("dev", selectedItem(environmentItems(listOf("dev"), cur), cur).label)
     }
+
+    @Test fun hintWarnsOnlyForAKnownMissingName() {
+        val cur = EnvironmentChoice.Named("old")
+        assertEquals(null, environmentHint(listOf("old"), cur))
+        assertEquals(null, environmentHint(null, cur))
+        assertEquals(null, environmentHint(listOf("dev"), EnvironmentChoice.None))
+        assertEquals(true, environmentHint(listOf("dev"), cur)!!.contains("'old' is not defined"))
+    }
+
+    @Test fun readErrorWinsOverTheMissingWarning() {
+        assertEquals("boom", environmentHint(listOf("dev"), EnvironmentChoice.Named("old"), "boom"))
+    }
 }
