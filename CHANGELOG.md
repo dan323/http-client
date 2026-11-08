@@ -5,6 +5,9 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Docs: `docs/features.md` is the user reference again (with a table of contents); implementation and security detail (class names, atomic-write mechanics, residual races, history layout, Public Suffix List update procedure) moved to the new `docs/design-notes.md`, same section names. Docs only; no behaviour change.
+
 ## [0.5.0] - 2026-11-08
 
 The first release with the release workflow: the CLI zip and tar and the IntelliJ plugin zip are attached to the GitHub release. Desktop installers are built and attached on a best-effort basis. `0.5.0-rc1` was a pre-release used to test that workflow, the Windows installer and the plugin.
