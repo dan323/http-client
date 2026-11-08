@@ -18,7 +18,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** One request's result as shown in the response window (reused, response or error). */
 data class Section(val display: OutcomeDisplay)
 
-data class Report(val message: String? = null, val environment: String? = null, val sections: List<Section> = emptyList())
+/** Nothing to show yet (no message, environment or section): the tool window then shows its how-to-run hint. */
+data class Report(val message: String? = null, val environment: String? = null, val sections: List<Section> = emptyList()) {
+    val isEmpty: Boolean get() = message == null && environment == null && sections.isEmpty()
+}
 
 /**
  * The IDE-independent state behind [HttpClientService]: the environment choice, the last report and its listeners, the
@@ -31,7 +34,7 @@ class ClientState(locator: EnvironmentLocator, maxSessions: Int = 16, newSession
             field = value
             synchronized(choiceListeners) { choiceListeners.toList() }.forEach { it() }
         }
-    @Volatile var lastReport: Report = Report(message = "Run a request with Ctrl+Alt+R.")
+    @Volatile var lastReport: Report = Report()
         private set
     private val choiceListeners = mutableListOf<() -> Unit>()
     private val listeners = mutableListOf<(Report) -> Unit>()

@@ -313,6 +313,7 @@ Works in any IntelliJ-based IDE, including Community (it depends only on the pla
 
 - Open a `.http` file, click the green gutter icon next to the request you want to run (the icon runs its own request wherever the caret is), or put the caret in a request and use *Run HTTP Request* in the editor context menu. The shortcut is **Ctrl+Alt+R**.
 - *Select HTTP Environment* in the context menu picks the environment from `http-client.env.json`.
+- Before the first run the **HTTP Response** tool window explains how to run a request (gutter icon, *Run HTTP Request*, and the shortcut as bound in the keymap). Its **Reset chain** and **Cancel** buttons have icons and tooltips.
 - Results appear in the **HTTP Response** tool window. Chained prerequisites run first, as in the CLI.
 
 - The environment choice is explicit and starts as "(none)" (variables from the file only); pick `dev` etc. in the *Select HTTP Environment* popup or the environment picker in the header of the `.http` editor (as in JetBrains' HTTP Client; it applies to runs from every file). A name that no longer exists is an error, never another environment. The choice is kept per project until the IDE restarts.

@@ -12,6 +12,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 - Desktop README: the "Not yet implemented" list no longer claims that persisting the window, last file and environment is missing (it has been implemented).
+- IntelliJ plugin: the "HTTP Response" tool window's empty state now says how to run a request (gutter icon, right-click *Run HTTP Request*, and the shortcut as bound in the keymap) instead of only naming `Ctrl+Alt+R`. **Reset chain** and **Cancel** have icons (`AllIcons.Actions.Refresh` and `Suspend`, the latter the same as the title-bar action). Unverified by hand in an IDE. The hint is plain text, not a clickable link.
 - Docs: `docs/features.md` is the user reference again (with a table of contents); implementation and security detail (class names, atomic-write mechanics, residual races, history layout, Public Suffix List update procedure) moved to the new `docs/design-notes.md`, same section names. Docs only; no behaviour change.
 - Desktop: the **Forget responses** button is now **Reset chain** (the name the IntelliJ plugin uses) and the buttons under the request list are compact so the label fits.
 - Desktop: the request list shows the HTTP method in the editor's method colour and bold.
