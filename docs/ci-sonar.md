@@ -15,3 +15,5 @@ One-time setup (repository owner):
 
 Until the secret exists the analysis step is skipped, so nothing else changes. Pull requests from forks have no
 access to secrets and also skip it. Documentation-only pull requests skip the whole job's steps, as for the tests.
+
+`intellij-plugin/**` is excluded from coverage only (`sonar.coverage.exclusions` in the root `build.gradle.kts`): the module is not in the merged JaCoCo report because its tests need an IDE, so editing plugin code must not be blocked by a coverage gate. Bug, smell and security analysis still covers it.

@@ -41,6 +41,7 @@ cover it (see "Sources and limits"). Status: **Partial** (accepted with limits),
 | `$shared` in the env file | shared variables | Not supported | Not read as shared variables; it appears as a selectable environment named `$shared`. |
 | `SSLConfiguration` in env files | client certificates | Not supported | Not read as ordinary variables: only JSON primitives are kept, nested objects are dropped. No client certificates. |
 | "(none)" environment | n/a | Different | Means none: no fallback; a vanished name is an error ([features.md](features.md#environments)). |
+| Environment picker (IDE plugin) | selector in the `.http` editor | Same place | The picker sits in the header of each `.http` editor; the choice is per project until the IDE restarts and applies to runs from every file. |
 | Env value containing `{{...}}` | unverified | Different | Sent as is, not expanded. |
 | `{{name.response.body.$.x}}` | yes | Partial | JSONPath subset, no filters; JetBrains' extent is unverified ([features.md](features.md#request-chaining)). |
 | `{{$timestamp}}`, `{{$randomInt}}` | yes | Partial | Offset syntax and `$randomInt a b` are ours; `$randomInt` is 0 to 999 here (their docs say 0 to 1000) ([features.md](features.md#dynamic-variables)). |

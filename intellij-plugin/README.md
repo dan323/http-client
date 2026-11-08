@@ -11,12 +11,12 @@ It depends only on `com.intellij.modules.platform`, so it is meant to work in Co
 - Green run icon in the gutter on each request line.
 - **Run HTTP Request** (editor context menu; the shortcut `Ctrl+Alt+Enter` does not work in the default keymap, see [known limitations](../docs/known-limitations.md) for the cause and workarounds) runs the request at the caret,
   plus any requests it chains on (`{{login.response.body.$.token}}`).
-- **Select HTTP Environment** (editor context menu, or the picker in the tool window) picks variables from the nearest
+- **Select HTTP Environment** (the picker in the header of every `.http` editor, or the editor context menu) picks variables from the nearest
   `http-client.env.json`, searching upward from the file. The default is "(none)" (variables from the file only); a name that
   no longer exists is an error. The choice is kept per project until the IDE restarts.
 - Responses of earlier requests (a login) are remembered per file and environment; any edit to the file, or deleting or moving it,
   drops them, and **Reset chain** in the tool window forgets them all. One request runs at a time.
-- **HTTP Response** tool window with status, timing, headers and the body (JSON pretty-printed).
+- **HTTP Response** tool window (with the **Reset chain** button) with status, timing, headers and the body (JSON pretty-printed).
 
 See [../docs/features.md](../docs/features.md) for the `.http` syntax, variables and chaining.
 
@@ -39,9 +39,10 @@ Install the zip via *Settings → Plugins → ⚙ → Install Plugin from Disk�
   The PSI is flat (a sequence of tokens); request structure comes from `core`'s `HttpFileParser`.
 - `RunLineMarker.kt` — gutter run icons.
 - `Actions.kt` — run and environment actions.
+- `EnvironmentEditorHeader.kt` — the environment picker shown in the header of `.http` editors (an `EditorNotificationProvider`).
 - `ClientState.kt` — IDE-independent state: environment choice, last report and listeners, the run guard, text-based session invalidation, on top of the shared `RunController`.
 - `HttpClientService.kt` — project service wrapping `ClientState`; forgets files on VFS delete/move and closes the `SessionFactory` when the project is disposed.
-- `EnvironmentItems.kt` — the picker entries for the environment choice.
+- `EnvironmentItems.kt` — the picker entries for the environment choice (used by the editor header and the popup action).
 - `ResponseToolWindowFactory.kt` — the response panel; JSON colouring and status/duration formatting come from the shared `view-model` module (its kotlinx-serialization is excluded from the plugin zip, the IDE provides it).
 - `src/main/resources/META-INF/plugin.xml` — registrations.
 
