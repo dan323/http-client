@@ -21,6 +21,10 @@ class HttpLineLexerTest {
         )
     }
 
+    @Test fun `QUERY is highlighted as a method`() {
+        assertEquals(listOf(METHOD to "QUERY", URL to "/s"), kinds("QUERY /s\n").take(2))
+    }
+
     @Test fun `a rejected protocol word gets no method token, like an unknown method`() {
         val text = "GRPC localhost:50051/x\nGTE http://h/y\n"
         val methods = HttpLineLexer.tokenize(text).filter { it.kind == METHOD }

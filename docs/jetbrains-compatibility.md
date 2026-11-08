@@ -22,7 +22,7 @@ cover it (see "Sources and limits"). Status: **Partial** (accepted with limits),
 
 | Feature | JetBrains HTTP Client | Status | What happens here |
 |---|---|---|---|
-| Custom methods | via quick fix / settings | Different | Unknown method word: parse error, no way to register one ([features.md](features.md#http-files)). |
+| Custom methods | via quick fix / settings | Different | Unknown method word: parse error, no way to register one ([features.md](features.md#http-files)). `QUERY` is built in here; the JetBrains pages do not list it as built in, so there it is added as a custom method. |
 | `HTTP/2`, `HTTP/1.1` after the URL | selects the version | Partial | `HTTP/1.1`, `HTTP/2` are stripped and ignored (the JDK negotiates); `HTTP/2 (Prior Knowledge)` is not stripped and ends up in the URL. |
 | `GRAPHQL`, `WEBSOCKET`, `GRPC` requests | yes (plugins for some) | Not supported | Parse error naming the line; nothing is sent. |
 | `import` / `run` directives | yes | Not supported | Parse error: the line is read as an unknown method. Chaining inside one file works. |
