@@ -1,6 +1,6 @@
 # Design notes
 
-Implementation and security detail behind [features.md](features.md), the user reference. The sections have the same names as there. Nothing here is needed to write a `.http` file; it explains how things work and where the limits come from. Class names are those of the `core` and `adapters` modules (see [AGENTS.md](../AGENTS.md)).
+How the behaviour described in [features.md](features.md) is implemented, and why. The sections have the same names. Class names are from `core` and `adapters` (see [AGENTS.md](../AGENTS.md)).
 
 ## Contents
 
@@ -18,199 +18,77 @@ Implementation and security detail behind [features.md](features.md), the user r
 - [Command line](#command-line)
 - [Desktop app](#desktop-app)
 
-Where a passage below is quoted from the old features.md, it is shown as a block quote; the rest is paraphrase that points at the code.
-
 ## `.http` files
 
-Security of `< path` and `<@ path` reads (the user-facing rules are in [features.md](features.md#http-files)):
-
-> Residual risk: the file is opened without following a final symlink and re-verified, but someone with write access inside an allowed folder could still race the check by swapping a parent directory for a symlink.
+`< path` and `<@ path` reads go through `FileAccessPolicy`: the path is normalised (`..`), symlinks are resolved and the result must lie in the `.http` file's folder or an allowed root. The file is opened without following a final symlink and the real path is checked again. The JDK has no `openat`, so one race remains: someone with write access inside an allowed folder can swap a parent directory for a symlink between the check and the open.
 
 ## Variables
 
 ### Editor diagnostics (analysis)
 
-Original description of the API (the features page keeps the table of codes and the rules for what is scanned):
+`VariableAnalysis` (`core`, pure and IO-free) works on the text and the names of the environment variables only; values never enter the analysis (pass the union of all environments for a lenient editor, nothing for "no environment").
 
-> `VariableAnalysis` (`core`, pure and IO-free) checks the `{{...}}` of a `.http` text without running anything, for the
-> editors (desktop and plugin use it in later tasks). `VariableAnalysis.analyze(text, environmentNames)` takes the
-> text and the *names* of the available environment variables (values never enter the analysis; pass the union of
-> all environments for a lenient editor, nothing for "no environment") and offers:
->
-> - `diagnostics`: `Diagnostic(code, severity, message, range)`; `range` is a `SourceRange` in UTF-16 chars (offset, length,
-> 0-based line and column; tabs and CRLF count as in the text). Messages name variables and requests, never values.
-> - `knownVariablesAt(offset)`: file variables defined above, environment variables, `name.response.` prefixes of the
-> requests above, and the dynamic variable templates (`$uuid`, `$timestamp`, `$random.integer(from, to)`, `$env.NAME`, ...).
-> - `findUsages(name)`, `findVariableUsages`, `findRequestUsages`, `occurrenceAt(offset)`: every use, `@x =` definition,
-> `# @name` declaration and `{{name.response...}}` prefix, each range covering exactly the name (for rename).
-
-- The run-time rules are implemented by `VariableResolver`; the analysis shares its reference pattern and lookup order. A consistency test runs `samples/` and compares with run time.
-- Analysis time is linear in the text size.
+- `analyze(text, environmentNames)` returns `Diagnostic(code, severity, message, range)`; a `SourceRange` is in UTF-16 chars (offset, length, 0-based line and column).
+- `knownVariablesAt(offset)` lists file variables above, environment variables, `name.response.` prefixes of earlier requests and the dynamic variable templates. `findUsages`, `findVariableUsages`, `findRequestUsages` and `occurrenceAt` return ranges covering exactly the name (for rename).
+- It shares the reference pattern and lookup order with `VariableResolver`; a consistency test runs `samples/` and compares with run time. A file variable beats the environment in request text, and in a value only when defined above it.
+- A file that does not parse still gets analysed: each rejected line becomes a `parse-error` and is left out without shifting the other offsets. A file with more than 50 bad lines reports only parse errors. The request that failed has no `name.response.` prefix and its references are not scanned.
+- A response reference inside a file variable value is only checked for an existing request name, because the request that uses the variable is not known. Duplicate request names resolve to the latest response at run time. Analysis is linear in the text size.
 
 ### Request settings
 
-Original wording of the introduction:
-
-> The parser records them on the request
-> (`RequestTemplate.settings`); the following are honoured per request by the executor (carried as `HttpRequest.options`)
-
-Other details:
-
-- Interrupting the calling thread cancels the in-flight request and fails with a `CancellationException` (the interrupt flag is kept).
-- The redirect credential handling is the same on every JDK because, in the original words: the JDK client is never left to follow redirects, so the credential handling is the same on every JDK
-- `JdkHttpExecutor` sends with `Redirect.NEVER` clients (redirects are followed by `RedirectFollower`), reusing one derived client per proxy when the injected client needs one or a request names an `@proxy`, and copies the injected client's connect timeout, SSL, authenticator, cookie handler, executor and HTTP version; request priority cannot be copied.
+The parser stores settings on `RequestTemplate.settings`; the executor honours them through `HttpRequest.options`. `JdkHttpExecutor` always sends with `Redirect.NEVER` clients and follows redirects itself with `RedirectFollower`, so credential stripping does not depend on the JDK version. It reuses one derived client per proxy and copies the injected client's connect timeout, SSL, authenticator, cookie handler, executor and HTTP version (request priority cannot be copied). Interrupting the calling thread cancels the in-flight request with a `CancellationException` and keeps the interrupt flag.
 
 ### Cookie jar
 
-- The session that owns the jar is the `RequestSession`; the jar itself is `CookieJar` in `core`. In the desktop app and plugin the sessions are kept by the shared `RunController`. Original fragments: `Each `RequestSession` (one CLI run;`, `kept by the shared `RunController` so when`, `owns an in-memory `CookieJar` in `core``.
-- Redirects:
-
-> The JDK
-> client is never asked to follow redirects (its forwarding of such headers varies by JDK version; `JdkHttpExecutor` itself follows
-> through the same code), so this holds on every JDK.
-
-- Public Suffix List (the user page only says the list is a snapshot):
-
-> Public Suffix List: `core` stays free of third-party libraries, so the list is a bundled classpath resource,
-> `core/src/main/resources/com/dan323/httpclient/core/public_suffix_list.txt` (ICANN and private sections, rules only; the first
-> line records the list version and commit), read by `PublicSuffixList` (wildcard and exception rules supported; a name with no
-> matching rule counts as a one-label suffix, as in the PSL algorithm). The list is a snapshot and goes stale as registries change;
-> to update it, download `https://publicsuffix.org/list/public_suffix_list.dat`, drop comment lines (`//`), blank lines and
-> anything after whitespace, put a header line with the new `VERSION` and `COMMIT` on top, replace the file and run `./gradlew :core:test`.
-
-- Library limitation:
-
-> `@no-cookie-jar` cannot disable a `CookieHandler` configured
-> on an `HttpClient` injected into `JdkHttpExecutor` (that handler still sends and stores on its own).
+- `RequestSession` owns the in-memory `CookieJar` (`core`). In the desktop app and plugin the shared `RunController` keeps one session per file, environment and loaded variables.
+- The session follows redirects one hop at a time and tells the executor not to follow any, which is why `Set-Cookie` on a `302` is stored and why `Cookie`, `Authorization` and `Proxy-Authorization` handling is the same on every JDK. `JdkHttpExecutor` follows through the same code.
+- `Path` is matched on the raw, undecoded path. `Max-Age` takes digits with an optional `-` (`+5` or text is ignored; extreme values saturate). `Expires` uses lenient RFC 6265 parsing (`21 Oct 2015`, `21-Oct-2015`, 2-digit years, asctime).
+- `@no-cookie-jar` cannot disable a `CookieHandler` configured on an `HttpClient` injected into `JdkHttpExecutor`; that handler still sends and stores on its own.
+- Public Suffix List: `core` has no third-party dependencies, so the list is a classpath resource, `core/src/main/resources/com/dan323/httpclient/core/public_suffix_list.txt` (ICANN and private sections, rules only; the first line records the list version and commit), read by `PublicSuffixList`. Wildcard and exception rules are supported and a name with no matching rule counts as a one-label suffix, as in the PSL algorithm. To update: download `https://publicsuffix.org/list/public_suffix_list.dat`, drop comment lines (`//`), blank lines and anything after whitespace, put a header line with the new `VERSION` and `COMMIT` on top, replace the file and run `./gradlew :core:test`.
 
 ### Assertions
 
-Original bullet on sessions and outcomes (the features page keeps the behaviour in one bullet):
-
-> - `RequestSession` is safe for concurrent use: runs are serialised (one request at a time per session) and
-> interrupting the running thread stops `runAll` without sending the queued requests.
-> - `RequestSession.runAll` evaluates them and attaches one `AssertionResult` (passed, expected, actual, message) each to
-> `RunOutcome.Success.assertions`. A request that throws reports `RunOutcome.Failure.assertionsNotRun`.
-> `runChained` (single-request runs) evaluates only the requested request; its prerequisites run for their responses
-> and their assertions are neither evaluated nor reported. Reused dependencies are not re-asserted.
+`RequestSession.runAll` evaluates assertions and attaches one `AssertionResult` (passed, expected, actual, message) to each `RunOutcome.Success`; a request that throws reports `RunOutcome.Failure.assertionsNotRun`. `runChained` (single-request runs) evaluates only the requested request, and reused dependencies are not re-asserted. A session is safe for concurrent use: runs are serialised, and interrupting the running thread stops `runAll` without sending the queued requests. Numbers are `BigDecimal` (`-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d{1,4})?`).
 
 ### Run reports
 
-> `RunReport.from(outcomes)` (in `core`) builds a pure summary of a run: one entry per request (name, method, URL as
-> written in the file, status, duration, assertion results, assertions not run, error, optional `httpError`) plus totals
-> and an overall pass/fail. A request passes when it completed and all its assertions passed; when the run is built with
-> `failOnHttpError` (CLI `--fail-on-http-error`) it also needs a status below 400, otherwise the entry carries
-> `httpError` (`"HTTP 503"`). Exporters, both in `adapters`:
-> `JUnitXmlReport` (plain string building with XML escaping; illegal XML characters are dropped) and `JsonRunReport`
-> (kotlinx-serialization, also parses a report back). Files are written through the `ReportWriter` port (`core`),
-> implemented by `AtomicReportWriter` (`adapters`).
-
-Other fragments:
-
-- The pass/fail decision is `RunReport.passed`.
-- Original JSON wording: Top-level `version` (currently 1); `JsonRunReport.parse` rejects a newer version. `passed` and `totals` (and each
-entry's `passed`) are derived: written for consumers, ignored and recomputed by `parse`.
-
-Report building is `RunReport.from(outcomes)` in `core` (pure); exporters are `JUnitXmlReport` (plain string building with XML escaping) and `JsonRunReport` (kotlinx-serialization) in `adapters`, written through the `ReportWriter` port by `AtomicReportWriter`.
+`RunReport.from(outcomes, failOnHttpError)` (`core`) is pure; `RunReport.passed` decides pass or fail. Exporters are in `adapters`: `JUnitXmlReport` (plain string building with XML escaping; illegal XML characters are dropped; tabs and line breaks in attributes become character references) and `JsonRunReport` (kotlinx-serialization; `parse` reads a report back, rejects a newer `version` and recomputes `passed` and `totals`). Files go through the `ReportWriter` port, implemented by `AtomicReportWriter` (temp file and move, independently per report; a replaced report keeps its permissions).
 
 ### Saved responses
 
-- Confinement is `FileAccessPolicy` (the same policy as `< path` bodies: the `.http` file's folder plus the allowlist). Original fragment: ``FileAccessPolicy`:`
-- Ports and adapters: The port is `ResponseSaver` (`core`), `LocalResponseSaver` (`adapters`). Results are carried by `RunOutcome.Success.saveError` and `savedTo`; original wording:
-
-> `RunOutcome.Success.saveError` holds the
-> message (names the path, hides substituted values, never contains the body) and `savedTo` the path written.
-
-- The path shown after a save is `RunOutcome.Success.savedTo` (also the CLI line).
-- Atomic publishing and the residual race, original bullet:
-
-> - The temp file (random name, owner-only) is written in the final, already verified folder; `>>!` is one atomic rename
-> inside that folder, and `>>` hard-links the finished temp file to the first free name (a link fails if the name exists,
-> so nothing is clobbered and no empty or partial file is ever visible), then removes the temp name (without hard links a
-> plain move without replace is used). Right before publishing, the folder's real path must still be the verified one
-> and the temp file must be in it. If a folder was swapped for a symlink after validation, the source (named by its random
-> temp name) does not exist at the new location, so the rename/link fails and nothing outside is touched, also for `>>!`.
-> Residual race (same family as `< path` reads; the JDK has no openat): an attacker who can write inside the allowed
-> folders, can observe the random temp name and swaps the folder in the microseconds between the last check and the
-> syscall, while placing a file of that name at the new location, can still make one save land outside; that is detected
-> afterwards, a `>>` file is removed, a `>>!` replacement cannot be restored and the error says so.
-
-- Application point, original bullet:
-
-> - Bare `RequestSession.run` does not save or link; `>>`/`>>!`/`<>` are applied by `runAll`/`runChained`, once per request.
-
-- Desktop app history, original fragment: `; the desktop  app passes a `FileHistoryStore` like the CLI and the plugin, so `<>` links are recorded there too. ... recorded there too.` (it passes a `FileHistoryStore` like the CLI and the plugin).
-- `<>` links, original paragraph:
-
-> `<> path` links: JetBrains rewrites the `.http` file to add a `<>` line per stored response. This tool deliberately
-> never edits your `.http` file. The `<> path` text is kept as written (`RequestTemplate.responseLinks`, the path itself
-> is not used); instead, after a run of a request that has a `<>` line, its latest response is recorded in the history
-> index (`HistoryStore.recordLinked`), and `ResponseLinks.latest(store, httpFile, request)` returns the latest stored
-> response of that request (`HistoryStore.latestLinked`). A request is identified by its `# @name` (duplicate names
-> share one link: the newest run wins) or, unnamed, by the line where it starts (so adding lines above it breaks the
-> link). Recording is opt-in: `SessionFactory(history = FileHistoryStore())` (or any `HistoryStore`, with an injectable
-> root); the CLI and the plugin pass it, so the response of a linked request lands in `.http-history/`. The history keeps
-> the newest 50 runs per file, and additionally the newest record of every `<>` key even when it is older than that, so a
-> link keeps resolving however often other requests run (at most one extra run folder per distinct linked request; an
-> entry whose request lost its `<>` line or was removed stays until you delete it from `.http-history/`). Only a record whose body can still be read
-> protects its key from pruning. Entries written
-> before keys existed carry no key and are pruned as ordinary runs. Opening the linked response in
-> the desktop app or the plugin is not implemented yet.
+- Ports: `ResponseSaver` (`core`), `LocalResponseSaver` (`adapters`). The path is confined by the same `FileAccessPolicy` as `< path` bodies. Results are `RunOutcome.Success.savedTo` and `saveError`.
+- Publishing: the temp file (random name, owner-only) is written in the final, already verified folder. `>>!` is one atomic rename inside that folder. `>>` hard-links the finished temp file to the first free name (the link fails if the name exists, so nothing is clobbered and no empty or partial file is visible) and then removes the temp name; without hard links it uses a plain move without replace. Concurrent `>>` saves of one name end up in different files.
+- Race handling: right before publishing, the folder's real path must still be the verified one and the temp file must be in it. If the folder was swapped for a symlink, the temp name does not exist at the new location, so the rename or link fails and nothing outside is touched. The residual race needs an attacker who can write inside an allowed folder, observe the random temp name and swap the folder between the last check and the syscall while placing a file of that name at the new location. It is detected afterwards: a `>>` file is removed, a `>>!` replacement cannot be restored and the error says so.
+- `RequestSession.run` alone does not save or link; `runAll` and `runChained` apply `>>`, `>>!` and `<>` once per request. Cancellation inside a save or link is rethrown (it stops the session) and is not a save error; runtime link failures become `linkError`.
+- `<>` links: `RequestTemplate.responseLinks` keeps the text, but the path is not used. After a run, `HistoryStore.recordLinked` stores the response under the request's key (its `# @name`, or its start line); `ResponseLinks.latest(store, httpFile, request)` returns it via `HistoryStore.latestLinked`. Recording is opt-in through `SessionFactory(history = ...)`, which the CLI, plugin and desktop app pass as a `FileHistoryStore`. Pruning keeps the newest 50 runs plus the newest readable record of every link key, at most one extra run folder per linked request; a record whose body cannot be read does not protect its key. Entries written before keys existed are ordinary runs.
 
 ### Run history store
 
-Original section, in full (the features page keeps retention, truncation, the secrets warning and `.gitignore` advice):
+`HistoryStore` (port in `core`: `record`, `list`, `read`, `readResponse`, `latestResponse` by request name, `recordLinked`, `latestLinked`) is implemented by `FileHistoryStore` (`adapters`) in `.http-history/<file name>/` next to the `.http` file; the folder is injectable (`FileHistoryStore.underRoot(dir)` or any `(Path) -> Path`).
 
-> `HistoryStore` (port in `core`) remembers past runs of a `.http` file: `record` (a `RunReport` plus the response of
-> each request), `list` (newest first), `read`, `readResponse` and `latestResponse` (by request name). Only `<>` links use it
-> today (see "Saved responses"); the CLI, desktop app and plugin do not record ordinary runs yet. `FileHistoryStore` (`adapters`)
-> keeps it in `.http-history/<file name>/` next to the `.http` file; the folder is injectable
-> (`FileHistoryStore.underRoot(dir)` for a shared root, or any `(Path) -> Path`).
->
-> Layout: one folder per run, named by its id (`20261106T101500123Z-n0000-a1b2c3d4`: UTC time, a sequence number within the millisecond so equal-time runs keep their recorded order, random suffix; ids from before the sequence existed stay readable and sort first), holding `run.json`
-> (version, id, timestamp, the report in the `JsonRunReport` format, and per response: status, headers, duration,
-> body size, `bodyTruncated`) and `<index>.body` (raw bytes). `run.json` is written last; a folder without it is
-> incomplete and ignored (removed after an hour). There is no shared index file, so two processes recording at once
-> cannot lose each other's runs; all files are written atomically.
->
-> - Retention: the newest 50 runs per file are kept (`maxRuns`); older ones are deleted when recording.
-> - Bodies are stored in full up to 5 MB (`maxBodyBytes`); larger ones are cut, with `bodyTruncated = true` and the real
-> size in `originalBodySize`.
-> - Confinement: only the history folder is written. Body files are named by index, never by request name; the `.http`
-> file name used as folder name is sanitized (separators, Windows-illegal characters, `.`/`..`, reserved names such
-> as `CON`, trailing dots, length over 80); run ids are validated before use; symlinked entries are not followed.
-> - Corrupt, foreign or newer-version entries are skipped with a warning, never fatal.
-> - Secrets: stored responses are raw (tokens, cookies, personal data). On POSIX, folders are `rwx------` and files
-> `rw-------` from creation (Windows uses the default ACLs). Add `.http-history/` to your `.gitignore` (this repository
-> does) and never share the folder.
+- Layout: one folder per run, named by its id, e.g. `20261106T101500123Z-n0000-a1b2c3d4` (UTC time, a sequence number within the millisecond so equal-time runs keep their order, random suffix; older ids without the sequence stay readable and sort first). It holds `run.json` (version, id, timestamp, the report in `JsonRunReport` format, per response status, headers, duration, body size, `bodyTruncated`, `originalBodySize`) and `<index>.body` (raw bytes).
+- Atomicity: all files are written atomically and `run.json` last; a folder without it is incomplete, ignored and removed after an hour. There is no shared index file, so two processes recording at once cannot lose each other's runs.
+- Confinement: only the history folder is written. Body files are named by index, never by request name. The `.http` file name used as folder name is sanitised (separators, Windows-illegal characters, `.`/`..`, reserved names such as `CON`, trailing dots, length over 80), run ids are validated before use and symlinked entries are not followed.
+- Limits: `maxRuns` 50, `maxBodyBytes` 5 MB. Corrupt, foreign or newer-version entries are skipped with a warning.
+- Permissions: on POSIX folders are `rwx------` and files `rw-------` from creation; Windows uses the default ACLs.
 
 ### Dynamic variables
 
-- Library users and tests, original bullets:
-
-> - Library users: `SystemEnvironmentVariables(setOf("NAME"))` from `adapters`; `core` callers that pass nothing
-> see no variables (the `EnvironmentVariables` port).
-
-> - For tests, `DynamicVariables(random, clock, env)` makes randomness, time and environment injectable.
-
-- Random generator, original wording: `$uuid`, `$random.uuid` and the `$random.*` family use a cryptographically strong
-  generator (`SecureRandom`), which is stronger than we know JetBrains to guarantee; this was our choice, not
-  something taken from JetBrains. (`SecureRandom`, stronger than we know JetBrains to guarantee).
+`DynamicVariables(random, clock, env)` makes randomness, time and environment injectable for tests. `$env` reads go through the `EnvironmentVariables` port; `core` callers that pass nothing see no variables, and library users pass `SystemEnvironmentVariables(setOf("NAME"))` from `adapters`. Randomness is `SecureRandom`.
 
 ## Request chaining
 
-- The extraction expressions are implemented by `ResponseExtractor` in `core`; original wording: `(via `ResponseExtractor` in `core`)` ... what assertions use.
+Extraction (JSONPath subset, header, XPath, regex) is `ResponseExtractor` in `core`, shared by chaining and assertions. XPath evaluation cannot be interrupted, so its number is capped instead: at most 4 at a time in the whole process, and timed-out ones count until they really end.
 
 ## Command line
 
-- `--fail-on-http-error`: The decision is `RunReport.from(outcomes, failOnHttpError = true)` in `core`.
-- `--output FILE`: original wording: `It goes through the `OutputWriter` port (bytes) and `AtomicReportWriter`, which also implements `ReportWriter` for reports: parent` (the `OutputWriter` port writes bytes; `AtomicReportWriter` also implements `ReportWriter` for reports).
+`--output` goes through the `OutputWriter` port (bytes), implemented by `AtomicReportWriter` together with `ReportWriter`. `--fail-on-http-error` is `RunReport.from(outcomes, failOnHttpError = true)`. The resolver prefers file variables over the variable map, so the CLI removes names overridden by `--var` from the file variables first.
 
 ## Desktop app
 
-Persistence details, original wording:
+Persistence is `SettingsStore` (`core`) with `JsonSettingsStore` and `ConfigDirLocator` (`adapters`).
 
-- Sizes and positions are device-independent pixels compared with AWT screen bounds: exact on single-DPI setups, not verified on mixed-DPI multi-monitor setups.
-- Changes are saved in the background (debounced), saves are serialised so the newest state is always written last, and closing the window flushes them (waiting at most 2 s for a save in flight); a quit that bypasses the window close (macOS Cmd+Q, OS shutdown) can lose changes from the last 500 ms.
-- The file is written atomically and owner-only on POSIX (a config folder created by the app is owner-only too); unknown fields are ignored.
-- (then `.corrupt-1`, `.corrupt-2`, ...; an existing backup is never overwritten and the newest 5 are kept)
+- Saves are debounced, serialised so the newest state is written last, and `close` waits up to 2 s for one in flight. The file is written atomically; unknown fields are ignored.
+- A corrupt, empty, foreign or newer-version file is backed up before the next save as `settings.json.corrupt`, then `.corrupt-1`, `.corrupt-2`, ...; an existing backup is never overwritten and the newest 5 are kept. After an I/O error on read, saving is skipped (reported once) until the file can be read; then stored and in-memory settings are merged.
+- Recent files: 10 entries; files missing at start are hidden but stay stored, and a vanished one is removed when clicked. Environments are remembered for the 50 most recently used files.
+- Window: fullscreen is stored as the maximized flag and the last normal size is kept; the bogus (-32000, -32000) position Windows reports when minimized is ignored; with no screen information the position is dropped. Sizes and positions are device-independent pixels compared with AWT screen bounds: exact on single-DPI setups, not verified on mixed-DPI multi-monitor setups.

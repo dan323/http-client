@@ -4,7 +4,7 @@ package com.dan323.httpclient.core.application
  * The Mozilla Public Suffix List (ICANN and private sections), bundled as the classpath resource
  * `public_suffix_list.txt` next to this package's classes (rules only, comments stripped, so core keeps zero
  * third-party dependencies). Used by [CookieJar] to refuse `Domain` attributes that name a registry-controlled
- * suffix such as `com`, `co.uk` or `github.io`. Update procedure: see "Cookie jar" in `docs/features.md`.
+ * suffix such as `com`, `co.uk` or `github.io`. Update procedure: see "Cookie jar" in `docs/design-notes.md#cookie-jar`.
  */
 internal object PublicSuffixList {
     private class Rules(val plain: Set<String>, val wildcardParents: Set<String>, val exceptions: Set<String>)

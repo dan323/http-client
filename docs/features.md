@@ -3,6 +3,7 @@
 A Postman-style HTTP client that implements a practical subset of the JetBrains `.http` format, with additional testing and execution features.
 For where this project differs from the JetBrains HTTP Client, see [jetbrains-compatibility.md](jetbrains-compatibility.md).
 Front ends: the `httpc` command line, a desktop app and an IntelliJ plugin, all built on the same `core` and `adapters`.
+Internals (mechanisms, class names, security reasoning) are in [design-notes.md](design-notes.md), which has the same section names.
 
 ## Contents
 
@@ -25,8 +26,6 @@ Front ends: the `httpc` command line, a desktop app and an IntelliJ plugin, all 
 - [IntelliJ plugin](#intellij-plugin)
 - [Not yet implemented](#not-yet-implemented)
 
-Implementation and security details that a user does not need to write or read a `.http` file are in [design-notes.md](design-notes.md), which has the same section names.
-
 ## `.http` files
 
 Requests are separated by `###`.
@@ -42,33 +41,29 @@ Content-Type: application/json
 GET {{base}}/me
 ```
 
-- `# @name x` or `// @name x` names a request (needed for chaining and `--request`).
-- Lines starting with `#` or `//` are comments.
-- A bare URL (no method) means `GET`. A trailing `HTTP/1.1` is ignored. An unknown method (`GTE http://x`) is a parse error naming the line, with a "did you mean" hint for a one-letter typo; a method with no URL is also an error. `GRAPHQL`, `WEBSOCKET` and `GRPC` (request types of the JetBrains format that are not supported) are also a parse error naming the line ("GRPC requests are not supported (only HTTP methods are sent)"), so the file does not run and nothing is sent as plain HTTP. Indented `?a=1` / `&b=2` lines after the request line extend the URL, and an indented header line without `:` continues the previous header value. `> handler`, `>> file` and `<> file` lines count only when they come after the body; earlier ones are body text. `<@ path` reads the file but does not substitute variables inside it (warning).
-- Headers follow the request line; a header line without `:` is a parse error naming the line. A blank line starts the body.
-- A body consisting only of `< ./path` (note the space; `<html>` is plain text) is read from that file, relative to the `.http` file.
-  - **Security note (deviates from JetBrains, which does not confine):** `< path` and `<@ path` may only read files inside the `.http` file's folder, checked after `..` normalisation and after resolving symlinks (a symlink pointing out of the folder is rejected, as are absolute paths elsewhere). A rejected read fails that request with an error naming the path and how to allow it; no file contents are included. To allow more directories: CLI `--allow-file-root DIR` (repeatable); desktop app and IDE plugin `-Dhttpclient.allowFileRoots=DIR` or environment variable `HTTPC_ALLOW_FILE_ROOTS=DIR`, several separated by the platform path separator (`:`, or `;` on Windows). Roots from the property/env var must be absolute (a leading `~` is expanded); relative roots, empty values (also `--allow-file-root ""`), unparsable paths and filesystem roots such as `/` or `C:\` are rejected with an error naming the entry (shown as a failed request in the desktop app, in the tool window in the IDE, and as a usage error in the CLI); a root equal to your home directory only prints a warning. In the IDE the environment variable `HTTPC_ALLOW_FILE_ROOTS` is the practical choice (the property needs VM options).
-- Response handlers (`> {% ... %}`, `> file`) are not supported: they are not sent as body, and the parser reports a warning per ignored line (`HttpFile.warnings`; the CLI prints them on stderr). `>> file`, `>>! file` and `<> file` are supported, see "Saved responses".
+- `# @name x` or `// @name x` names a request (needed for chaining and `--request`). Lines starting with `#` or `//` are comments.
+- A bare URL (no method) means `GET`. A trailing `HTTP/1.1` is ignored. Indented `?a=1` / `&b=2` lines after the request line extend the URL, and an indented header line without `:` continues the previous header value.
+- Parse errors name the line: an unknown method (`GTE http://x`, with a "did you mean" hint for a one-letter typo), a method with no URL, a header line without `:`, and the unsupported request types `GRAPHQL`, `WEBSOCKET` and `GRPC` (the file does not run, so nothing is sent as plain HTTP).
+- Headers follow the request line; a blank line starts the body.
+- A body consisting only of `< ./path` (note the space; `<html>` is plain text) is read from that file, relative to the `.http` file. `<@ path` does the same but does not substitute variables inside the file (warning).
+- `> handler`, `>> file` and `<> file` lines count only when they come after the body; earlier ones are body text.
+- Response handlers (`> {% ... %}`, `> file`) are not supported: they are not sent as body, and a warning is reported per ignored line (the CLI prints it on stderr). `>> file`, `>>! file` and `<> file` are supported, see [Saved responses](#saved-responses).
 
-Implementation and security details: [design notes, .http files](design-notes.md#http-files).
+**File confinement (deviates from JetBrains, which does not confine).** `< path` and `<@ path` may only read files inside the `.http` file's folder; `..`, absolute paths elsewhere and symlinks pointing out are rejected. A rejected read fails that request with an error naming the path and how to allow it; no file contents are included. To allow more directories:
+
+- CLI: `--allow-file-root DIR` (repeatable).
+- Desktop app and IDE plugin: `-Dhttpclient.allowFileRoots=DIR` or the environment variable `HTTPC_ALLOW_FILE_ROOTS=DIR`, several separated by the platform path separator (`:`, or `;` on Windows). In the IDE the environment variable is the practical choice (the property needs VM options).
+- Roots must be absolute (a leading `~` is expanded). Relative or empty roots, unparsable paths and filesystem roots such as `/` or `C:\` are rejected with an error naming the entry; a root equal to your home directory only prints a warning.
+
+Confinement is a guard against files you download, not against a local attacker: someone with write access inside an allowed folder could still race the check by swapping a parent folder for a symlink ([design notes](design-notes.md#http-files)).
 
 ## Variables
 
-`{{name}}` is replaced in the URL, header values, body text and file-body paths.
-An undefined variable is an error, so nothing is sent with a placeholder left in.
+`{{name}}` is replaced in the URL, header values, body text and file-body paths. An undefined variable is an error, so nothing is sent with a placeholder left in.
 
 ### Environments
 
-Put `http-client.env.json` in the `.http` file's folder or any parent folder and pick one with `--env`. All front ends
-(CLI, desktop, IntelliJ plugin) use the same rule: the nearest enclosing folder containing `http-client.env.json`
-wins (searching upward); the `http-client.private.env.json` beside it is merged. A folder holding only the private file
-counts. The `.http` file's own folder is always checked; the search then continues through parent folders but stops after
-the first folder containing a `.git` entry, and never enters the user's home directory (or the system temp directory) or
-anything above it, so a stray `~/http-client.env.json` cannot leak into unrelated projects (put the file in the project).
-Running a request reads the env files only when a named environment is chosen (the CLI and the run path never read them otherwise); the desktop app also reads them when opening or saving a request, and the IDE plugin to fill its environment picker, so a malformed file can be reported even with no environment chosen. The choice is explicit: no
-environment (variables from the file only; the CLI default) or a named one. A name that does not exist is an error,
-never another environment. A JSON `null` value is treated as undefined; a malformed env file fails with an error
-naming the file (and the position).
+Put `http-client.env.json` in the `.http` file's folder or any parent folder and pick one with `--env`. All front ends use the same rule: the nearest enclosing folder containing `http-client.env.json` wins; the `http-client.private.env.json` beside it is merged (a folder holding only the private file counts). The search starts in the `.http` file's folder, goes up through parent folders, stops after the first folder containing a `.git` entry, and never enters the home directory (or the system temp directory) or anything above it, so a stray `~/http-client.env.json` cannot leak into unrelated projects.
 
 ```json
 // http-client.env.json
@@ -77,19 +72,11 @@ naming the file (and the position).
 
 `http-client.private.env.json` uses the same shape for secrets; its values override the shared file.
 
+The choice is explicit: no environment (variables from the file only; the CLI default) or a named one. A name that does not exist is an error, never another environment. A JSON `null` value is treated as undefined; a malformed env file fails with an error naming the file and position. Running a request reads the env files only when a named environment is chosen; the desktop app also reads them when opening or saving a request and the plugin to fill its picker, so a malformed file can be reported even with no environment chosen.
+
 ### File variables
 
-`@name = value` lines define variables inside the `.http` file. They apply to the requests from that line to the end
-of the file; defining the same name again replaces the value from there on. File variables override environment
-values, and a value may use `{{...}}` (environment variables, earlier file variables, dynamic variables, response
-references). Only values written in the file are expanded: an environment value (or a response value) that contains
-`{{` is sent as is, so environment values cannot reference other variables (`"api": "{{host}}/v1"` sends the
-text `{{host}}/v1`); compose them with file variables instead. A variable that refers to itself reads the environment's value of that name (`@host = {{host}}/api`), and fails
-with `Undefined variable: host` when there is none; a cycle through others (`@a = {{b}}`, `@b = {{a}}`) fails with
-`Circular variable reference: a -> b -> a`, and a
-value that needs more than 10,000 distinct expansions (or 100 nested levels) fails instead of hanging. Running a single request (`--request`,
-"run this request") also runs the requests it reads responses from, including through file variables, `# @assert`
-expressions and settings, and request names may contain dots (`auth.login`).
+`@name = value` lines define variables inside the `.http` file. They apply from that line to the end of the file; defining a name again replaces the value from there on. File variables override environment values, and a value may use `{{...}}` (environment variables, earlier file variables, dynamic variables, response references).
 
 ```
 @host = http://localhost:8080
@@ -98,9 +85,13 @@ expressions and settings, and request names may contain dots (`auth.login`).
 GET {{host}}/users/{{user}}
 ```
 
+- Only values written in the file are expanded: an environment or response value that contains `{{` is sent as is, so environment values cannot reference other variables. Compose them with file variables instead.
+- A variable that refers to itself reads the environment's value of that name (`@host = {{host}}/api`) and fails with `Undefined variable: host` when there is none. A cycle (`@a = {{b}}`, `@b = {{a}}`) fails with `Circular variable reference: a -> b -> a`. A value needing more than 10,000 distinct expansions (or 100 nested levels) fails instead of hanging.
+- Running a single request (`--request`, "run this request") also runs the requests it reads responses from, including through file variables, `# @assert` expressions and settings. Request names may contain dots (`auth.login`).
+
 ### Editor diagnostics (analysis)
 
-Diagnostics for the `{{...}}` of a `.http` text, computed without running anything, for the editors (desktop and plugin use them in later tasks). Messages name variables and requests, never values.
+The `{{...}}` of a `.http` text can be checked without running anything, for the editors (desktop and plugin use it in later tasks). Messages name variables and requests, never values.
 
 | Code | Severity | Meaning |
 |---|---|---|
@@ -110,79 +101,41 @@ Diagnostics for the `{{...}}` of a `.http` text, computed without running anythi
 | `self-reference` | warning | a request reads its own response (works on a later run in the same session, e.g. a polling request) |
 | `malformed-reference` | error | `x.response` with nothing after it, an unknown part (not `status`, `headers.Name`, `body...`) or an empty `headers.`/`body.` |
 | `invalid-dynamic-variable` | error | bad arguments, e.g. `$random.integer(5, 1)` |
-| `circular-variable` | error | file variables that refer to each other (on the final value of each name) |
+| `circular-variable` | error | file variables that refer to each other |
 | `unterminated-reference` | warning | `{{` with no `}}` after it |
 | `invalid-reference-text` | warning | `{{ a b }}`: not a reference, sent as written |
 | `duplicate-request-name` | warning | the later `# @name` repeats an earlier one |
 | `variable-defined-later` | warning | an `@a = {{b}}` value uses a file variable defined below it |
 | `parse-error` | error | the parser rejected a line (its message, on that line); one per `###` block |
 
-A file that does not parse is still analysed: each rejected line is reported as `parse-error` and left out (the offsets of the
-rest do not change), so completion, find-usages and the other diagnostics keep working while a request is half typed. The
-request that failed has no `name.response.` prefix and its references are not scanned. Only a file with more than 50 bad
-lines is reported as parse errors alone.
-
-It follows the run-time rules: the same reference pattern and lookup order (a file variable
-beats the environment in request text, and in a value only when defined above it; a variable naming itself reads the
-environment), and a response reference needs an earlier request with that name. Scanned: request line and query
-lines, header values (not names), body text, the *path* of a `< path` body (not the file), the path of a `>> path` / `>>! path` save (a `<>` link path is not resolved, so it is not scanned), file variable values,
-`# @assert` expressions (without a trailing ` # comment`) and the values of `@timeout`, `@no-redirect`,
-`@no-cookie-jar`, `@proxy`. Not scanned: comments, `# @name`, other settings, trailing response handlers.
-Not decidable statically, so never flagged: whether `body.$.x` finds anything, and `$env.X` / `$processEnv X`
-(allow-list and value are run-time matters). Duplicate request names resolve to the latest response at run time. A
-response reference inside a file variable value is only checked for an existing request name, because the request that
-uses the variable is not known.
-
-Implementation and security details: [design notes, Editor diagnostics](design-notes.md#editor-diagnostics-analysis).
+A file that does not parse is still analysed: each rejected line is a `parse-error` and left out, so the other diagnostics keep working while a request is half typed. The rules are the run-time ones. Scanned: request and query lines, header values, body text, the path of a `< path` body or `>> path` / `>>! path` save, file variable values, `# @assert` expressions and the values of `@timeout`, `@no-redirect`, `@no-cookie-jar`, `@proxy`. Not scanned: comments, `# @name`, other settings. Never flagged, because they depend on run time: whether `body.$.x` finds anything, and `$env.X` / `$processEnv X`.
 
 ### Request settings
 
-`# @setting [value]` (or `// @setting`) lines before a request line attach settings to it: for example
-`# @timeout 5`, `# @no-redirect`, `# @no-cookie-jar`. The following are honoured per request:
+`# @setting [value]` (or `// @setting`) lines before a request line attach settings to it. Names are case-insensitive and unknown ones are ignored. An invalid value (including a blank `@proxy`) fails the request with an `Invalid @timeout` / `@proxy` / `@no-redirect` error before anything is sent. All values may use `{{vars}}`.
 
-- `# @timeout 5`: maximum time for the whole exchange, response headers and body; on expiry the request is cancelled and fails with a timeout. Without `@timeout` the default total timeout applies: 60 s, or the CLI `--timeout`, or the system property `httpclient.timeout` / environment variable `HTTPC_TIMEOUT` (same duration format; the desktop app and the plugin read the property and the variable; a bad value is reported when a request runs, never replaced by the default). The client also has a 30 s connect timeout. There is no way to disable the limit: use a long `@timeout` for slow endpoints. A whole, positive number: plain numbers are seconds, or add `ms`, `s` or `m` (any case, `@timeout 500ms`). Decimals (`1.5s`), `0`, negatives and values that overflow are rejected. May use `{{vars}}`.
-- `# @no-redirect`: do not follow HTTP redirects (the 3xx response is returned). An optional value `true` (default) or `false` (`# @no-redirect false` keeps redirects); it may use `{{vars}}`; any other value is an error.
-- `# @proxy host:port`: send the request through that HTTP proxy. Forms: `host`, `host:port`, `http://host:port`, IPv6 as `[::1]:8080`; the port defaults to 80. Only plain HTTP proxies are supported: other schemes (`https://`, `socks://`) and credentials (`user:pass@host`) are rejected. May use `{{vars}}`.
+- `# @timeout 5`: maximum time for the whole exchange, headers and body; on expiry the request fails with a timeout. A whole positive number: plain numbers are seconds, or add `ms`, `s` or `m` (`@timeout 500ms`); decimals (`1.5s`), `0`, negatives and overflowing values are rejected. Without it the default of 60 s applies, or the CLI `--timeout`, or the system property `httpclient.timeout` / environment variable `HTTPC_TIMEOUT` (same format; read by the desktop app and the plugin; a bad value is reported when a request runs, never replaced by the default). The connect timeout is 30 s. The limit cannot be disabled: use a long `@timeout` for slow endpoints.
+- `# @no-redirect`: do not follow redirects (the 3xx response is returned). Optional value `true` (default) or `false` (keeps redirects); anything else is an error.
+- `# @proxy host:port`: send the request through that HTTP proxy. Forms: `host`, `host:port`, `http://host:port`, IPv6 as `[::1]:8080`; the port defaults to 80. Other schemes (`https://`, `socks://`) and credentials (`user:pass@host`) are rejected.
+- `# @no-cookie-jar`: neither send nor store cookies for this request (see below). Same optional `true`/`false` value as `@no-redirect`.
 
-The JDK client controls `Host`, `Content-Length`, `Connection`, `Expect` and `Upgrade` itself, so user-set headers with these names are dropped silently. With the session cookie jar on (the default), redirects are followed by the session (also without a jar, see Redirects below): an explicit `Cookie`, `Authorization` or `Proxy-Authorization` header is dropped when a redirect leaves the origin (scheme, host, port) but kept on same-origin hops, where the jar also adds its matching cookies, and `@timeout` is one deadline across all hops. With `@no-cookie-jar` redirects are followed the same way, only without reading or storing cookies.
-
-Setting names are case-insensitive and unknown ones are ignored. Invalid values (including a blank `@proxy`) fail when the request is resolved with an `Invalid @timeout` / `@proxy` / `@no-redirect` error, before anything is sent.
-
-- `# @no-cookie-jar`: do not use the cookie jar for this request (see below). Same optional `true`/`false` value as `@no-redirect`.
-
-Implementation and security details: [design notes, Request settings](design-notes.md#request-settings).
+The JDK client controls `Host`, `Content-Length`, `Connection`, `Expect` and `Upgrade` itself, so user-set headers with these names are dropped silently.
 
 ### Cookie jar
 
-Each session (one CLI run; in the desktop app and plugin one per file, environment and loaded variables, so when you send one request, the named requests it chains on that already ran in the session, such as a login, are not sent again until the environment file changes or the chain is reset; the selected request itself, and every request of Send all, always run again) owns an in-memory cookie jar. `Set-Cookie` headers
-of a response are stored, and later requests in the same session to a matching host and path get a `Cookie` header, so a login
-request followed by an authenticated one just works. Sessions never share cookies and nothing is persisted to disk.
-Supported: `Domain` (host-only when absent; a host cannot set cookies for an unrelated domain, and a `Domain` that is a
-public suffix per the Public Suffix List, such as `com`, `co.uk` or `github.io`, is rejected unless it equals the request host,
-in which case the cookie stays host-only and is never sent to other hosts under that suffix), `Path` (matched on the raw,
-undecoded path), `Max-Age` (digits with optional `-`; `+5` or text is ignored; extreme values saturate), `Expires` (lenient RFC 6265
-date parsing: `21 Oct 2015`, `21-Oct-2015`, 2-digit years, asctime; unparseable is ignored; `Max-Age` wins), `Secure`;
-`Max-Age<=0` or a past `Expires` deletes. `# @no-cookie-jar` makes a request neither send nor store cookies.
+Each session owns an in-memory cookie jar: one CLI run; in the desktop app and plugin one per file, environment and loaded variables. `Set-Cookie` headers of a response are stored, and later requests in the same session to a matching host and path get a `Cookie` header, so a login followed by an authenticated request just works. In the desktop app and plugin the session is kept, so when you send one request the named requests it chains on that already ran (a login) are not sent again until the environment file changes or the chain is reset; the selected request itself, and every request of Send all, always run again. Sessions never share cookies and nothing is persisted to disk.
 
-Redirects: when the jar is in use, the session follows redirects itself, one hop at a time (the executor is told not to follow
-any), so `Set-Cookie` on a `302` (the `POST /login` -> `302` flow) is stored and the `Cookie` header is recomputed for every hop's
-URL. Up to 10 hops, then an error. `# @no-redirect` returns the first response (its cookies are still stored). 301/302 on `POST`
-and 303 switch to `GET` without body; 307/308 keep method and body. An explicit `Cookie`, `Authorization` or
-`Proxy-Authorization` request header is dropped when a redirect leaves the origin (scheme, host, port). With `@no-cookie-jar` the jar is only skipped (nothing read or stored) and explicit
-credential headers are kept on same-origin hops. Only these three headers are stripped: other custom headers such as `X-API-Key` still cross origins on a redirect, so do not put a secret in one if the server may redirect elsewhere. 307/308 re-send the request body to the new origin (as the JDK and curl do). The reported duration is the sum of all hops.
+Supported attributes: `Domain` (host-only when absent; a host cannot set cookies for an unrelated domain, and a `Domain` that is a public suffix per the Public Suffix List, such as `com`, `co.uk` or `github.io`, is rejected unless it equals the request host, in which case the cookie stays host-only), `Path`, `Max-Age` (wins over `Expires`), `Expires` (lenient date parsing; unparseable is ignored), `Secure`. `Max-Age<=0` or a past `Expires` deletes the cookie.
 
-The Public Suffix List used for the `Domain` check is a bundled snapshot that goes stale as registries change; the update procedure is in the design notes.
+Redirects: the session follows them itself, one hop at a time, up to 10 hops, so `Set-Cookie` on a `302` (the `POST /login` -> `302` flow) is stored and the `Cookie` header is recomputed for every hop. 301/302 on `POST` and 303 switch to `GET` without body; 307/308 keep method and body (re-sent to the new origin, as the JDK and curl do). `@timeout` is one deadline across all hops and the reported duration is the sum. With `@no-redirect` the first response is returned (its cookies are still stored). With `@no-cookie-jar` redirects are followed the same way, only without reading or storing cookies.
 
-Limitations: a `Cookie` header written in the request is sent as is (the jar adds nothing); an IP host only matches exactly; `Secure` cookies are neither accepted from nor sent over plain http (no localhost exception),
-and a plain-http response cannot overwrite a `Secure` cookie; a cookie over 4096 bytes is ignored, at most 50 per domain and
-3000 in total (oldest first evicted); no SameSite handling.
+**Redirect credentials:** an explicit `Cookie`, `Authorization` or `Proxy-Authorization` header is dropped when a redirect leaves the origin (scheme, host, port) and kept on same-origin hops. Only these three are stripped: other custom headers such as `X-API-Key` still cross origins, so do not put a secret in one if the server may redirect elsewhere.
 
-Implementation and security details: [design notes, Cookie jar](design-notes.md#cookie-jar).
+Limitations: a `Cookie` header written in the request is sent as is (the jar adds nothing); an IP host only matches exactly; `Secure` cookies are neither accepted from nor sent over plain http (no localhost exception), and a plain-http response cannot overwrite a `Secure` cookie; a cookie over 4096 bytes is ignored, at most 50 per domain and 3000 in total (oldest first evicted); no SameSite handling. The Public Suffix List is a bundled snapshot; how to refresh it is in the [design notes](design-notes.md#cookie-jar).
 
 ### Assertions
 
-`# @assert <expression> <operator> [expected]` lines before a request line check its response. They may repeat
-and are kept apart from settings (`RequestTemplate.assertions`).
+`# @assert <expression> <operator> [expected]` lines before a request line check its response. They may repeat.
 
 ```
 # @assert status == 200
@@ -192,73 +145,24 @@ and are kept apart from settings (`RequestTemplate.assertions`).
 GET {{base}}/items/1
 ```
 
-- `<expression>` is `status`, `headers.Name` or `body.<...>` (`body.*`, `body.$.json.path`, `body./xpath`,
-  `body.regex:...`). Any other prefix (a typo such as `stauts` or `header.X`) is an invalid assertion, not a
-  missing value. The expression ends at the first space; to use one with spaces, quote it:
-  `# @assert "body.$.items[?(@.id == 1)]" exists`.
-- `expected` is the rest of the line, inner spaces kept. In matching single or double quotes it is literal
-  (`== ""` asserts an empty value, `== " a "` keeps the spaces) and `==`/`!=` compare as exact text. An unquoted
-  empty expected value is invalid.
-- Operators: `==`, `!=`, `<`, `<=`, `>`, `>=`, `contains`, `!contains`, `startsWith`, `endsWith`,
-  `matches` (the whole value matches a regex; `.` also matches newlines; a pattern running over 2 seconds is
-  aborted and reported as invalid), `exists`, `!exists`. `exists`/`!exists` take no expected value.
-- Numbers are strict decimals (`-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d{1,4})?`) compared exactly as `BigDecimal`.
-  `==` holds when the texts are identical, or when both sides are numbers with the same value: `5 == 5.0` and
-  `1e3 == 1000` pass, `1.10 == 1.1` passes (quote the expected value, `== "1.1"`, to compare text), while
-  `007 == 7` fails (leading zeros are text), as do `NaN`/`Infinity` (plain text). `<`, `<=`, `>`, `>=` need numbers
-  on both sides.
-- A value that cannot be found (nothing matched) fails every operator except `!exists`, including `!=` and
-  `!contains`. An XPath that evaluates to a string (`xpath:string(//a)`, `count(...)`) gives `""` rather than
-  missing, so `exists` holds for it; use `== ""` to test for emptiness.
-- `{{variables}}` and `{{name.response...}}` references are substituted before evaluating, exactly as in
-  request text (environment, file variables, dynamic variables). An undefined one makes the assertion fail
-  as invalid with "Undefined variable: x".
-- A malformed assertion (including a bare `# @assert`) fails with an "invalid assertion" message. A trailing
-  ` # comment` is stripped (a `#` preceded by whitespace and outside quotes). `# @assert` lines must sit before
-  the request line; in a block that has no request they are discarded. Failure messages show at most 200
-  characters of the actual value.
-- When an assertion uses `{{variables}}` its resolved values are never shown: a failing comparison reports
-  "expected value contains substitutions, not shown", while an invalid one (bad regex, non-numeric `<`, unknown
-  operator) keeps its reason with the values left out.
-- With `--request`, only the requested request's assertions are evaluated; its prerequisites run for their responses and their assertions are neither evaluated nor reported. Reused dependencies are not re-asserted. A request that fails to complete has its assertions reported as not run. Requests run one at a time per session, and interrupting the run stops Send all without sending the queued requests.
-
-Implementation and security details: [design notes, Assertions](design-notes.md#assertions).
+- `<expression>` is `status`, `headers.Name` or `body.<...>` (`body.*`, `body.$.json.path`, `body./xpath`, `body.regex:...`). Any other prefix (a typo such as `stauts`) is an invalid assertion. The expression ends at the first space; to use one with spaces, quote it: `# @assert "body.$.items[?(@.id == 1)]" exists`.
+- `expected` is the rest of the line, inner spaces kept. In matching single or double quotes it is literal (`== ""` asserts an empty value) and `==`/`!=` compare as exact text. An unquoted empty expected value is invalid.
+- Operators: `==`, `!=`, `<`, `<=`, `>`, `>=`, `contains`, `!contains`, `startsWith`, `endsWith`, `matches` (the whole value matches a regex; a pattern running over 2 seconds is aborted and reported as invalid), `exists`, `!exists` (these take no expected value).
+- Numbers are strict decimals, compared exactly. `==` holds when the texts are identical or both sides are numbers of the same value: `5 == 5.0` and `1e3 == 1000` pass (quote the expected value to compare text), `007 == 7` fails (leading zeros are text), as do `NaN`/`Infinity`. `<`, `<=`, `>`, `>=` need numbers on both sides.
+- A value that cannot be found fails every operator except `!exists`, including `!=` and `!contains`. An XPath that evaluates to a string (`xpath:string(//a)`, `count(...)`) gives `""` rather than missing, so `exists` holds; use `== ""` to test for emptiness.
+- `{{variables}}` and `{{name.response...}}` are substituted before evaluating, as in request text. An undefined one makes the assertion fail as invalid ("Undefined variable: x"). Resolved values are never shown: a failing comparison reports "expected value contains substitutions, not shown".
+- A malformed assertion (including a bare `# @assert`) fails with an "invalid assertion" message. A trailing ` # comment` is stripped. `# @assert` lines must sit before the request line. Failure messages show at most 200 characters of the actual value.
+- With `--request`, only the requested request's assertions are evaluated; its prerequisites run for their responses and are not asserted.
 
 ### Run reports
 
-A run report summarises a run: one entry per request (name, method, URL as written in the file, status, duration, assertion results, assertions not run, error, optional `httpError`) plus totals and an overall pass/fail. A request passes when it completed and all its assertions passed; when the run uses `--fail-on-http-error` it also needs a status below 400, otherwise the entry carries `httpError` (`"HTTP 503"`). Formats: JUnit XML and JSON.
+A report has one entry per request (name, method, URL as written in the file, status, duration, assertion results, error, optional `httpError`) plus totals and an overall pass/fail. A request passes when it completed and all its assertions passed; with `--fail-on-http-error` it also needs a status below 400. By default a 4xx/5xx response without a failed assertion counts as passed, so a green report does not mean "no 5xx".
 
-The CLI writes them with `--report-json FILE` and `--report-junit FILE`. Option values must be non-empty and not
-start with `--`. These are usage errors (exit 2, nothing is run or written): repeating an option, giving both reports
-the same path, a report path that is the input `.http` file (also through `..` or a symlink; it would overwrite it),
-and combining a report option with `--list` (nothing runs, so there is no report). Parent directories are created
-and files are written atomically (temp file + move), each report independently. New report files are owner-only
-(`rw-------`, POSIX) because they may contain secrets; replacing an existing report keeps that file's permissions.
-Exit codes, by precedence: 2 usage; 1 the run failed (request error, failed assertion, an HTTP error status with
-`--fail-on-http-error`, or the run could not start),
-even if a report could not be written (the write error is still printed); 3 the run passed but a report could not
-be written; 0 otherwise. If the run cannot start (missing file,
-unknown environment or request, unexpected exception) a report with a
-single failed `httpc` entry is still written so CI finds a file. Console output is unchanged.
+The CLI writes reports with `--report-json FILE` and `--report-junit FILE` (console output is unchanged). Option values must be non-empty and not start with `--`. Usage errors (exit 2, nothing is run or written): repeating an option, both reports on the same path, a report path that is the input `.http` file (also through `..` or a symlink) and combining a report option with `--list`. Parent directories are created and files are written atomically; new report files are owner-only (POSIX) because they may contain secrets. If the run cannot start (missing file, unknown environment or request) a report with a single failed `httpc` entry is still written so CI finds a file. Exit codes are listed under [Command line](#command-line).
 
-JUnit XML: one `testcase` per request; `tests`/`failures`/`errors` count testcases. All failed assertions of a
-request are merged into one `failure` of type `AssertionFailure` (one per line); with `--fail-on-http-error` a 4xx/5xx
-response adds a separate `failure` of type `HttpStatusFailure` (message `HTTP 503 from GET url`), so a testcase with
-both has two `failure` elements and counts once in `failures`; a request that could not complete is an `error` (time 0). The
-testcase `name` is `"<index>. <request name or METHOD url>"` (1-based position in the run) and `classname` is the
-file name, so duplicate or unnamed requests stay distinct and stable. Prerequisites (requests run only to feed
-`{{name.response...}}` chaining) are not asserted: they are omitted when they passed and kept as an `error` when they
-failed; in JSON they are always listed with `"prerequisite": true`. An empty run reports `tests="0"`. Tabs and line
-breaks in attributes are written as character references.
-
-JSON: an entry's optional `httpError` is set with `--fail-on-http-error` (see below). Top-level `version` (currently 1). `passed` and `totals` (and each entry's `passed`) are derived values written for consumers.
-
-Caveats: by default a response with an HTTP error status (4xx/5xx) that has no failed assertion counts as passed (only
-transport errors and failed assertions fail a run), so a green report does not mean "no 5xx"; run with
-`--fail-on-http-error` to fail on them (below). Reports contain URLs as written in the file
-and error messages, which may include secrets (tokens in query strings); treat them as sensitive CI artifacts.
-
-Implementation and security details: [design notes, Run reports](design-notes.md#run-reports).
+- JUnit XML: one `testcase` per request, named `"<index>. <request name or METHOD url>"` with the file name as `classname`. Failed assertions of a request are merged into one `failure` of type `AssertionFailure`; with `--fail-on-http-error` a 4xx/5xx adds a separate `failure` of type `HttpStatusFailure`; a request that could not complete is an `error`. Prerequisites (requests run only to feed chaining) are omitted when they passed and kept as an `error` when they failed.
+- JSON: top-level `version` (currently 1); `passed` and `totals` are derived values written for consumers; prerequisites are always listed with `"prerequisite": true`.
+- Reports contain URLs as written in the file and error messages, which may include secrets (tokens in query strings): treat them as sensitive CI artifacts.
 
 ### Saved responses
 
@@ -271,65 +175,23 @@ GET {{host}}/orders/1
 <> order.json
 ```
 
-- `>> path` saves the response body to `path`; it never overwrites. Like JetBrains, an existing name gets a numeric
-  suffix before the extension: `out.json`, `out-1.json`, `out-2.json`. `>>! path` overwrites.
-- `<> path` links the request to its latest stored response (see below).
-- Order: JetBrains writes the handler, then `>>`, then `<>` lines; this parser accepts the `>>`/`<>` lines in any order
-  but only after the body: a `>>`/`>>!`/`<>` line is a directive only in the trailing region, i.e. when every non-blank
-  line after it is also a directive or a response handler. A line starting with `>> ` followed by more body text is body
-  (`>>x` without a space never is a directive). Ambiguity, the same as in JetBrains: a last body line that starts with
-  `>> ` (`hello` then `>> quoted reply`) is read as a directive, so existing files keep working; to avoid surprises the
-  parser adds a warning when such a line directly follows the body (no blank line) and its path contains whitespace
-  (what prose looks like), and a blank line before the directive removes both the doubt and the warning. To keep a
-  line like that as body text, put more body text after it.
-  At most one `>>`/`>>!` per request (JetBrains allows one): a second is a parse error with its line number. Several `<>`
-  lines are fine (JetBrains accumulates them). An empty path is a parse error naming the line.
-- The path may contain `{{variables}}`, resolved when the request runs. It is relative to the `.http` file; paths with
-  spaces are fine, `\` counts as a separator on every platform. Names that cannot exist on Windows are refused on every
-  platform, so a project shared between systems does not save files another system cannot hold: reserved device names
-  (`CON`, `PRN`, `AUX`, `NUL`, `COM0-9`, `LPT0-9`, also with an extension), a segment ending in a dot or a space, and
-  the characters `< > : " | ? *` and control characters (which also rules out `file.txt:stream`).
-- Confinement is the one of `< path` bodies (the `.http` file's folder plus the allowlist): `..`
-  out of the allowed folders, absolute paths (`/x`, `\x`, `C:\x`), symlinks leading out, a final symlink, a folder,
-  the `.http` file itself and (for `>>!`) a read-only file are refused. Missing parent folders are created, only
-  inside the allowed roots. Files are written atomically, owner-only on POSIX (an overwritten file keeps its
-  permissions), byte for byte (no charset conversion); an empty body gives an empty file. Concurrent saves of the same
-  name end up in different files (`>>`).
-- A save happens after the assertions are evaluated, also when they failed, but not when the request itself failed.
-  A rejected or failed save fails only the save: the request's result stays, the error message names the path, hides substituted values and never contains the body.
-  Paths are not part of reports. The path shown after a successful save (the CLI line) follows the same rule
-  as error messages: values substituted into `{{variables}}` (3 characters or more) come back as `{{name}}`, so
-  `>> out/{{token}}.json` prints `out/{{token}}.json`, never the token. The file on disk has the real name.
-- Files are published atomically: `>>` never clobbers an existing file and no empty or partial file is ever visible. A save whose folder was swapped for a symlink after validation fails without touching anything outside the allowed folders.
-- The path is validated exactly as written: leading or trailing whitespace is refused (never trimmed into a different
-  path).
-- `>>`/`>>!`/`<>` are applied once per request run.
-  A `>> {{other.response...}}` path makes `other` a prerequisite that runs first (also through file variables).
-  Cancellation or interruption inside a save or link is not reported as a save error: it stops the session.
-- CLI: a `--report-*` / `--output` file that is the same file as a response saved in this run (symlinks and case aliases
-  included) is not written, an error is printed and the saved response is kept. Corrupt-history warnings go to stderr
-  of the run.
-- Prerequisites: a request that only runs to feed `{{name.response...}}` to the request you asked for (`@import`/chained
-  dependencies) is sent like any other, so its own `>>` and `<>` directives fire too (it saved its `pre.json`). A
-  prerequisite that is reused instead of re-sent does not save or link again.
+- `>> path` saves the response body to `path` and never overwrites: an existing name gets a numeric suffix before the extension (`out.json`, `out-1.json`, `out-2.json`). `>>! path` overwrites. `<> path` links the request to its latest stored response (see below).
+- The `>>`/`<>` lines are accepted in any order but only after the body. A `>>`, `>>!` or `<>` line is a directive only when every non-blank line after it is also a directive or a response handler; `>>x` without a space never is. As in JetBrains, a last body line starting with `>> ` (`hello` then `>> quoted reply`) is read as a directive; the parser warns when such a line directly follows the body and its path contains whitespace. A blank line before the directive removes the doubt; to keep it as body text, put more body text after it.
+- At most one `>>`/`>>!` per request (a second is a parse error with its line number); several `<>` lines are fine. An empty path is a parse error.
+- The path may contain `{{variables}}`, is relative to the `.http` file, and is validated exactly as written (leading or trailing whitespace is refused). `\` counts as a separator on every platform. Names that cannot exist on Windows are refused on every platform: reserved device names (`CON`, `PRN`, `AUX`, `NUL`, `COM0-9`, `LPT0-9`, also with an extension), a segment ending in a dot or a space, and the characters `< > : " | ? *` and control characters (which rules out `file.txt:stream`).
+- Confinement is the one of `< path` bodies (the `.http` file's folder plus the allowlist): `..` out of the allowed folders, absolute paths, symlinks leading out, a final symlink, a folder, the `.http` file itself and (for `>>!`) a read-only file are refused. Missing parent folders are created inside the allowed roots. Files are written atomically, owner-only on POSIX (an overwritten file keeps its permissions), byte for byte (no charset conversion). Residual risk: someone with write access inside an allowed folder who can win a race may make one save land outside it; that is detected afterwards, a `>>` file is removed and a `>>!` replacement cannot be restored (the error says so; [design notes](design-notes.md#saved-responses)).
+- The save happens after the assertions, also when they failed, but not when the request failed. A rejected or failed save fails only the save: the request's result stays and the error names the path, hides substituted values (shown as `{{name}}`, 3 characters or more) and never contains the body. Paths are not part of reports.
+- A `>> {{other.response...}}` path makes `other` a prerequisite that runs first. A prerequisite is sent like any other request, so its own `>>` and `<>` directives fire; one that is reused instead of re-sent does not save again.
+- CLI: `Saved response: PATH` (relative to the `.http` file) on stderr, also with `--quiet`; a failed save prints `Error: Cannot save response to ...` and makes the exit code 1. A `--report-*` / `--output` file that is the same file as a saved response is not written (an error is printed and the saved response is kept).
 - Desktop app and plugin show `Saved to PATH` (or the save/link error) under the status of the response; the desktop app records `<>` links like the CLI and the plugin.
-- CLI: `Saved response: PATH` (relative to the `.http` file) on stderr, also with `--quiet`; a failed save prints
-  `Error: Cannot save response to ...` on stderr and makes the exit code 1.
 
-`<> path` links: JetBrains rewrites the `.http` file to add a `<>` line per stored response. This tool deliberately never edits your `.http` file. The `<> path` text is kept as written but the path itself is not used; instead, after a run of a request that has a `<>` line, its latest response is recorded in the history (`.http-history/`, see below). A request is identified by its `# @name` (duplicate names share one link: the newest run wins) or, unnamed, by the line where it starts (so adding lines above it breaks the link). The history keeps the newest 50 runs per file, and additionally the newest record of every `<>` key even when it is older than that, so a link keeps resolving however often other requests run; an entry whose request lost its `<>` line or was removed stays until you delete it from `.http-history/`. Opening the linked response in the desktop app or the plugin is not implemented yet.
-
-Implementation and security details: [design notes, Saved responses](design-notes.md#saved-responses).
+`<> path` links: JetBrains rewrites the `.http` file to add a `<>` line per stored response. This tool never edits your `.http` file; instead, after a run of a request with a `<>` line, its latest response is recorded in `.http-history/`. A request is identified by its `# @name` (duplicate names share one link, the newest run wins) or, unnamed, by the line where it starts (adding lines above it breaks the link). The newest record of every `<>` request is kept however often other requests run. Opening the linked response in the desktop app or the plugin is not implemented yet.
 
 ### Run history store
 
-Past runs of a `.http` file can be remembered in `.http-history/<file name>/` next to the `.http` file. Only `<>` links use it today (see "Saved responses"); the CLI, desktop app and plugin do not record ordinary runs yet.
+Responses recorded for `<>` links go to `.http-history/<file name>/` next to the `.http` file; ordinary runs are not recorded yet. The newest 50 runs per file are kept, and bodies over 5 MB are cut and marked as truncated. Corrupt or newer entries are skipped with a warning, never fatal.
 
-- Retention: the newest 50 runs per file are kept; older ones are deleted when recording.
-- Bodies are stored in full up to 5 MB; larger ones are cut and marked as truncated.
-- Only the history folder is written. Corrupt, foreign or newer-version entries are skipped with a warning, never fatal.
-- Secrets: stored responses are raw (tokens, cookies, personal data). Add `.http-history/` to your `.gitignore` (this repository does) and never share the folder.
-
-Implementation and security details: [design notes, Run history store](design-notes.md#run-history-store).
+Stored responses are raw (tokens, cookies, personal data). Folders and files are owner-only on POSIX; on Windows the default folder permissions apply. Add `.http-history/` to your `.gitignore` (this repository does) and never share the folder. Layout and pruning: [design notes](design-notes.md#run-history-store).
 
 ### Authorization shortcuts
 
@@ -340,9 +202,7 @@ Authorization: Basic {{user}} {{pass}}
 Authorization: Basic {{user}}:{{pass}}
 ```
 
-Variables resolve first. Rule: after `Basic`, a value that contains `:` or has two or more whitespace-separated tokens is plain credentials (user is the text before the first `:`, or the first token; everything after is the password, so passwords may contain `:` and spaces; an empty password `user:` is fine). A single token without `:` is taken as already encoded and sent unchanged, as is every other scheme (`Bearer {{token}}` needs no shortcut: it is just a header). The header name and the `Basic` keyword are case-insensitive, and every `Authorization` header of a request is handled on its own. Limitation: a username without a password written as `Basic user` is read as an already-encoded token; write `Basic user:`.
-
-The encoded value, the `user:password` text and the password are kept out of failure messages like variable values (shown as `{{Authorization}}` or the variable name). Not implemented: `Digest` credentials and `{{$auth.token(...)}}` / OAuth helpers.
+Variables resolve first. After `Basic`, a value that contains `:` or has two or more whitespace-separated tokens is plain credentials (user is the text before the first `:`, or the first token; everything after is the password, so passwords may contain `:` and spaces; an empty password `user:` is fine). A single token without `:` is taken as already encoded and sent unchanged, as is every other scheme (`Bearer {{token}}` is just a header). The header name and `Basic` are case-insensitive. A username without a password written as `Basic user` is read as an already-encoded token; write `Basic user:`. The encoded value, the `user:password` text and the password are kept out of failure messages. Not implemented: `Digest` credentials and `{{$auth.token(...)}}` / OAuth helpers.
 
 ### Dynamic variables
 
@@ -355,7 +215,7 @@ Each occurrence is evaluated separately. A variable you define with the same nam
 | `{{$isoTimestamp}}` | current time, ISO-8601 UTC |
 | `{{$randomInt}}`    | integer from 0 to 999      |
 
-More (names modelled on the JetBrains HTTP Client and Postman; see the notes below for what is ours):
+More (names modelled on the JetBrains HTTP Client and Postman):
 
 | Variable                          | Value                                                              |
 |-----------------------------------|--------------------------------------------------------------------|
@@ -372,43 +232,14 @@ More (names modelled on the JetBrains HTTP Client and Postman; see the notes bel
 | `{{$env.NAME}}`                   | OS environment variable `NAME`, only if explicitly allowed (below) |
 | `{{$processEnv NAME}}`            | alias of `{{$env.NAME}}`                                           |
 
-- **Offsets** are `<amount> <unit>` after `$timestamp` / `$isoTimestamp`: a whole number with an optional sign
-  (`1`, `-2`, `+5`) and one of `ms`, `s`, `m` (minutes), `h`, `d`, `w`, `M` (calendar months), `y` (calendar years);
-  the space between them is optional (`90s`). Units are case-sensitive (`m` minutes vs `M` months). Month and year
-  offsets are calendar arithmetic in UTC and clamp to the end of a shorter month (31 Jan + 1 M = 29 Feb 2024).
-  The syntax is loosely based on JetBrains' offsets and may not match it exactly; JetBrains' `$datetime` / `$localDatetime` are not supported.
-- Arguments in `$random.*(...)` are comma separated; spaces are allowed. Wrong argument counts, non-numbers,
-  `from` greater than `to` (and, for `$random.float`, equal to it), an unknown offset unit or a length outside 0..10000 fail (in an `# @assert` line that
-  makes only that assertion invalid) with
-  `Invalid dynamic variable {{...}}: <reason>`.
-- An unknown `$name` or an unset `$env.NAME` fails as `Undefined variable: <name>`.
-- **`$env` is opt-in.** A `.http` file you download or open could otherwise send `AWS_SECRET_ACCESS_KEY` or any
-  token in your environment to a server of its choosing, so no variable is readable until you allow its name
-  (exact match; everything else fails with `Invalid dynamic variable {{$env.X}}: environment variable 'X' is not
-  allowed; <how to allow it>`). An allowed name that is not set fails as `Undefined variable: $env.X`.
-  Prefer `http-client.env.json` / `.private.env.json` for secrets; use `$env` only for values you are happy to
-  expose to the files you run. How to allow names:
-  - CLI: `--allow-env NAME[,NAME]` (repeatable), e.g. `httpc api.http --allow-env API_TOKEN,HOME`; the property and variable below are honoured
-    too and merged with the flag.
-  - Desktop app and IntelliJ plugin (no UI for this yet): the system property `-Dhttpclient.allowEnv=NAME,NAME`
-    (for the IDE add it under Help | Edit Custom VM Options) and/or (the two lists are merged) the environment
-    variable `HTTPC_ALLOW_ENV=NAME,NAME` of the process that starts the app/IDE. Restart to apply.
-  - Environment variables of a GUI-launched IDE may differ from your shell.
-- Values read through `$env` are used exactly where you write them and are inserted as plain text (they are not
-  scanned for `{{...}}` again). The desktop/plugin reports and CLI output show the request as written in the
-  file (with `{{$env.X}}` unresolved), not the resolved request, and error messages name the variable, never its
-  value. The server's response may of course echo what you sent.
-- **Randomness and what is ours.** `$uuid`, `$random.uuid` and the `$random.*` family use a cryptographically strong generator (our choice, not something taken from JetBrains). The offset syntax (`1 d`, `-2 h`, units `ms s m h d w M y`) is also our own design,
-  loosely inspired by JetBrains' `$timestamp`/`$isoTimestamp` offsets, and may not match it exactly.
-  `$random.float` is printed as plain decimal, never as `1.0E10`.
-- Naming: to our knowledge the JetBrains HTTP Client reads process environment with `{{$processEnv NAME}}`;
-  `{{$env.NAME}}` is the form used here and `$processEnv NAME` is accepted as an alias. We could not verify this
-  against JetBrains' current documentation, so check before moving files between tools. In JetBrains the allowlist
-  does not exist, so a file using `$processEnv` there will not need `--allow-env` but will here.
-- Only `$` followed by a letter starts a dynamic variable; `{{$ x}}`, `{{$x := 1}}` and references split over
-  several lines are left untouched, as before.
-
-Implementation and security details: [design notes, Dynamic variables](design-notes.md#dynamic-variables).
+- **Offsets** are `<amount> <unit>` after `$timestamp` / `$isoTimestamp`: a whole number with an optional sign (`1`, `-2`, `+5`) and one of `ms`, `s`, `m` (minutes), `h`, `d`, `w`, `M` (calendar months), `y` (calendar years); the space is optional (`90s`). Units are case-sensitive. Month and year offsets are calendar arithmetic in UTC and clamp to the end of a shorter month. The syntax is our own, loosely based on JetBrains' offsets; `$datetime` / `$localDatetime` are not supported.
+- Arguments in `$random.*(...)` are comma separated. Wrong argument counts, non-numbers, `from` greater than `to` (for `$random.float` also equal), an unknown offset unit or a length outside 0..10000 fail with `Invalid dynamic variable {{...}}: <reason>` (in an `# @assert` line only that assertion is invalid). An unknown `$name` fails as `Undefined variable: <name>`. `$random.float` prints as plain decimal, never `1.0E10`. Only `$` followed by a letter starts a dynamic variable.
+- **`$env` is opt-in.** A `.http` file you download could otherwise send `AWS_SECRET_ACCESS_KEY` or any token in your environment to a server of its choosing, so no variable is readable until you allow its name (exact match; anything else fails with `Invalid dynamic variable {{$env.X}}: environment variable 'X' is not allowed; <how to allow it>`). An allowed name that is not set fails as `Undefined variable: $env.X`. Prefer `http-client.env.json` / `.private.env.json` for secrets. How to allow names:
+  - CLI: `--allow-env NAME[,NAME]` (repeatable), e.g. `httpc api.http --allow-env API_TOKEN,HOME`.
+  - Desktop app and IntelliJ plugin (no UI yet): the system property `-Dhttpclient.allowEnv=NAME,NAME` (in the IDE under Help | Edit Custom VM Options) and/or the environment variable `HTTPC_ALLOW_ENV=NAME,NAME` of the process that starts the app/IDE. Restart to apply. All sources are merged. The environment of a GUI-launched IDE may differ from your shell.
+- `$env` values are inserted as plain text (not scanned for `{{...}}` again). Reports and CLI output show the request as written (with `{{$env.X}}` unresolved), and error messages name the variable, never its value. The server's response may of course echo what you sent.
+- `$uuid`, `$random.uuid` and the `$random.*` family use a cryptographically strong generator (our choice, not taken from JetBrains).
+- JetBrains reads process environment with `{{$processEnv NAME}}` as far as we know (unverified); here `{{$env.NAME}}` is the main form and `$processEnv NAME` an alias. JetBrains has no allowlist, so a file using `$processEnv` there will not need `--allow-env` but will here.
 
 ## Request chaining
 
@@ -425,22 +256,9 @@ Requests run in file order. Once a **named** request has run, later requests can
 | `{{page.response.body.//a/@href}}` | XPath over an XML body (also `body.xpath:count(//a)`) |
 | `{{page.response.body.regex:id=(\d+)}}` | regex over the body: group 1 if present, else the whole match |
 
-The same expressions are what assertions use (see Assertions).
+The same expressions are what assertions use. The body is decoded with the `charset` of the response's `Content-Type` (UTF-8 when absent or unknown). JSONPath supports a subset: `$`, `.key`, `['key']`, `[index]`; objects and arrays are returned as JSON text. XPath runs with secure processing (no DOCTYPE, no external access, no extension functions); XPath and regex stop after 2 seconds and find nothing, and at most 4 XPath evaluations run at a time in the whole process (a fifth fails fast and finds nothing). Referencing a request that has not run, or a path that does not exist, is an error.
 
-The body is decoded with the `charset` of the response's `Content-Type` (UTF-8 when absent or unknown). XPath is
-evaluated with secure processing (no DOCTYPE, no external access, no extension functions) and stops after 2 seconds,
-finding nothing. The evaluation itself cannot be interrupted, so the number of evaluations is capped instead: at most 4 run
-at a time in the whole process (timed-out ones count until they really end). While all 4 are busy a new XPath
-evaluation fails fast and finds nothing, like a timeout. Regex is stopped after 2 seconds as well.
-
-Failure messages (also in `--report-json` / `--report-junit` and on stderr) never contain substituted variable
-values: a value that appears in an error text (for example the resolved URL in an invalid-URI error) is shown as
-`{{name}}`. Values shorter than 3 characters are not replaced.
-
-Supported JSONPath subset: `$`, `.key`, `['key']`, `[index]`. Objects and arrays are returned as JSON text.
-Referencing a request that has not run, or a path that does not exist, is an error.
-
-Implementation and security details: [design notes, Request chaining](design-notes.md#request-chaining).
+Failure messages (also in reports and on stderr) never contain substituted variable values: a value that appears in an error text is shown as `{{name}}`. Values shorter than 3 characters are not replaced.
 
 ## Command line
 
@@ -453,38 +271,30 @@ httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] 
 | Option        | Effect                                               |
 |---------------|------------------------------------------------------|
 | `--env NAME`  | use variables from `NAME` in the nearest `http-client.env.json` (see Environments); without it no environment is used |
-| `--request X` | run the request named `X`, or the Nth (1-based), plus the requests it chains on |
+| `--request X` | run the request named `X`, or the Nth (1-based), plus the named requests it reads responses from (transitively), in file order |
 | `--allow-env N` | let `{{$env.N}}` read these OS environment variables (repeatable) |
 | `--allow-file-root DIR` | also let `< path` bodies be read from `DIR` (repeatable) |
-| `--list`      | list requests and exit (cannot be combined with `--report-*`) |
+| `--list`      | list requests and exit (cannot be combined with `--report-*`, `--quiet`, `--var`, `--timeout`, `--fail-on-http-error`, `--output`) |
 | `--report-json FILE` / `--report-junit FILE` | write a run report (see Run reports) |
 | `--quiet`     | no per-request output on stdout (see below) |
-| `--output FILE` | write the raw response body (byte for byte) of the single selected request to `FILE` |
+| `--output FILE` | write the raw response body of the single selected request to `FILE` |
 | `--var NAME=VALUE` | set a variable, overriding file and environment variables (repeatable) |
-| `--timeout DURATION` | total time limit for requests without `# @timeout`: `30`, `500ms`, `45s`, `2m` (default 60 s; cannot be combined with `--list`) |
-| `--fail-on-http-error` | exit 1 when a selected request gets a response with status >= 400 (see below; cannot be combined with `--list`) |
+| `--timeout DURATION` | total time limit for requests without `# @timeout`: `30`, `500ms`, `45s`, `2m` (default 60 s) |
+| `--fail-on-http-error` | exit 1 when a selected request gets a response with status >= 400 |
 
-For each request the output is the status line with timing, the response headers, then the body.
-After a response, each assertion is printed as `PASS ...` or `FAIL ... -- message`; for a request that failed its assertions are listed as `NOT RUN ...`.
-A total line `Assertions: N passed, M failed, K not run` follows the run. With `--request`, only the selected request's assertions run, not its prerequisites.
-**Summary line:** after a run the CLI prints `3 requests, 2 passed, 1 failed in 1.2s` to **stderr** (so stdout stays the response data, e.g. when piped); it counts every request that ran, prerequisites included, and a request passes when it completed and its assertions held. It is not printed for `--list` or when the run cannot start.
+For each request the output is the status line with timing, the response headers, then the body. After a response, each assertion is printed as `PASS ...` or `FAIL ... -- message` (`NOT RUN ...` when the request failed), and a total line `Assertions: N passed, M failed, K not run` follows the run. After a run the CLI prints a summary such as `3 requests, 2 passed, 1 failed in 1.2s` to **stderr** (so stdout stays the response data); it counts every request that ran, prerequisites included. It is not printed for `--list` or when the run cannot start.
 
-**`--quiet`:** nothing per request is printed on stdout (no `###` heading, status, headers, body, `PASS`, `NOT RUN` or the `Assertions:` total). Failed assertions are printed to stderr as `FAIL ...`, request errors as `Error: ...`, and the summary line still appears, so a quiet run says what failed. Exit codes are unchanged.
+**`--quiet`:** nothing per request on stdout (no heading, status, headers, body, `PASS`, `NOT RUN` or the `Assertions:` total). Failed assertions go to stderr as `FAIL ...`, request errors as `Error: ...`, and the summary line still appears.
 
-**`--fail-on-http-error`:** by default an HTTP error status is not a failure: a `404` or `503` response without a failed assertion exits `0`. With the option, any selected request answering status >= 400 fails the run (exit `1`, same as a failed assertion), even if its assertions pass. Each one is printed to stderr as `FAIL HTTP 503 from <request name or METHOD url> (--fail-on-http-error)`, also with `--quiet`. Like assertions, it applies to the selected requests only: prerequisites that run just to feed `{{name.response...}}` chaining are not judged (with `--request X`, a 404 from a prerequisite does not fail the run; without `--request` every request is selected). Redirects (3xx) are not errors. In reports the entry fails: JSON gets an optional `httpError` string (`"HTTP 503"`, `null` otherwise; reports without the field still parse) and `passed: false`; JUnit XML gets a `failure` with `type="HttpStatusFailure"` and a message such as `HTTP 503 from GET http://host/path`, next to the `AssertionFailure` one when assertions failed too. Usage error (exit `2`) with `--list`.
+**`--fail-on-http-error`:** by default an HTTP error status is not a failure (a `404` or `503` without a failed assertion exits `0`). With the option, any selected request answering status >= 400 fails the run (exit `1`) even if its assertions pass, printed to stderr as `FAIL HTTP 503 from <request name or METHOD url> (--fail-on-http-error)`, also with `--quiet`. Prerequisites that run only to feed chaining are not judged; redirects (3xx) are not errors. In reports the entry fails: JSON gets `"httpError": "HTTP 503"` and `passed: false`; JUnit gets a `failure` of type `HttpStatusFailure` (message such as `HTTP 503 from GET http://host/path`).
 
-**`--output FILE`:** after the run, the body of the selected request's response is written to `FILE` as the raw bytes received, byte for byte, with no decoding: images, PDFs and archives are saved intact, and a text response in a non-UTF-8 charset (e.g. ISO-8859-1) keeps its original encoding instead of being transcoded to UTF-8 (versions before this wrote decoded UTF-8). The client does not decompress, so a `Content-Encoding: gzip` / `br` response is saved still compressed, exactly as received. It needs exactly one selected request: use `--request`, or a file with one request; otherwise it is a usage error (exit `2`, discovered before anything is sent). Prerequisites are never written. Nothing is written when that request fails. Parent folders are created, the write is atomic and a new file is owner-only (`rw-------`, POSIX) because bodies may contain secrets. `FILE` must differ from the input `.http` file and from the report paths (also through `..`, symlinks or case-only differences) and cannot be repeated or combined with `--list`. An unwritable output counts like an unwritable report (exit `3` on a passed run, `1` on a failed one).
+**`--output FILE`:** after the run, the body of the selected request's response is written to `FILE` as the raw bytes received, byte for byte: images, PDFs and archives stay intact, a non-UTF-8 charset keeps its encoding, and a `Content-Encoding: gzip` / `br` response is saved still compressed (the client does not decompress). It needs exactly one selected request (use `--request`, or a file with one request), otherwise it is a usage error (exit `2`, before anything is sent). Prerequisites are never written, nothing is written when that request fails. Parent folders are created, the write is atomic and a new file is owner-only (POSIX) because bodies may contain secrets. `FILE` must differ from the input `.http` file and from the report paths (also through `..`, symlinks or case-only differences) and cannot be repeated.
 
-**`--var NAME=VALUE`:** the name is everything before the first `=` and must be non-empty without whitespace or braces; the value may be empty or contain `=`. Repeating a name is a usage error. Precedence: `--var` beats file variables (`@name = value` lines), which beat the environment file. The resolver prefers file variables over the variable map, so the CLI removes the overridden names from the file variables first; other file variables that mention them then see the `--var` value. Values are treated like any resolved variable: they are replaced by `{{name}}` in failure messages, and usage errors never echo the value. `--quiet` and `--var` cannot be combined with `--list`.
+**`--var NAME=VALUE`:** the name is everything before the first `=` and must be non-empty without whitespace or braces; the value may be empty or contain `=`. Repeating a name is a usage error. Precedence: `--var` beats file variables (`@name = value`), which beat the environment file; other file variables that mention an overridden name see the `--var` value. Values are replaced by `{{name}}` in failure messages and usage errors never echo them.
 
-Exit codes, by precedence: `2` bad arguments (usage is printed, nothing runs); `1` a request or setup failed (missing file, unknown environment or request), an assertion failed, a selected request got an HTTP error status with `--fail-on-http-error`, or any other error; `3` the run passed but a requested report or output file could not be written; `0` otherwise. Parser warnings (ignored response handlers, see above) go to stderr as `warning: FILE: ...`; request failures go to stderr as `Error: ...`.
+**Exit codes**, by precedence: `2` bad arguments (usage is printed, nothing runs); `1` a request or setup failed (missing file, unknown environment or request), an assertion failed, a selected request got an HTTP error status with `--fail-on-http-error`, or any other error; `3` the run passed but a requested report or output file could not be written; `0` otherwise. Parser warnings (ignored response handlers) go to stderr as `warning: FILE: ...`; request failures as `Error: ...`.
 
-Run with `./gradlew :cli:run --args="requests.http --env dev"`, or build a launcher with
-`./gradlew :cli:installDist` (output in `cli/build/install/httpc/bin`).
-
-`--request` also runs the named requests the selected one reads responses from (transitively), in file order, so chaining keeps working.
-
-Implementation and security details: [design notes, Command line](design-notes.md#command-line).
+Run with `./gradlew :cli:run --args="requests.http --env dev"`, or build a launcher with `./gradlew :cli:installDist` (output in `cli/build/install/httpc/bin`).
 
 ## Desktop app
 
@@ -493,9 +303,7 @@ A standalone window for Windows, macOS and Linux: file editor, request list, env
 - The environment choice is explicit: "none" (default; variables from the file only) or a name from the nearest `http-client.env.json`. A name that vanished is reported as an error, never replaced.
 - One session is kept per file, environment and loaded variables, so **Send** on a chained request does not resend a login that already ran (reused prerequisites are not listed). Editing the text does not drop it; changing the environment file does. **Forget responses** drops all sessions so the next Send reruns the chain. **Send all** and the selected request always run again.
 - Only one run at a time: while it runs, editing, saving, opening and creating files are refused. A run first saves the file; a save error stops the run and stays visible.
-- **Remembered between runs** (`settings.json` in the user config folder: `$XDG_CONFIG_HOME/http-client` or `~/.config/http-client` on Linux, `~/Library/Application Support/http-client` on macOS, `%APPDATA%\http-client` on Windows): the last opened file, the last environment per file (by real path), the window size, position and maximized state, and the 10 most recent files (**Recent files** button, most recent first, no duplicates). Only paths, names and geometry are stored, never variable values or secrets. On start the last file and its environment are reopened; a file that no longer exists, or an environment name that vanished, is skipped without an error, and a vanished recent file is removed from the list when clicked. A saved window position is used only if it is visible on a current screen (with no screen information it is dropped and the platform places the window), sizes are clamped to the screen; a maximized or fullscreen window is stored as the maximized flag (restored maximized) and keeps the last normal size, and the bogus (-32000, -32000) position Windows reports for a minimized window is ignored. Entries for files that are missing at start (deleted, or on an absent drive) are hidden from the **Recent files** list but stay stored (the list is still capped at 10), and the remembered environments are capped at the 50 most recently used files. Changes are saved in the background and flushed when the window closes; a quit that bypasses the window close (macOS Cmd+Q, OS shutdown) can lose changes from the last 500 ms. The file is owner-only on POSIX (a config folder created by the app is owner-only too). A corrupt, empty, foreign or newer-version file is ignored (defaults used, a warning shown) and is not overwritten silently: the next save first copies it to `settings.json.corrupt`. A file that cannot be read because of an I/O error (locked, permissions, flaky drive) is not treated as corrupt: it is never backed up or replaced, saving is skipped (and reported once) until it can be read again, and then the stored and in-memory settings are merged. A config folder that cannot be written is reported once on stderr and the app keeps working. Two app instances do not merge: the last one to save wins. A file given on the command line wins over the remembered one.
-
-Implementation and security details: [design notes, Desktop app](design-notes.md#desktop-app).
+- **Remembered between runs** (`settings.json` in the user config folder: `$XDG_CONFIG_HOME/http-client` or `~/.config/http-client` on Linux, `~/Library/Application Support/http-client` on macOS, `%APPDATA%\http-client` on Windows): the last opened file, the last environment per file, the window size, position and maximized state, and the 10 most recent files (**Recent files** button). Only paths, names and geometry are stored, never variable values or secrets. On start the last file and its environment are reopened; a file or environment that no longer exists is skipped without an error, and a file given on the command line wins. A saved window position is used only if it is visible on a current screen. Changes are saved in the background and flushed when the window closes; a quit that bypasses the window close (macOS Cmd+Q, OS shutdown) can lose changes from the last 500 ms. The file is owner-only on POSIX. A corrupt or newer-version file is ignored (defaults used, a warning shown) and the next save first copies it to `settings.json.corrupt`; a file that cannot be read because of an I/O error is neither backed up nor replaced until it can be read again. A config folder that cannot be written is reported once on stderr and the app keeps working. Two app instances do not merge: the last one to save wins. Details: [design notes](design-notes.md#desktop-app).
 
 ## IntelliJ plugin
 
