@@ -39,6 +39,8 @@ class AppUiTest {
             onNodeWithText("t.http").assertExists()
             onNodeWithText("login").assertExists()
             onNodeWithText("me").assertExists()
+            onNodeWithText("Reset chain").assertExists()
+            onNodeWithText("Forget responses").assertDoesNotExist()
         } finally { server.stop() }
     }
 
@@ -53,7 +55,7 @@ class AppUiTest {
             onNodeWithText("Send").performClick()
             waitUntil(timeoutMillis = 10_000) { state.outcomes.size == 2 && !state.running }
             waitForIdle()
-            onNodeWithText("authenticated", substring = true).assertExists()
+            waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("authenticated", substring = true).fetchSemanticsNodes().isNotEmpty() }
             assertEquals(listOf("login", "me"), state.outcomes.map { it.request.name })
         } finally { server.stop() }
     }
