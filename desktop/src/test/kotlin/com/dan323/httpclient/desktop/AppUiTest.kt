@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.pressKey
@@ -171,6 +172,66 @@ class AppUiTest {
             onNodeWithText("Cancel").assertIsNotEnabled()
             onNodeWithText("Send").assertIsEnabled()
         } finally { release.countDown(); http.stop(0) }
+    }
+
+    @Test fun escapeCancelsARunningRequestAndShowsProgressMeanwhile() = runComposeUiTest {
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val http = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
+        http.createContext("/slow") { ex ->
+            entered.countDown()
+            release.await(10, java.util.concurrent.TimeUnit.SECONDS)
+            ex.sendResponseHeaders(200, -1); ex.close()
+        }
+        http.start()
+        try {
+            val dir = Files.createTempDirectory("httpc-ui-esc")
+            val file = dir.resolve("s.http")
+            Files.writeString(file, "GET http://127.0.0.1:${http.address.port}/slow\n")
+            val state = AppState().also { it.open(file) }
+            setContent { AppRoot(state) }
+            onNodeWithTag("run-progress").assertDoesNotExist()
+            onRoot().performKeyInput { pressKey(Key.Escape) }   // nothing running: ignored
+            waitForIdle()
+            assertEquals(false, state.cancelled)
+            onNodeWithText("Send").performClick()
+            waitUntil(timeoutMillis = 10_000) { state.running && entered.count == 0L }
+            waitForIdle()
+            onNodeWithTag("run-progress").assertExists()
+            onRoot().performKeyInput { pressKey(Key.Escape) }
+            waitUntil(timeoutMillis = 10_000) { state.cancelled && !state.running }
+            waitForIdle()
+            onNodeWithText("Cancelled").assertExists()
+            onNodeWithTag("run-progress").assertDoesNotExist()
+        } finally { release.countDown(); http.stop(0) }
+    }
+
+    @Test fun resetChainShowsAChainResetNotice() = runComposeUiTest {
+        val dir = Files.createTempDirectory("httpc-ui-reset")
+        val file = dir.resolve("r.http")
+        Files.writeString(file, "GET http://127.0.0.1:1/x\n")
+        val state = AppState().also { it.open(file) }
+        setContent { AppRoot(state) }
+        onNodeWithText("Chain reset").assertDoesNotExist()
+        onNodeWithText("Reset chain").performClick()
+        waitForIdle()
+        onNodeWithText("Chain reset").assertExists()
+    }
+
+    @Test fun aSecondResetRestartsTheNoticeTimer() = runComposeUiTest {
+        val dir = Files.createTempDirectory("httpc-ui-reset2")
+        val file = dir.resolve("r.http")
+        Files.writeString(file, "GET http://127.0.0.1:1/x\n")
+        val state = AppState().also { it.open(file) }
+        setContent { AppRoot(state) }
+        mainClock.autoAdvance = false
+        onNodeWithText("Reset chain").performClick()
+        mainClock.advanceTimeBy(3_000)
+        onNodeWithText("Reset chain").performClick()
+        mainClock.advanceTimeBy(2_000)   // 5 s after the first click, 2 s after the second
+        onNodeWithText("Chain reset").assertExists()
+        mainClock.advanceTimeBy(3_000)
+        onNodeWithText("Chain reset").assertDoesNotExist()
     }
 
     @Test fun assertionResultsAreShownUnderTheResponse() = runComposeUiTest {

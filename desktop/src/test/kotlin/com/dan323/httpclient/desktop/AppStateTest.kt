@@ -9,6 +9,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class AppStateTest {
@@ -140,6 +141,30 @@ class AppStateTest {
             state.resetChain()
             state.run(all = false)
             assertEquals(2, logins.get())
+        }
+    }
+
+    @Test fun resetChainSetsATransientNoticeClearedByTheNextRunOrClearNotice() {
+        AppState().use { state ->
+            state.open(slowFile("notice.http"))
+            assertEquals(null, state.notice)
+            state.resetChain()
+            assertEquals("Chain reset", state.notice)
+            state.clearNotice()
+            assertEquals(null, state.notice)
+            state.resetChain()
+            state.open(slowFile("notice2.http"))
+            assertEquals(null, state.notice)
+        }
+    }
+
+    @Test fun resettingTheChainAgainChangesTheNoticeId() {
+        AppState().use { state ->
+            state.resetChain()
+            val first = state.noticeId
+            state.resetChain()
+            assertEquals("Chain reset", state.notice)
+            assertNotEquals(first, state.noticeId)
         }
     }
 

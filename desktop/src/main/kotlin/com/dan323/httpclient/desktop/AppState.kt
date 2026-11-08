@@ -44,6 +44,14 @@ class AppState(
     var cancelled by mutableStateOf(false)
         private set
 
+    /** A short, self-clearing confirmation (e.g. [CHAIN_RESET_NOTICE]); the UI drops it after a few seconds with [clearNotice]. */
+    var notice by mutableStateOf<String?>(null)
+        private set
+
+    /** Changes every time [notice] is set, so the UI can restart its timer when the same text is shown again. */
+    var noticeId by mutableStateOf(0)
+        private set
+
     /** What the run buttons offer now; the shared rule for Send, Cancel and the refusals while running. */
     val controls: RunControls get() = RunControls(running, file != null)
 
@@ -93,6 +101,7 @@ class AppState(
         selected = 0
         outcomes = emptyList()
         cancelled = false
+        notice = null
         environments = emptyList()
         chosenEnvironment = null   // the choice belongs to the previous file's environments
         val key = canonical(path)
@@ -178,6 +187,7 @@ class AppState(
             val path = file ?: return
             cancellation.reset()
             cancelled = false
+            notice = null
             running = true
             synchronized(lock) { outcomes = emptyList() }   // never leave the previous run's results next to a new error
             val t = text   // one snapshot for the write and the run
@@ -207,8 +217,16 @@ class AppState(
         if (running) cancellation.cancel()
     }
 
-    /** Forgets remembered responses, so the next run sends the chained requests again. */
-    fun resetChain() = runner.resetChain()
+    /** Forgets remembered responses, so the next run sends the chained requests again, and says so in [notice]. */
+    fun resetChain() {
+        runner.resetChain()
+        notice = CHAIN_RESET_NOTICE
+        noticeId++
+    }
+
+    fun clearNotice() {
+        notice = null
+    }
 
     override fun close() {
         try { settings?.close() } finally { runner.close() }
@@ -254,3 +272,6 @@ internal fun canonical(path: Path): String = try {
 } catch (_: Exception) {
     path.toAbsolutePath().normalize().toString()
 }
+
+/** Shown after **Reset chain**; the plugin reports the same event. */
+internal const val CHAIN_RESET_NOTICE = "Chain reset"
