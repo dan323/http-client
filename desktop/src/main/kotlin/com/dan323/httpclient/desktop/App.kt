@@ -117,7 +117,7 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             } else {
                 val notice = state.notice
                 if (notice != null) {
-                    LaunchedEffect(notice) { delay(NOTICE_MILLIS); state.clearNotice() }
+                    LaunchedEffect(state.noticeId) { delay(NOTICE_MILLIS); state.clearNotice() }
                     Text(notice, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, maxLines = 1)
                 }
             }

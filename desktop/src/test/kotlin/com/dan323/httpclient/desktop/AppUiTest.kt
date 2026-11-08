@@ -218,6 +218,22 @@ class AppUiTest {
         onNodeWithText("Chain reset").assertExists()
     }
 
+    @Test fun aSecondResetRestartsTheNoticeTimer() = runComposeUiTest {
+        val dir = Files.createTempDirectory("httpc-ui-reset2")
+        val file = dir.resolve("r.http")
+        Files.writeString(file, "GET http://127.0.0.1:1/x\n")
+        val state = AppState().also { it.open(file) }
+        setContent { AppRoot(state) }
+        mainClock.autoAdvance = false
+        onNodeWithText("Reset chain").performClick()
+        mainClock.advanceTimeBy(3_000)
+        onNodeWithText("Reset chain").performClick()
+        mainClock.advanceTimeBy(2_000)   // 5 s after the first click, 2 s after the second
+        onNodeWithText("Chain reset").assertExists()
+        mainClock.advanceTimeBy(3_000)
+        onNodeWithText("Chain reset").assertDoesNotExist()
+    }
+
     @Test fun assertionResultsAreShownUnderTheResponse() = runComposeUiTest {
         val req = HttpFileParser().parse("# @assert status == 200\n# @assert body.id == 1\nGET http://h/a\n\n###\n# @assert status == 200\nGET http://h/b\n").requests
         val ok = RunOutcome.Success(

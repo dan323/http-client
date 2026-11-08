@@ -48,6 +48,10 @@ class AppState(
     var notice by mutableStateOf<String?>(null)
         private set
 
+    /** Changes every time [notice] is set, so the UI can restart its timer when the same text is shown again. */
+    var noticeId by mutableStateOf(0)
+        private set
+
     /** What the run buttons offer now; the shared rule for Send, Cancel and the refusals while running. */
     val controls: RunControls get() = RunControls(running, file != null)
 
@@ -217,6 +221,7 @@ class AppState(
     fun resetChain() {
         runner.resetChain()
         notice = CHAIN_RESET_NOTICE
+        noticeId++
     }
 
     fun clearNotice() {
