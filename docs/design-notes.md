@@ -1,6 +1,6 @@
 # Design notes
 
-How the behaviour described in [features.md](features.md) is implemented, and why. The sections have the same names. Class names are from `core` and `adapters` (see [AGENTS.md](../AGENTS.md)).
+How the behaviour described in [features.md](features.md) is implemented, and why. Only the sections that have internals worth keeping are covered; they use the same names as there. Class names are from `core` and `adapters` (see [AGENTS.md](../AGENTS.md)).
 
 ## Contents
 
@@ -41,7 +41,7 @@ The parser stores settings on `RequestTemplate.settings`; the executor honours t
 ### Cookie jar
 
 - `RequestSession` owns the in-memory `CookieJar` (`core`). In the desktop app and plugin the shared `RunController` keeps one session per file, environment and loaded variables.
-- The session follows redirects one hop at a time and tells the executor not to follow any, which is why `Set-Cookie` on a `302` is stored and why `Cookie`, `Authorization` and `Proxy-Authorization` handling is the same on every JDK. `JdkHttpExecutor` follows through the same code.
+- The session follows redirects one hop at a time and tells the executor not to follow any, which is why `Set-Cookie` on a `302` is stored; the credential-header handling is described under Request settings.
 - `Path` is matched on the raw, undecoded path. `Max-Age` takes digits with an optional `-` (`+5` or text is ignored; extreme values saturate). `Expires` uses lenient RFC 6265 parsing (`21 Oct 2015`, `21-Oct-2015`, 2-digit years, asctime).
 - `@no-cookie-jar` cannot disable a `CookieHandler` configured on an `HttpClient` injected into `JdkHttpExecutor`; that handler still sends and stores on its own.
 - Public Suffix List: `core` has no third-party dependencies, so the list is a classpath resource, `core/src/main/resources/com/dan323/httpclient/core/public_suffix_list.txt` (ICANN and private sections, rules only; the first line records the list version and commit), read by `PublicSuffixList`. Wildcard and exception rules are supported and a name with no matching rule counts as a one-label suffix, as in the PSL algorithm. To update: download `https://publicsuffix.org/list/public_suffix_list.dat`, drop comment lines (`//`), blank lines and anything after whitespace, put a header line with the new `VERSION` and `COMMIT` on top, replace the file and run `./gradlew :core:test`.
