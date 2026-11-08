@@ -30,15 +30,18 @@ dependencies {
 val extraRuntimeModules = listOf("java.net.http", "jdk.unsupported", "java.instrument")
 
 // Installers need a numeric version with MAJOR >= 1, and an installer only upgrades an older one if its version is
-// higher, so it is derived from the project version: 0.MINOR.PATCH[-rcN] becomes 1.MINOR.(PATCH*100 + N), a final
-// release counting as N = 99 (0.5.0-rc1 -> 1.5.1, 0.5.0 -> 1.5.99, 0.5.1 -> 1.5.199). The build part is at most 65535.
+// higher, so it is derived from the project version: MAJOR.MINOR.PATCH[-rcN] becomes (MAJOR+1).MINOR.(PATCH*100 + N),
+// a final release counting as N = 99 (0.5.0-rc1 -> 1.5.1, 0.5.0 -> 1.5.99, 0.5.1 -> 1.5.199, 1.0.0 -> 2.0.99).
+// Shifting the major by one keeps every 1.x release above every 0.x one. The build part is at most 65535.
 val installerVersion: String = run {
-    val match = Regex("""0\.(\d+)\.(\d+)(?:-rc(\d+))?""").matchEntire(project.version.toString())
-        ?: error("Cannot derive an installer version from '${project.version}': expected 0.MINOR.PATCH or 0.MINOR.PATCH-rcN")
-    val (minor, patch, rc) = match.destructured
+    val match = Regex("""(\d+)\.(\d+)\.(\d+)(?:-rc(\d+))?""").matchEntire(project.version.toString())
+        ?: error("Cannot derive an installer version from '${project.version}': expected MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-rcN")
+    val (major, minor, patch, rc) = match.destructured
+    // A release candidate is at most 98, so the final release (99) always has a higher installer version than any rc.
+    require(rc.isEmpty() || rc.toInt() in 1..98) { "Release candidate number in '${project.version}' must be 1..98" }
     val candidate = rc.ifEmpty { "99" }.toInt()
-    require(candidate in 1..99 && patch.toInt() * 100 + candidate <= 65535) { "Version '${project.version}' is out of range for an installer" }
-    "1.$minor.${patch.toInt() * 100 + candidate}"
+    require(patch.toInt() * 100 + candidate <= 65535) { "Version '${project.version}' is out of range for an installer" }
+    "${major.toInt() + 1}.$minor.${patch.toInt() * 100 + candidate}"
 }
 
 compose.desktop {
