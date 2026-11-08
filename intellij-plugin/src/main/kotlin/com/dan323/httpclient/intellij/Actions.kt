@@ -52,6 +52,20 @@ class RunRequestAction : AnAction(), DumbAware {
     }
 }
 
+/** Stops the running request. Enabled only while one runs; lives in the HTTP Response tool window and in Find Action. */
+class CancelRequestAction : AnAction(), DumbAware {
+    override fun getActionUpdateThread() = ActionUpdateThread.BGT
+
+    override fun update(e: AnActionEvent) {
+        val project = e.project
+        e.presentation.isEnabled = project != null && project.getService(HttpClientService::class.java).isRunning
+    }
+
+    override fun actionPerformed(e: AnActionEvent) {
+        e.project?.getService(HttpClientService::class.java)?.cancel()
+    }
+}
+
 class SelectEnvironmentAction : AnAction(), DumbAware {
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
 

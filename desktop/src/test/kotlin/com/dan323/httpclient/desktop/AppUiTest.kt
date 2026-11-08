@@ -2,6 +2,8 @@ package com.dan323.httpclient.desktop
 
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.onAllNodesWithText
@@ -138,6 +140,37 @@ class AppUiTest {
             waitForIdle()
             onNodeWithText("\"authenticated\": true", substring = true).assertExists()
         } finally { server.stop() }
+    }
+
+    @Test fun cancelButtonIsEnabledOnlyWhileRunningAndShowsCancelled() = runComposeUiTest {
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val http = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
+        http.createContext("/slow") { ex ->
+            entered.countDown()
+            release.await(10, java.util.concurrent.TimeUnit.SECONDS)
+            ex.sendResponseHeaders(200, -1); ex.close()
+        }
+        http.start()
+        try {
+            val dir = Files.createTempDirectory("httpc-ui-cancel")
+            val file = dir.resolve("s.http")
+            Files.writeString(file, "GET http://127.0.0.1:${http.address.port}/slow\n")
+            val state = AppState().also { it.open(file) }
+            setContent { AppRoot(state) }
+            onNodeWithText("Cancel").assertIsNotEnabled()
+            onNodeWithText("Send").performClick()
+            waitUntil(timeoutMillis = 10_000) { state.running && entered.count == 0L }
+            waitForIdle()
+            onNodeWithText("Cancel").assertIsEnabled()
+            onNodeWithText("Running…").assertIsNotEnabled()
+            onNodeWithText("Cancel").performClick()
+            waitUntil(timeoutMillis = 10_000) { state.cancelled && !state.running }
+            waitForIdle()
+            onNodeWithText("Cancelled").assertExists()
+            onNodeWithText("Cancel").assertIsNotEnabled()
+            onNodeWithText("Send").assertIsEnabled()
+        } finally { release.countDown(); http.stop(0) }
     }
 
     @Test fun assertionResultsAreShownUnderTheResponse() = runComposeUiTest {

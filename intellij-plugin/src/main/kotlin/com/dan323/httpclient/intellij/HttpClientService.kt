@@ -32,6 +32,7 @@ class HttpClientService(@Suppress("unused") private val project: Project) : Disp
         get() = state.environmentChoice
         set(value) { state.environmentChoice = value }
     val lastReport: Report get() = state.lastReport
+    val isRunning: Boolean get() = state.isRunning
 
     init {
         // Drop what is remembered about a file when it is deleted or moved/renamed (closing an editor keeps it: a
@@ -52,7 +53,13 @@ class HttpClientService(@Suppress("unused") private val project: Project) : Disp
     /** Called with every new report; unregistered when [parent] is disposed. */
     fun onReport(parent: Disposable, listener: (Report) -> Unit) = state.onReport(listener).let { remove -> Disposer.register(parent, Disposable { remove() }) }
 
+    /** Called with `true` when a request starts and `false` when it ends; unregistered when [parent] is disposed. */
+    fun onRunning(parent: Disposable, listener: (Boolean) -> Unit) = state.onRunning(listener).let { remove -> Disposer.register(parent, Disposable { remove() }) }
+
     fun resetChain() = state.resetChain()
+
+    /** Stops the running request, if any (see [ClientState.cancel]). */
+    fun cancel() = state.cancel()
 
     /** Environments for [file]: the nearest enclosing `http-client.env.json` (same rule as the CLI and desktop). */
     fun environments(file: Path): List<Environment> = locator.environments(file)

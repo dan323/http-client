@@ -5,6 +5,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.dan323.httpclient.core.application.RunOutcome
 import com.dan323.httpclient.core.domain.RequestTemplate
+import com.dan323.httpclient.viewmodel.RunCancellation
+import com.dan323.httpclient.viewmodel.RunControls
+import com.dan323.httpclient.viewmodel.Tracked
+import com.dan323.httpclient.viewmodel.cancelledLabel
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
@@ -36,6 +40,16 @@ class AppState(
     var message by mutableStateOf<String?>(null)
         private set
 
+    /** True when the last run was stopped with [cancel]; cleared when the next run starts or another file is opened. */
+    var cancelled by mutableStateOf(false)
+        private set
+
+    /** What the run buttons offer now; the shared rule for Send, Cancel and the refusals while running. */
+    val controls: RunControls get() = RunControls(running, file != null)
+
+    /** `Cancelled (1 request had finished)` after a cancelled run, else null. A cancelled run is not an error. */
+    val cancelledLabel: String? get() = if (cancelled) cancelledLabel(outcomes.size) else null
+
     /** Recently opened files, most recent first; entries whose file is missing right now (deleted, drive absent) are hidden but stay stored. */
     var recentFiles by mutableStateOf<List<Path>>(emptyList())
         private set
@@ -56,6 +70,7 @@ class AppState(
     /** Held for the whole of [run] and of a file switch, so the two never overlap and runs never overlap each other. */
     private val busy = AtomicBoolean(false)
     private val lock = Any()
+    private val cancellation = RunCancellation()
 
     private fun assignText(value: String) {
         text = value
@@ -77,6 +92,7 @@ class AppState(
         dirty = false
         selected = 0
         outcomes = emptyList()
+        cancelled = false
         environments = emptyList()
         chosenEnvironment = null   // the choice belongs to the previous file's environments
         val key = canonical(path)
@@ -160,6 +176,8 @@ class AppState(
         if (!busy.compareAndSet(false, true)) return
         try {
             val path = file ?: return
+            cancellation.reset()
+            cancelled = false
             running = true
             synchronized(lock) { outcomes = emptyList() }   // never leave the previous run's results next to a new error
             val t = text   // one snapshot for the write and the run
@@ -171,13 +189,22 @@ class AppState(
                 message = "No request is selected (the file has ${requests.size}); pick one from the list."
                 return
             }
-            runner.execute(path, t, if (all) null else index, environment) { o -> synchronized(lock) { outcomes = outcomes + o } }
+            val tracked = cancellation.track {
+                runner.execute(path, t, if (all) null else index, environment) { o -> synchronized(lock) { outcomes = outcomes + o } }
+            }
+            // Outcomes that finished before the cancel stay; the cancelled request is not remembered (see RunController).
+            if (tracked is Tracked.Cancelled) cancelled = true
         } catch (e: Exception) {
             message = e.message ?: e::class.simpleName
         } finally {
             running = false
             busy.set(false)
         }
+    }
+
+    /** Stops the running request; does nothing when none is running. The run ends shortly after with [cancelled] set. */
+    fun cancel() {
+        if (running) cancellation.cancel()
     }
 
     /** Forgets remembered responses, so the next run sends the chained requests again. */

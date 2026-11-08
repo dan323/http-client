@@ -304,6 +304,49 @@ class AppStateTest {
         }
     }
 
+    @Test fun cancelStopsTheRunShowsCancelledAndRemembersNothing() {
+        AppState().use { state ->
+            val file = slowFile("cancel.http")
+            state.open(file)
+            state.environment = "dev"
+            assertFalse(state.controls.canCancel)
+            state.cancel()   // nothing is running: ignored, and it must not cancel the next run
+            val t = Thread { state.run(all = false) }.also { it.start() }
+            assertTrue(entered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            assertTrue(state.controls.canCancel)
+            state.cancel()
+            t.join(15_000)
+            assertFalse(t.isAlive)
+            assertFalse(state.running)
+            assertTrue(state.cancelled)
+            assertEquals("Cancelled", state.cancelledLabel)
+            assertTrue(state.outcomes.isEmpty())
+            assertEquals(null, state.message)   // not an error
+            // The cancelled request is sent again, not served from a remembered response.
+            release.countDown()
+            state.run(all = false)
+            assertFalse(state.cancelled)
+            assertEquals(2, slowHits.get())
+            assertEquals("slow", bodyOf(state.outcomes.single()))
+        }
+    }
+
+    @Test fun cancelKeepsOutcomesThatFinishedBeforeIt() {
+        AppState().use { state ->
+            val file = dir.resolve("partial.http").also { Files.writeString(it, "GET {{base}}/echo\n\n###\nGET {{base}}/slow\n") }
+            state.open(file)
+            state.environment = "dev"
+            val t = Thread { state.run(all = true) }.also { it.start() }
+            assertTrue(entered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            state.cancel()
+            t.join(15_000)
+            assertEquals("Cancelled (1 request had finished)", state.cancelledLabel)
+            assertEquals(1, state.outcomes.size)
+            state.open(file)   // opening a file clears the notice
+            assertEquals(null, state.cancelledLabel)
+        }
+    }
+
     @Test fun staleSelectionClearsThePreviousRunsOutcomes() {
         AppState().use { state ->
             state.open(dir.resolve("clr.http").also { Files.writeString(it, "GET {{base}}/echo\n") })

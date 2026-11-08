@@ -87,6 +87,27 @@ class ClientStateTest {
         assertTrue(s.run(file, "GET http://x/other\n", 0))
     }
 
+    @Test fun cancelStopsTheRunReportsCancelledAndAllowsTheNextRun() {
+        val s = state()
+        s.environmentChoice = dev
+        val running = mutableListOf<Boolean>()
+        s.onRunning { running += it }
+        s.cancel()   // nothing running: ignored
+        gate = CountDownLatch(1); entered = CountDownLatch(1)
+        val t = thread { s.run(file, text, 5) }
+        assertTrue(entered!!.await(10, TimeUnit.SECONDS))
+        s.cancel()
+        t.join(10_000)
+        assertFalse(t.isAlive)
+        assertFalse(s.isRunning)
+        assertEquals(listOf(true, false), running.toList())
+        assertEquals("Cancelled", s.lastReport.message)
+        assertEquals(0, s.cachedSessions)   // the cancelled request is not remembered
+        gate = null
+        assertTrue(s.run(file, text, 5))
+        assertEquals(listOf("http://h/login", "http://h/login", "http://h/me"), sent.toList())
+    }
+
     @Test fun editingTheFileDropsItsRememberedResponses() {
         val s = state()
         s.environmentChoice = dev

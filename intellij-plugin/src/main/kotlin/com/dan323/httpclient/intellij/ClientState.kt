@@ -4,9 +4,12 @@ import com.dan323.httpclient.core.application.EnvironmentChoice
 import com.dan323.httpclient.core.application.RequestSession
 import com.dan323.httpclient.core.port.out.EnvironmentLocator
 import com.dan323.httpclient.viewmodel.OutcomeDisplay
+import com.dan323.httpclient.viewmodel.RunCancellation
 import com.dan323.httpclient.viewmodel.RunController
 import com.dan323.httpclient.viewmodel.RunResult
 import com.dan323.httpclient.viewmodel.RunTarget
+import com.dan323.httpclient.viewmodel.Tracked
+import com.dan323.httpclient.viewmodel.cancelledLabel
 import com.dan323.httpclient.viewmodel.display
 import com.dan323.httpclient.viewmodel.reusedDisplay
 import java.nio.file.Path
@@ -34,6 +37,8 @@ class ClientState(locator: EnvironmentLocator, maxSessions: Int = 16, newSession
     private val listeners = mutableListOf<(Report) -> Unit>()
     private val controller = RunController(locator, maxSessions, newSession)
     private val running = AtomicBoolean(false)
+    private val cancellation = RunCancellation()
+    private val runListeners = mutableListOf<(Boolean) -> Unit>()
     // Text last run per file, least recently used first, bounded like the sessions; the file evicted here also loses its
     // sessions (see [rememberText]), so the two caches never disagree about a file.
     private val lastTexts = object : LinkedHashMap<Path, String>(16, 0.75f, true) {
@@ -53,6 +58,19 @@ class ClientState(locator: EnvironmentLocator, maxSessions: Int = 16, newSession
     fun onEnvironmentChoice(listener: () -> Unit): () -> Unit {
         synchronized(choiceListeners) { choiceListeners += listener }
         return { synchronized(choiceListeners) { choiceListeners -= listener } }
+    }
+
+    /** Called with `true` when a run starts and `false` when it ends (finished, failed or cancelled), from the running thread. */
+    fun onRunning(listener: (Boolean) -> Unit): () -> Unit {
+        synchronized(runListeners) { runListeners += listener }
+        return { synchronized(runListeners) { runListeners -= listener } }
+    }
+
+    private fun notifyRunning(value: Boolean) = synchronized(runListeners) { runListeners.toList() }.forEach { it(value) }
+
+    /** Stops the running request, if any; its report then reads `Cancelled`. Safe from any thread. */
+    fun cancel() {
+        if (running.get()) cancellation.cancel()
     }
 
     /** Called with every new report, from the running thread. Returns the function that unregisters it. */
@@ -88,6 +106,8 @@ class ClientState(locator: EnvironmentLocator, maxSessions: Int = 16, newSession
      */
     fun run(file: Path, text: String, caretLine: Int): Boolean {
         if (!running.compareAndSet(false, true)) return false
+        cancellation.reset()
+        notifyRunning(true)
         try {
             val abs = file.toAbsolutePath()
             val (previous, dropped) = synchronized(lastTexts) {
@@ -99,20 +119,27 @@ class ClientState(locator: EnvironmentLocator, maxSessions: Int = 16, newSession
             val sections = mutableListOf<Section>()
             var envName: String? = null
             val report = { Report(environment = envName ?: "none", sections = sections.toList()) }
-            val result = controller.run(file, text, RunTarget.AtLine(caretLine), environmentChoice,
-                onEnvironment = { envName = it },
-                onReused = { reused ->
-                    reused.forEach { sections += Section(reusedDisplay(it)) }
+            val tracked = cancellation.track {
+                controller.run(file, text, RunTarget.AtLine(caretLine), environmentChoice,
+                    onEnvironment = { envName = it },
+                    onReused = { reused ->
+                        reused.forEach { sections += Section(reusedDisplay(it)) }
+                        publish(report())
+                    },
+                ) { outcome ->
+                    sections += Section(outcome.display())
                     publish(report())
-                },
-            ) { outcome ->
-                sections += Section(outcome.display())
-                publish(report())
+                }
             }
-            if (result is RunResult.Rejected) publish(Report(message = result.message))
+            when (tracked) {
+                // A cancelled run is an outcome, not an error: what finished stays, with a Cancelled line above it.
+                Tracked.Cancelled -> publish(report().copy(message = cancelledLabel(sections.count { it.display !is OutcomeDisplay.Reused })))
+                is Tracked.Done -> (tracked.value as? RunResult.Rejected)?.let { publish(Report(message = it.message)) }
+            }
             return true
         } finally {
             running.set(false)
+            notifyRunning(false)
         }
     }
 }

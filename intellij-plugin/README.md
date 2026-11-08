@@ -16,7 +16,8 @@ It depends only on `com.intellij.modules.platform`, so it is meant to work in Co
   no longer exists is an error. The choice is kept per project until the IDE restarts.
 - Responses of earlier requests (a login) are remembered per file and environment; any edit to the file, or deleting or moving it,
   drops them, and **Reset chain** in the tool window forgets them all. One request runs at a time.
-- **HTTP Response** tool window (with the **Reset chain** button) with status, timing, assertion results (`# @assert`: a summary and a PASS/FAIL line each; unverified by hand in an IDE), headers and the body (JSON pretty-printed).
+- **HTTP Response** tool window (with the **Reset chain** and **Cancel** buttons) with status, timing, assertion results (`# @assert`: a summary and a PASS/FAIL line each; unverified by hand in an IDE), headers and the body (JSON pretty-printed).
+- **Cancel** (a button in the tool window and the title-bar action *Cancel HTTP Request*, enabled only while a request runs) stops the running request; the tool window shows `Cancelled` above the responses that had arrived, and the cancelled request is not remembered. Unverified by hand in an IDE (only the shared logic and `ClientState` have tests).
 
 See [../docs/features.md](../docs/features.md) for the `.http` syntax, variables and chaining.
 

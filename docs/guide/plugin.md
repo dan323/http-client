@@ -37,6 +37,10 @@ The choice starts as `(none)` after every IDE restart and applies to runs from e
 
 A request that uses {% raw %}`{{login.response.body.token}}`{% endraw %} runs the `login` request first. The plugin remembers the responses so the login is not sent again. Editing a file, or deleting or moving it, drops what was remembered for it. Press **Reset chain** in the tool window to drop everything and run the chain again.
 
+## 5. Stop a running request
+
+While a request runs, press **Cancel** in the **HTTP Response** tool window (or the stop icon in its title bar). The window shows **Cancelled** above the responses that had already arrived. The next run sends the whole chain again.
+
 ## More
 
 Behavior and limits: [feature reference, IntelliJ plugin](https://github.com/dan323/http-client/blob/master/docs/features.md#intellij-plugin) and the [plugin README](https://github.com/dan323/http-client/blob/master/intellij-plugin/README.md).

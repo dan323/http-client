@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dan323.httpclient.core.application.RunOutcome
+import com.dan323.httpclient.viewmodel.RunControls
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.awt.FileDialog
@@ -83,17 +84,22 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
                 }
             }
         }
+        val controls = state.controls
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(enabled = state.file != null && !state.running, contentPadding = CompactButtonPadding, onClick = { scope.launch(Dispatchers.IO) { state.run(all = false) } }) {
-                Text(if (state.running) "Running…" else "Send", maxLines = 1)
+            Button(enabled = controls.canSend, contentPadding = CompactButtonPadding, onClick = { scope.launch(Dispatchers.IO) { state.run(all = false) } }) {
+                Text(controls.sendLabel, maxLines = 1)
             }
-            OutlinedButton(enabled = state.file != null && !state.running, contentPadding = CompactButtonPadding, onClick = { scope.launch(Dispatchers.IO) { state.run(all = true) } }) {
+            // Stops the request in flight; what already finished stays and the cancelled request is not remembered.
+            OutlinedButton(enabled = controls.canCancel, contentPadding = CompactButtonPadding, onClick = { state.cancel() }) {
+                Text(RunControls.CANCEL_LABEL, maxLines = 1)
+            }
+            OutlinedButton(enabled = controls.canSend, contentPadding = CompactButtonPadding, onClick = { scope.launch(Dispatchers.IO) { state.run(all = true) } }) {
                 Text("Send all", maxLines = 1)
             }
-            // Responses of earlier requests (e.g. a login token) are remembered between runs; this forgets them.
-            OutlinedButton(enabled = state.file != null && !state.running, contentPadding = CompactButtonPadding, onClick = { state.resetChain() }) {
-                Text("Reset chain", maxLines = 1)
-            }
+        }
+        // Responses of earlier requests (e.g. a login token) are remembered between runs; this forgets them.
+        OutlinedButton(enabled = controls.canSend, contentPadding = CompactButtonPadding, onClick = { state.resetChain() }) {
+            Text("Reset chain", maxLines = 1)
         }
     }
 
@@ -118,7 +124,11 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
     // Right: responses.
     Column(Modifier.weight(1.2f).fillMaxHeight().padding(12.dp)) {
         Text("Response", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp))
-        if (state.outcomes.isEmpty()) {
+        val cancelled = state.cancelledLabel
+        if (cancelled != null) {
+            // A cancelled run is an outcome, not an error: neutral colour, and the results that finished stay below.
+            Text(cancelled, color = MaterialTheme.colorScheme.outline, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
+        } else if (state.outcomes.isEmpty()) {
             Text(
                 if (state.running) "Sending…" else "Select a request and press Send (Ctrl/Cmd+Enter).",
                 color = MaterialTheme.colorScheme.outline,

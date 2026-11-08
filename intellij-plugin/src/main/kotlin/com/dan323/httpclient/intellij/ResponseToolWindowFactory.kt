@@ -1,9 +1,11 @@
 package com.dan323.httpclient.intellij
 
 import com.dan323.httpclient.viewmodel.JsonPart
+import com.dan323.httpclient.viewmodel.RunControls
 import com.dan323.httpclient.viewmodel.StatusClass
 import com.dan323.httpclient.viewmodel.OutcomeDisplay
 import com.dan323.httpclient.viewmodel.jsonSpans
+import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.editor.colors.EditorFontType
 import com.intellij.openapi.project.DumbAware
@@ -15,6 +17,7 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.content.ContentFactory
 import java.awt.BorderLayout
 import java.awt.Color
+import java.awt.FlowLayout
 import javax.swing.BorderFactory
 import javax.swing.JButton
 import javax.swing.JPanel
@@ -54,9 +57,17 @@ class ResponseToolWindowFactory : ToolWindowFactory, DumbAware {
             toolTipText = "Forget remembered responses (e.g. an expired login) so chained requests run again"
             addActionListener { service.resetChain() }
         }
+        // Enabled only while a request runs (what the desktop app does too, see RunControls); the same action is in the title bar.
+        val cancel = JButton(RunControls.CANCEL_LABEL).apply {
+            toolTipText = "Stop the running request; responses that already arrived stay"
+            isEnabled = service.isRunning
+            addActionListener { service.cancel() }
+        }
+        service.onRunning(toolWindow.disposable) { running -> SwingUtilities.invokeLater { cancel.isEnabled = RunControls(running).canCancel } }
+        ActionManager.getInstance().getAction("httpclient.CancelRequest")?.let { toolWindow.setTitleActions(listOf(it)) }
         val top = JPanel(BorderLayout(8, 0)).apply {
             border = BorderFactory.createEmptyBorder(4, 8, 4, 8)
-            add(reset, BorderLayout.WEST)
+            add(JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply { add(reset); add(cancel) }, BorderLayout.WEST)
         }
         val panel = JPanel(BorderLayout()).apply {
             add(top, BorderLayout.NORTH)
