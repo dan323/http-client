@@ -5,6 +5,9 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- IntelliJ plugin: its own icon for `.http` files (light and dark variants) and for the plugin listing, instead of a generic server icon.
+
 ### Fixed
 - HTTP/2 pseudo-headers (`:status`) are no longer listed among the response headers in any front end, report or saved response; the status was already shown separately.
 

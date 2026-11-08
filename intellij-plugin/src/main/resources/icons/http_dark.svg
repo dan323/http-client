@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <title>HTTP request file</title>
+  <rect x="1" y="1" width="14" height="14" rx="3.25" fill="#5A93DB"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3.9 5.1h8.0m-2.1-2.0 2.1 2.0-2.1 2.0"/>
+    <path d="M12.1 10.9h-8.0m2.1-2.0-2.1 2.0 2.1 2.0"/>
+  </g>
+</svg>
