@@ -25,7 +25,7 @@ The build-only `quality-reports/` project (not shipped) aggregates reports of al
 - `./gradlew :core:pitest` runs PIT mutation testing on `core` (about a minute; HTML report in `core/build/reports/pitest/`). Measured mutation score 83 % (820 of 988 mutants killed); the build fails below 80 %.
 - The IntelliJ plugin is excluded from JaCoCo (the IDE test runtime instruments classes itself and its tests need an IDE).
 
-Documentation: [getting started](docs/getting-started.md) · [features](docs/features.md) · [design notes](docs/design-notes.md) · [differences from JetBrains](docs/jetbrains-compatibility.md) · [plan](docs/PLAN.md) · [changelog](CHANGELOG.md)
+Documentation: [getting started](docs/getting-started.md) · [features](docs/features.md) · [design notes](docs/design-notes.md) · [differences from JetBrains](docs/jetbrains-compatibility.md) · [user guide](docs/user-guide-plan.md) · [plan](docs/PLAN.md) · [changelog](CHANGELOG.md)
 
 ## CLI
 
