@@ -23,7 +23,7 @@ starts with "(none)", so samples that use `{{base}}` fail with an undefined vari
 | `assertions.http` | `# @assert` lines; the last request is expected to fail an assertion |
 | `dynamic.http` | dynamic variables (`$random.*`, offsets, `$env`) |
 | `file-body.http` | `< ./payload.json` body |
-| `methods.http` | PUT, PATCH, DELETE, HEAD, OPTIONS, 404, redirects |
+| `methods.http` | PUT, PATCH, DELETE, HEAD, OPTIONS, QUERY, 404, redirects |
 
 Environments are in `http-client.env.json`: `dev` is the mock server; `httpbin` targets the public
 https://httpbin.org instead. For secrets, copy `http-client.private.env.json.example` to

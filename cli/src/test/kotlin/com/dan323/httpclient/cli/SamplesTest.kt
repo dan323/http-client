@@ -110,6 +110,8 @@ class SamplesTest {
         val r = sample("methods.http")
         assertEquals(0, r.code, r.err)
         assertContains(r.out, "HTTP 404")
+        assertContains(r.out, "\"method\": \"QUERY\"")
+        assertContains(r.out, "\"data\": \"q=1\"")
         assertFalse(r.out.contains("HTTP 302"), "redirects should be followed")
     }
 }

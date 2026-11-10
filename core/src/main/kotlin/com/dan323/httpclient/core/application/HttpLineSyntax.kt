@@ -16,7 +16,7 @@ sealed interface RequestLineKind {
 
 /** Line classification shared by the parser and the lexer. */
 object HttpLineSyntax {
-    val METHODS = setOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "CONNECT")
+    val METHODS = setOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "CONNECT", "QUERY")
 
     /** Request types of the JetBrains format that are not supported; they must fail instead of being sent as plain HTTP. */
     val UNSUPPORTED_PROTOCOLS = setOf("GRAPHQL", "WEBSOCKET", "GRPC")

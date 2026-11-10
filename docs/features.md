@@ -41,6 +41,7 @@ Content-Type: application/json
 GET {{base}}/me
 ```
 
+- The methods are `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`, `TRACE`, `CONNECT` and `QUERY` (the safe method with a request body). Any other word is a parse error.
 - `# @name x` or `// @name x` names a request (needed for chaining and `--request`). Lines starting with `#` or `//` are comments.
 - A bare URL (no method) means `GET`. A trailing `HTTP/1.1` is ignored. Indented `?a=1` / `&b=2` lines after the request line extend the URL, and an indented header line without `:` continues the previous header value.
 - Parse errors name the line: an unknown method (`GTE http://x`, with a "did you mean" hint for a one-letter typo), a method with no URL, a header line without `:`, and the unsupported request types `GRAPHQL`, `WEBSOCKET` and `GRPC` (the file does not run, so nothing is sent as plain HTTP).

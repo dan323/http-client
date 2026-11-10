@@ -20,6 +20,13 @@ HEAD {{base}}/get
 OPTIONS {{base}}/get
 
 ###
+# @name query (QUERY is a safe method with a body)
+QUERY {{base}}/anything
+Content-Type: text/plain
+
+q=1
+
+###
 # @name not-found (4xx is shown, not treated as a failure)
 GET {{base}}/status/404
 
