@@ -39,6 +39,15 @@ class MockServerTest {
         assertContains(form.body(), "\"b\": \"2\"")
     }
 
+    @Test fun postSplitsMultipartIntoFormAndFiles() {
+        val body = "--B\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\nhello\r\n" +
+            "--B\r\nContent-Disposition: form-data; name=\"doc\"; filename=\"a.txt\"\r\nContent-Type: text/plain\r\n\r\nline1\nline2\r\n--B--\r\n"
+        val r = send("POST", "/post", body, "Content-Type" to "multipart/form-data; boundary=B")
+        assertContains(r.body(), "\"title\": \"hello\"")
+        assertContains(r.body(), "\"doc\": \"line1\\nline2\"")
+        assertEquals(1, Regex("\"doc\"").findAll(r.body()).count(), "the file is listed under files, not form")
+    }
+
     @Test fun wrongMethodIs405AndUnknownPathIs404() {
         assertEquals(405, send("GET", "/post").statusCode())
         assertEquals(404, send("GET", "/nope").statusCode())

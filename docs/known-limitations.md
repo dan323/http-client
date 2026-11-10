@@ -28,6 +28,8 @@ Related: [competitive-gaps.md](competitive-gaps.md) (what to add), [PLAN.md](PLA
 - It binds in the constructor instead of `start()`, and a non-numeric port argument silently falls back to 8080.
 - Not looked at again: bad percent-escape handling, the default single-threaded executor with an unbounded body read, and repeated query keys as lists.
 
+- Multipart bodies are built in memory, file parts included: a very large upload is read completely before it is sent. `<@ path` file parts (variables inside the file) are not supported.
+
 ## Deliberate deviations from the JetBrains HTTP Client
 
 Decided in the review, not bugs:

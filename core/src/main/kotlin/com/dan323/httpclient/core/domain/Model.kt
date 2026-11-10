@@ -6,6 +6,17 @@ sealed interface Body {
     data class Text(val content: String) : Body
     /** Body loaded from a file, written `< ./path` in a .http file. */
     data class FromFile(val path: String) : Body
+    /** A `multipart/...` body split into [parts]; [boundary] is literal text from the `Content-Type` header. */
+    data class Multipart(val boundary: String, val parts: List<Part>) : Body
+}
+
+/** One part of a [Body.Multipart]: its own [headers] (including `Content-Disposition`) and its [content]. */
+data class Part(val headers: List<Header>, val content: PartContent)
+
+/** What a [Part] carries: text (may hold `{{variables}}`) or a file written `< ./path`. */
+sealed interface PartContent {
+    data class Text(val content: String) : PartContent
+    data class File(val path: String) : PartContent
 }
 
 /** A request as written in a .http file; may still contain `{{variables}}`. */

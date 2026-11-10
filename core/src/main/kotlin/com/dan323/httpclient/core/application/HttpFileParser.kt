@@ -61,6 +61,7 @@ class HttpFileParser : ParseHttpFile {
 
         fun lineNo(index: Int) = startLine + index + 1
         val first = lines[i].trim()
+        val requestLineNo = lineNo(i)
         val (method, url) = when (val kind = HttpLineSyntax.classifyRequestLine(first)) {
             is RequestLineKind.Method -> {
                 val target = HttpLineSyntax.stripHttpVersion(kind.rest)
@@ -166,9 +167,22 @@ class HttpFileParser : ParseHttpFile {
                     if (t.startsWith("<@")) warnings += "Line ${lineNo(from)}: '<@' file is sent as-is; variables inside it are not substituted"
                     Body.FromFile(t.removePrefix("<").removePrefix("@").trim())
                 }
-            else -> Body.Text(bodyLines.joinToString("\n"))
+            else -> multipartBody(headers, bodyLines, lineNo(from), requestLineNo, warnings) ?: Body.Text(bodyLines.joinToString("\n"))
         }
         return RequestTemplate(name, method, fullUrl, headers, body, startLine, settings, fileVariables.toMap(), assertions, saveResponse, links)
+    }
+
+    /** The body split into parts when the `Content-Type` is `multipart/...` with a literal boundary, else null (plain text body). */
+    private fun multipartBody(headers: List<Header>, bodyLines: List<String>, firstBodyLine: Int, requestLine: Int, warnings: MutableList<String>): Body? {
+        val contentType = headers.lastOrNull { it.name.equals("Content-Type", ignoreCase = true) }?.value ?: return null
+        if (!MultipartParser.isMultipart(contentType)) return null
+        val boundary = MultipartParser.boundaryOf(contentType)
+        if (boundary == null) {
+            warnings += "Line $requestLine: multipart Content-Type without a boundary parameter; the body is sent as text"
+            return null
+        }
+        if ("{{" in boundary) throw HttpParseException(requestLine, "the multipart boundary must be literal text, not a {{variable}}")
+        return MultipartParser.parse(bodyLines, firstBodyLine, boundary, warnings)
     }
 
     /**

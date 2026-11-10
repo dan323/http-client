@@ -18,7 +18,7 @@ We do not try to match either there; we win on plain files, no proprietary colle
 | Assertions, chaining, environments, cookies | yes                            | yes    | yes     | yes                     |
 | Free in an open IDE (Community)             | plugin works, Community unverified | n/a    | n/a     | paid (Ultimate)         |
 | Editor intelligence                         | not yet                        | n/a    | n/a     | yes                     |
-| Multipart / form bodies                     | not yet                        | yes    | yes     | yes                     |
+| Multipart / form bodies                     | multipart yes, urlencoded as text | yes    | yes     | yes                     |
 | Pre/post-request scripts                    | no                             | yes    | yes     | yes (response handlers) |
 | GraphQL, WebSocket, gRPC, OAuth 2           | no                             | yes    | yes     | yes                     |
 | Postman / cURL import                       | no                             | yes    | n/a     | yes                     |
@@ -29,7 +29,6 @@ We do not try to match either there; we win on plain files, no proprietary colle
 | Gap                                                                                            | Task                  |
 |------------------------------------------------------------------------------------------------|-----------------------|
 | Plugin checked on Ultimate 2026.3 only; Community and the 2026.1 baseline unverified           | T21 (rest)            |
-| Multipart and form bodies, file uploads                                                        | T8                    |
 | Variable completion, diagnostics and find in the editors (the analysis in `core` is done, T13) | T16, T22              |
 | Response history browser and compare (saved responses `>>` / `<>` are done, T26)               | T18                   |
 | Run all, remember environment in the plugin                                                    | T23                   |
@@ -56,7 +55,7 @@ These are what Bruno / Postman users will ask for. Each needs a decision, not a 
 
 1. T21 (rest): verify the plugin in a Community IDE and on the 2026.1 baseline (checked by hand on Ultimate 2026.3).
 2. Robustness quick-wins: G1-G8 are done.
-3. Planned feature-work from PLAN.md: T8, then the editor-intelligence and plugin tasks.
+3. Planned feature-work from PLAN.md: the editor-intelligence and plugin tasks.
 4. Publishing to external channels (Marketplace, Homebrew, Scoop, winget; see the follow-ups in [getting-started.md](getting-started.md)), T25 and the import decision. In-repo distribution (G9: release workflow, CLI distribution, getting-started page, examples) is done.
 
 Do not add protocols or collaboration before the plugin is verified and the quick wins land: the IDE experience is the differentiator.
