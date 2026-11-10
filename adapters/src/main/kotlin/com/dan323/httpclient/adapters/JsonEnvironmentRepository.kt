@@ -21,7 +21,8 @@ class JsonEnvironmentRepository(private val dir: Path) : EnvironmentRepository {
     override fun load(): List<Environment> {
         val shared = read(dir.resolve(SHARED_FILE))
         val private = read(dir.resolve(PRIVATE_FILE))
-        // `$shared` is not an environment: its variables apply to every environment, which overrides them.
+        // `$shared` is not an environment: its variables apply to every environment (this client's own feature). Lowest to
+        // highest precedence: public `$shared`, private `$shared`, public named environment, private named environment.
         val common = shared[SHARED_ENV].orEmpty() + private[SHARED_ENV].orEmpty()
         return (shared.keys + private.keys).filter { it != SHARED_ENV }.map { name ->
             Environment(name, common + (shared[name].orEmpty()) + (private[name].orEmpty()))

@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
-- `$shared` in `http-client.env.json` / `http-client.private.env.json`: its variables apply to every environment (an environment's own values override them) and `$shared` is no longer listed as an environment.
+- `$shared` in `http-client.env.json` / `http-client.private.env.json` (this client's own feature; JetBrains does not document it): its variables apply to every environment (an environment's own values override them, private over public within each level) and `$shared` is no longer listed as an environment.
 - A warning (with the line) for the settings `# @no-auto-encoding`, `# @connection-timeout`, `# @no-log` and `# @use-os-credentials`, which used to be ignored silently. The request still runs.
 - `QUERY` request method (the safe method with a body) in the parser, the editor highlighting and the executor; the JDK client sends it unchanged. A sample in `samples/methods.http` runs it against the mock server. JetBrains documents unknown methods as custom methods only, so there it needs to be registered first.
 - Desktop quick wins: **Esc** cancels the running request (only while one runs), a small spinner shows beside the buttons while a request runs, and **Reset chain** shows a transient `Chain reset` notice (`AppState.notice`, as the plugin reports it). Headless UI and state tests cover them; how it looks on screen was not checked by hand.

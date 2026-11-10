@@ -38,7 +38,7 @@ cover it (see "Sources and limits"). Status: **Partial** (accepted with limits),
 
 | Feature | JetBrains HTTP Client | Status | What happens here |
 |---|---|---|---|
-| `$shared` in the env file | shared variables | Supported | Its variables are added to every environment (an environment overrides them); it is not listed as an environment. |
+| `$shared` in the env file | unverified (not in JetBrains' variable documentation) | Different | This client's own feature: `$shared` variables are added to every environment and `$shared` is not listed as an environment. JetBrains may treat it as an ordinary environment named `$shared`, so a file relying on it may not get those variables there. Order: [features.md](features.md#environments). |
 | `SSLConfiguration` in env files | client certificates | Not supported | Not read as ordinary variables: only JSON primitives are kept, nested objects are dropped. No client certificates. |
 | "(none)" environment | n/a | Different | Means none: no fallback; a vanished name is an error ([features.md](features.md#environments)). |
 | Environment picker (IDE plugin) | selector in the `.http` editor | Same place | The picker sits in the header of each `.http` editor; the choice is per project until the IDE restarts and applies to runs from every file. |
