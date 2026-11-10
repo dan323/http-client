@@ -85,8 +85,13 @@ class MultipartTest {
         assertTrue(e.message!!.contains("closing"))
     }
 
-    @Test fun `text before the first delimiter or after the closing one is an error`() {
-        assertFailsWith<HttpParseException> { parser.parse(request("oops\n--B--")) }
+    @Test fun `a body that does not start with the delimiter stays text with a warning`() {
+        val file = parser.parse(request("{{rawBody}}"))
+        assertEquals(Body.Text("{{rawBody}}"), file.requests.single().body)
+        assertTrue(file.warnings.single().contains("does not start with '--B'"), file.warnings.toString())
+    }
+
+    @Test fun `text after the closing delimiter is an error`() {
         assertFailsWith<HttpParseException> { parser.parse(request("--B\nContent-Disposition: form-data; name=\"t\"\n\nx\n--B--\ntrailing")) }
     }
 
@@ -98,6 +103,17 @@ class MultipartTest {
 
     @Test fun `a part header without a colon is an error`() {
         assertFailsWith<HttpParseException> { parser.parse(request("--B\nnope\n\nx\n--B--")) }
+    }
+
+    @Test fun `blank lines after a file line do not turn it into text`() {
+        val body = parser.parse(request("--B\nContent-Disposition: form-data; name=\"f\"\n\n< ./a.json\n\n--B--")).requests.single().body as Body.Multipart
+        assertEquals(PartContent.File("./a.json"), body.parts.single().content)
+    }
+
+    @Test fun `an undefined variable inside a part is flagged by the editor analysis`() {
+        val text = request("--B\nContent-Disposition: form-data; name=\"t\"\n\nhi {{nope}}\n--B\nContent-Disposition: form-data; name=\"f\"\n\n< ./{{dir}}/a.json\n--B--")
+        val undefined = com.dan323.httpclient.core.application.VariableAnalysis.analyze(text).diagnostics.map { text.substring(it.range.offset, it.range.end) }
+        assertEquals(listOf("nope", "dir"), undefined)
     }
 
     @Test fun `a part with no content is an empty text part`() {

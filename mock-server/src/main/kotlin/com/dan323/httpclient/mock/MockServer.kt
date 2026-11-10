@@ -91,11 +91,11 @@ class MockServer(port: Int = 8080) {
 
     /** httpbin-style view of a `multipart/form-data` body: text parts as `form`, parts with a filename as `files`. */
     private fun multipartParts(raw: String, contentType: String): Multipart {
-        val boundary = Regex("""boundary="?([^";\s]+)"?""", RegexOption.IGNORE_CASE).find(contentType)?.groupValues?.get(1)
+        val boundary = Regex("""boundary=(?:"([^"]+)"|([^;\s]+))""", RegexOption.IGNORE_CASE).find(contentType)?.let { it.groups[1]?.value ?: it.groups[2]?.value }
         if (boundary == null || !contentType.startsWith("multipart/form-data", ignoreCase = true)) return Multipart(emptyMap(), emptyMap())
         val fields = linkedMapOf<String, JsonElement>()
         val files = linkedMapOf<String, JsonElement>()
-        for (segment in raw.split("--$boundary").drop(1)) {
+        for (segment in raw.split(Regex("(?:^|\r\n)--" + Regex.escape(boundary))).drop(1)) {
             if (segment.startsWith("--")) break
             val (head, content) = segment.removePrefix("\r\n").split("\r\n\r\n", limit = 2).let { it[0] to it.getOrElse(1) { "" } }
             val disposition = head.lineSequence().firstOrNull { it.startsWith("Content-Disposition", ignoreCase = true) } ?: continue

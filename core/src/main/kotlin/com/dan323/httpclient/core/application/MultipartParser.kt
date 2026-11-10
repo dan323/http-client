@@ -18,8 +18,13 @@ internal object MultipartParser {
     fun isMultipart(contentType: String) = contentType.trim().startsWith("multipart/", ignoreCase = true)
 
     /** [firstLine] is the 1-based number of `lines[0]`, for error messages. */
-    fun parse(lines: List<String>, firstLine: Int, boundary: String, warnings: MutableList<String>): Body.Multipart {
+    fun parse(lines: List<String>, firstLine: Int, boundary: String, warnings: MutableList<String>): Body.Multipart? {
         val delimiter = "--$boundary"
+        // A body that does not even start with the delimiter is not multipart text (for example `{{rawBody}}`): send it as text.
+        if (lines.firstOrNull { it.isNotBlank() }?.trimEnd() != delimiter) {
+            warnings += "Line $firstLine: multipart body does not start with '$delimiter'; it is sent as text"
+            return null
+        }
         val closing = "$delimiter--"
         fun lineNo(k: Int) = firstLine + k
         val parts = mutableListOf<Part>()
@@ -35,7 +40,6 @@ internal object MultipartParser {
                 t == closing -> { current?.let(::finish); current = null; closed = true }
                 t == delimiter -> { current?.let(::finish); current = mutableListOf(); start = k }
                 current != null -> current += IndexedValue(k, line)
-                t.isNotBlank() -> throw HttpParseException(lineNo(k), "multipart body must start with '$delimiter'")
             }
         }
         if (!closed) throw HttpParseException(lineNo(lines.size - 1), "multipart body is missing the closing '$closing'")
@@ -54,7 +58,7 @@ internal object MultipartParser {
         if (headers.none { it.name.equals("Content-Disposition", ignoreCase = true) }) {
             throw HttpParseException(delimiterLine, "multipart part has no Content-Disposition header")
         }
-        val single = content.singleOrNull()?.takeIf { it.value.isNotBlank() }
+        val single = content.dropLastWhile { it.value.isBlank() }.singleOrNull()
         val text = single?.value?.trim()
         val body = when {
             text != null && text.startsWith("< ") -> PartContent.File(text.removePrefix("<").trim())

@@ -1,4 +1,16 @@
-package com.dan323.httpclient.adapters
+>> Line Coverage (for mutated classes only): 1734/1841 (94%)
+>> 148 tests examined
+>> Generated 1489 mutations Killed 1183 (79%)
+>> Mutations with no coverage 122. Test strength 87%
+>> Ran 4735 tests (3.18 tests per mutation)
+Enhanced functionality available at https://www.arcmutate.com/
+
+Build messages:-
+* Project uses kotlin, but the Arcmutate kotlin plugin is not present. (https://docs.arcmutate.com/docs/kotlin.html)
+
+
+> Task :core:pitest FAILED
+FAILURE: Build failed with an exception.package com.dan323.httpclient.adapters
 
 import java.io.File
 import java.nio.file.InvalidPathException

@@ -4,7 +4,7 @@ import com.dan323.httpclient.core.domain.Header
 import java.io.ByteArrayOutputStream
 
 /** A part with its variables already resolved and its file already read. */
-class EncodedPart(val headers: List<Header>, val content: ByteArray)
+internal class EncodedPart(val headers: List<Header>, val content: ByteArray)
 
 /** Builds the bytes of a `multipart/...` body. Only the structure uses CRLF; part content is written exactly as given. */
 internal object MultipartEncoder {

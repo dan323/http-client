@@ -47,7 +47,9 @@ Built by the parser, not at send time, so that `VariableAnalysis` sees part text
 - Delimiter lines are `--boundary` and the closing `--boundary--`. A line that starts with the boundary text but has other content after it is part content.
 - A part is: header lines, a blank line, then content. Content is `Text` (lines joined) or, if it is exactly one `< path` line, `FromFile`.
 - Only `< path` is a file part. A `<@ path` line in a part is plain text, as it is for any line that is not exactly `< path`; the parser adds a warning that `<@` file parts are not supported. (JetBrains' `<@` substitutes variables inside the file; this client does not, for whole bodies or parts. See "Out of scope".)
-- Errors (with the line): non-blank text before the first delimiter, a part with no closing delimiter, a part without a `Content-Disposition` header.
+- A body whose first non-blank line is not the opening delimiter is not multipart text (for example `{{rawBody}}`): warning, body stays `Text`.
+- A file part may be followed by blank lines.
+- Errors (with the line): text after the closing delimiter, a part with no closing delimiter, a part without a `Content-Disposition` header.
 - The trailing `>>` / `<>` handling is unchanged and runs first.
 
 ## Resolution (`RequestRunner.build`)
