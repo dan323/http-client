@@ -16,6 +16,8 @@ class HttpParseException(val line: Int, reason: String) : IllegalArgumentExcepti
  */
 class HttpFileParser : ParseHttpFile {
     private val nameTag = Regex("""^(?:#|//)\s*@name\s+(\S+)""")
+    /** JetBrains settings this client knows of but does not implement; they warn instead of being dropped silently. */
+    private val IGNORED_SETTINGS = setOf("no-auto-encoding", "connection-timeout", "no-log", "use-os-credentials")
     private val settingTag = Regex("""^(?:#|//)\s*@([A-Za-z][\w-]*)(?:\s+(.*))?$""")
 
     override fun parse(text: String): HttpFile {
@@ -44,7 +46,12 @@ class HttpFileParser : ParseHttpFile {
                 nameTag.find(l)?.let { name = it.groupValues[1] }
                 settingTag.matchEntire(l)?.let { m ->
                     if (m.groupValues[1] == "assert") assertions += stripTrailingComment(m.groupValues[2])
-                    else if (m.groupValues[1] != "name") settings[m.groupValues[1]] = m.groupValues[2].trim()
+                    else if (m.groupValues[1] != "name") {
+                        settings[m.groupValues[1]] = m.groupValues[2].trim()
+                        if (m.groupValues[1].lowercase() in IGNORED_SETTINGS) {
+                            warnings += "Line ${startLine + i + 1}: '@${m.groupValues[1]}' is ignored (not supported)"
+                        }
+                    }
                 }
                 i++; continue
             }

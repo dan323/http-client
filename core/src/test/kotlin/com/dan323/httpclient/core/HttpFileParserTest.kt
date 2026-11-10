@@ -156,6 +156,16 @@ class HttpFileParserTest {
     }
 
     @Test
+    fun `settings that are known but not implemented warn with their line`() {
+        val file = parser.parse("# @no-auto-encoding\n// @Connection-Timeout 5\nGET http://x/\n")
+        assertEquals(
+            listOf("Line 1: '@no-auto-encoding' is ignored (not supported)", "Line 2: '@Connection-Timeout' is ignored (not supported)"),
+            file.warnings,
+        )
+        assertEquals("GET", file.requests.single().method)
+    }
+
+    @Test
     fun `response handlers are not sent as body and produce warnings, links are kept`() {
         val text = "POST http://x\n\n{\"a\":1}\n\n> {%\n  client.global.set(\"t\", 1);\n%}\n<> out.json\n> handler.js\n"
         val file = parser.parse(text)

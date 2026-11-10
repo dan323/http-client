@@ -89,7 +89,7 @@ Put `http-client.env.json` in the `.http` file's folder or any parent folder and
 { "dev": { "base": "http://localhost:8080", "user": "alice" } }
 ```
 
-`http-client.private.env.json` uses the same shape for secrets; its values override the shared file.
+`http-client.private.env.json` uses the same shape for secrets; its values override the shared file. A `"$shared"` entry in either file is not an environment: its variables are added to every environment. This client's own addition (JetBrains does not document it). From lowest to highest precedence, later wins: `$shared` in `http-client.env.json`, `$shared` in `http-client.private.env.json`, the named environment in `http-client.env.json`, the named environment in `http-client.private.env.json`. So a public value of the chosen environment overrides a private `$shared` value.
 
 The choice is explicit: no environment (variables from the file only; the CLI default) or a named one. A name that does not exist is an error, never another environment. A JSON `null` value is treated as undefined; a malformed env file fails with an error naming the file and position. Running a request reads the env files only when a named environment is chosen; the desktop app also reads them when opening or saving a request and the plugin to fill its picker, so a malformed file can be reported even with no environment chosen.
 
