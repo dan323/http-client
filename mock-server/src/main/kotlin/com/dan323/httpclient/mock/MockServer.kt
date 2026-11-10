@@ -74,15 +74,36 @@ class MockServer(port: Int = 8080) {
     private fun echo(ex: HttpExchange): JsonObject {
         val raw = ex.requestBody.readBytes().toString(Charsets.UTF_8)
         val contentType = ex.requestHeaders.getFirst("Content-Type").orEmpty()
+        val multipart = multipartParts(raw, contentType)
         return buildJsonObject {
             put("method", ex.requestMethod)
             put("url", "http://${ex.requestHeaders.getFirst("Host")}${ex.requestURI}")
             put("args", pairs(ex.requestURI.rawQuery))
             put("headers", headers(ex))
             put("data", raw)
-            put("form", if (contentType.startsWith("application/x-www-form-urlencoded")) pairs(raw) else JsonObject(emptyMap()))
+            put("form", if (contentType.startsWith("application/x-www-form-urlencoded")) pairs(raw) else JsonObject(multipart.fields))
+            put("files", JsonObject(multipart.files))
             put("json", if (raw.isBlank()) JsonNull else runCatching { Json.parseToJsonElement(raw) }.getOrDefault(JsonNull))
         }
+    }
+
+    private class Multipart(val fields: Map<String, JsonElement>, val files: Map<String, JsonElement>)
+
+    /** httpbin-style view of a `multipart/form-data` body: text parts as `form`, parts with a filename as `files`. */
+    private fun multipartParts(raw: String, contentType: String): Multipart {
+        val boundary = Regex("""boundary="?([^";\s]+)"?""", RegexOption.IGNORE_CASE).find(contentType)?.groupValues?.get(1)
+        if (boundary == null || !contentType.startsWith("multipart/form-data", ignoreCase = true)) return Multipart(emptyMap(), emptyMap())
+        val fields = linkedMapOf<String, JsonElement>()
+        val files = linkedMapOf<String, JsonElement>()
+        for (segment in raw.split("--$boundary").drop(1)) {
+            if (segment.startsWith("--")) break
+            val (head, content) = segment.removePrefix("\r\n").split("\r\n\r\n", limit = 2).let { it[0] to it.getOrElse(1) { "" } }
+            val disposition = head.lineSequence().firstOrNull { it.startsWith("Content-Disposition", ignoreCase = true) } ?: continue
+            val name = Regex("""[; ]name="([^"]*)"""").find(disposition)?.groupValues?.get(1) ?: continue
+            val value = JsonPrimitive(content.removeSuffix("\r\n"))
+            if (Regex("""filename="""").containsMatchIn(disposition)) files[name] = value else fields[name] = value
+        }
+        return Multipart(fields, files)
     }
 
     private fun pairs(query: String?): JsonObject = JsonObject(

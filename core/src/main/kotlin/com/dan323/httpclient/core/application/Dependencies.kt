@@ -1,6 +1,7 @@
 package com.dan323.httpclient.core.application
 
 import com.dan323.httpclient.core.domain.Body
+import com.dan323.httpclient.core.domain.PartContent
 import com.dan323.httpclient.core.domain.RequestTemplate
 
 private val referencePattern = Regex("""\{\{\s*([^{}\s]+)\s*}}""")
@@ -20,6 +21,10 @@ private fun RequestTemplate.referencedNames(): Set<String> {
     when (val b = body) {
         is Body.Text -> texts += b.content
         is Body.FromFile -> texts += b.path
+        is Body.Multipart -> b.parts.forEach { part ->
+            part.headers.forEach { texts += it.value }
+            texts += when (val c = part.content) { is PartContent.Text -> c.content; is PartContent.File -> c.path }
+        }
         null -> {}
     }
     texts += settings.values

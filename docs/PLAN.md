@@ -13,7 +13,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F1 | Response assertions (`# @assert ...`) and a test-runner mode with pass/fail results | core, CLI, UIs | done (the plugin panel is unverified by hand, see T21) |
 | F2 | File variables (`@host = localhost`) and request settings (`# @timeout`, `# @no-redirect`, `# @no-cookie-jar`, `# @proxy`) | core | done |
 | F3 | Auth helpers (Basic encoding; Bearer needs none) | core | done |
-| F4 | Multipart and form bodies, file uploads | core | open |
+| F4 | Multipart and form bodies, file uploads | core | done: multipart parts and `< path` file parts; urlencoded bodies stay plain text |
 | F5 | Cookie jar between requests | core | done |
 | F6 | More dynamic variables (`$random.*`, `$env.X`, timestamp offsets, `$randomInt` range) | core | done |
 | F7 | More extraction: XPath, regex, headers (for chaining and assertions) | core | done |
@@ -37,7 +37,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 
 Done tasks are listed in the CHANGELOG, not here: T1 (file variables, settings), T2 (executor options), T3 (cookie jar),
 T4 (`ResponseExtractor`), T5 (assertions), T6 (dynamic variables v2), T7 (Basic auth shortcut), T9 (`RunReport`, JSON and JUnit export),
-T12 (`view-model`). Done as well: the review fixes R1-R13 (see [known-limitations.md](known-limitations.md) for what was left), including the
+T8 (multipart bodies), T12 (`view-model`). Done as well: the review fixes R1-R13 (see [known-limitations.md](known-limitations.md) for what was left), including the
 composition root, environment resolution, file confinement, the CI matrix part of T24 and build quality reports.
 
 Each remaining task is listed once even when it serves several features. Size: S ≈ 1 day, M ≈ 2 days, L ≈ 3 days
@@ -45,7 +45,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 
 | ID | Task | Serves | Size | Needs |
 |---|---|---|---|---|
-| T8 | **Multipart and form bodies** in parser and executor, with file parts (file reads go through the confined `FileReader`) | F4 | M | – |
 | T15 | **Desktop workspace:** several open files (tabs) and a folder view | F12 | L | – |
 | T16 | **Desktop editor intelligence:** variable completion, diagnostics from T13, find/replace | F14 | L | – (T13 done: `VariableAnalysis`) |
 | T17 | **Desktop response extras:** body search, save to file, image/HTML preview | F15 | M | – |
@@ -66,7 +65,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 
 | Feature | Open tasks |
 |---|---|
-| F4 | T8 |
 | F9 | T18, T27 |
 | F11 | T14 |
 | F12 | T15 |
@@ -90,7 +88,7 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 |------|----------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------|
 | 1    | T21 (plugin GUI check)                                                                                                     | Done on Ultimate 2026.3 (Community and 2026.1 baseline still open); its findings may reshape T22/T23 |
 | 2    | T13 (variable analysis), T14 (desktop persistence)                                                                         | disjoint areas                                               |
-| 3    | T8 (multipart), T23 (plugin panel)                                                                  | disjoint areas                                               |
+| 3    | T23 (plugin panel)                                                                                  | (T8 done)                                                    |
 | 4    | T22 (plugin intelligence), T16 (desktop editor), T15 (workspace)                                                           | need T13 / T14                                               |
 | 5    | T17 (desktop extras), T18 (history browser), T20 (environment editor), T27 (plugin: open linked response) | up to three at a time                                        |
 | 6    | T25 (QA and release notes)                                                                                                 | needs everything                                             |

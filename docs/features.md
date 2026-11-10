@@ -47,6 +47,24 @@ GET {{base}}/me
 - Parse errors name the line: an unknown method (`GTE http://x`, with a "did you mean" hint for a one-letter typo), a method with no URL, a header line without `:`, and the unsupported request types `GRAPHQL`, `WEBSOCKET` and `GRPC` (the file does not run, so nothing is sent as plain HTTP).
 - Headers follow the request line; a blank line starts the body.
 - A body consisting only of `< ./path` (note the space; `<html>` is plain text) is read from that file, relative to the `.http` file. `<@ path` does the same but does not substitute variables inside the file (warning).
+- **Multipart bodies:** when the `Content-Type` is `multipart/...` with a `boundary=` parameter (the boundary must be literal text), the body is split at the `--boundary` lines into parts, each with its own headers (a `Content-Disposition` is required) and a blank line before its content. A part whose content is only `< ./path` sends that file's bytes (read through the same confined file reader as a `< path` body); any other content is text with `{{variables}}` substituted, as are the part headers. The structure uses CRLF; part content is sent exactly as written. A missing closing `--boundary--`, text outside the delimiters or a part without `Content-Disposition` is a parse error naming the line. `<@ path` inside a part is sent as text, with a warning. Without a boundary the body is plain text, with a warning. The whole body is built in memory. See `samples/multipart.http`.
+
+```
+POST {{base}}/post
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="title"
+
+hello {{user}}
+--WebAppBoundary
+Content-Disposition: form-data; name="doc"; filename="payload.json"
+Content-Type: application/json
+
+< ./payload.json
+--WebAppBoundary--
+```
+
 - `> handler`, `>> file` and `<> file` lines count only when they come after the body; earlier ones are body text.
 - Response handlers (`> {% ... %}`, `> file`) are not supported: they are not sent as body, and a warning is reported per ignored line (the CLI prints it on stderr). `>> file`, `>>! file` and `<> file` are supported, see [Saved responses](#saved-responses).
 
@@ -329,4 +347,4 @@ Do not install it next to the bundled HTTP Client plugin of IntelliJ Ultimate, s
 
 ## Not yet implemented
 
-Response handlers (`> {% ... %}`, `> file`), opening `<>`-linked responses in the desktop app and plugin, and multipart/form bodies.
+Response handlers (`> {% ... %}`, `> file`), and opening `<>`-linked responses in the desktop app and plugin.

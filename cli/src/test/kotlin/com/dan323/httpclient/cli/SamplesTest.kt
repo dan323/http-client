@@ -106,6 +106,15 @@ class SamplesTest {
         assertContains(r.out, "\"source\": \"payload.json\"")
     }
 
+    @Test fun multipart() {
+        val r = sample("multipart.http")
+        assertEquals(0, r.code, r.err)
+        assertContains(r.out, "\"title\": \"hello from http://")
+        assertContains(r.out, "\"files\": {")
+        assertContains(r.out, "\"doc\": \"{")
+        assertContains(r.out, "payload.json")
+    }
+
     @Test fun methods() {
         val r = sample("methods.http")
         assertEquals(0, r.code, r.err)

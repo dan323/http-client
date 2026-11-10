@@ -30,7 +30,7 @@ cover it (see "Sources and limits"). Status: **Partial** (accepted with limits),
 | `< ./file` body | yes | Different | Relative to the `.http` file and confined to its folder plus an allow-list ([features.md](features.md#http-files)). |
 | `<@ ./file` body | unverified | Partial | File is sent as is; variables inside are not substituted (warning). |
 | `application/x-www-form-urlencoded` | pairs, optionally one per line | Partial | Sent as written; we do not join or encode lines. |
-| `multipart/form-data` | boundaries and file parts | Partial | Hand-typed boundary text is sent as text; file parts are not supported (T8 in [PLAN.md](PLAN.md)). |
+| `multipart/form-data` | boundaries and file parts | Partial | Parts with text and `< path` file parts are supported ([features.md](features.md#http-files)). Not supported: `<@ path` parts (variables inside the file; sent as text with a warning), a variable in the boundary, and streaming: the body is built in memory. |
 | `# @no-auto-encoding` | sends unencoded | Not supported | Silently ignored. |
 | `Host`, `Content-Length`, `Connection`, `Expect`, `Upgrade` headers | sent | Different | The JDK client drops them silently ([known-limitations.md](known-limitations.md)). |
 
@@ -102,7 +102,7 @@ Decided in review, not bugs (also in [known-limitations.md](known-limitations.md
 
 From [PLAN.md](PLAN.md) and [competitive-gaps.md](competitive-gaps.md):
 
-- Planned: form and multipart file parts (T8); editor completion and inspections (T16, T22); history browser and `<>` links (T18, T27).
+- Planned: editor completion and inspections (T16, T22); history browser and `<>` links (T18, T27).
 - Later or out of scope: GraphQL, WebSocket, gRPC; full OAuth 2 and Digest; handler scripts; Postman and cURL import; team sync.
 - Not on any list: `import`/`run`, client certificates, `# @connection-timeout`, `# @no-log`, Faker-based `$random.*`.
 

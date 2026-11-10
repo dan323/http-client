@@ -4,6 +4,7 @@ import com.dan323.httpclient.core.domain.Body
 import com.dan323.httpclient.core.domain.Header
 import com.dan323.httpclient.core.domain.HttpRequest
 import com.dan323.httpclient.core.domain.HttpResponse
+import com.dan323.httpclient.core.domain.PartContent
 import com.dan323.httpclient.core.domain.RequestOptions
 import com.dan323.httpclient.core.domain.RequestTemplate
 import com.dan323.httpclient.core.port.`in`.RunRequest
@@ -51,6 +52,18 @@ class RequestRunner(
             null -> null
             is Body.Text -> text(b.content).toByteArray()
             is Body.FromFile -> files.read(text(b.path))
+            is Body.Multipart -> MultipartEncoder.encode(
+                b.boundary,
+                b.parts.map { part ->
+                    EncodedPart(
+                        part.headers.map { Header(it.name, text(it.value)) },
+                        when (val c = part.content) {
+                            is PartContent.Text -> text(c.content).toByteArray()
+                            is PartContent.File -> files.read(text(c.path))
+                        },
+                    )
+                },
+            )
         },
         options = options(t, text),
     )

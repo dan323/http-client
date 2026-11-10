@@ -1,0 +1,16 @@
+# A multipart/form-data upload: a text part with a variable and a file part (`< path`, next to this file).
+# Run with: --env dev
+# @name upload
+POST {{base}}/post
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="title"
+
+hello from {{base}}
+--WebAppBoundary
+Content-Disposition: form-data; name="doc"; filename="payload.json"
+Content-Type: application/json
+
+< ./payload.json
+--WebAppBoundary--
