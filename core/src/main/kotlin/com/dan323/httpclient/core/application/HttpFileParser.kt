@@ -55,7 +55,12 @@ class HttpFileParser : ParseHttpFile {
         fun lineNo(index: Int) = startLine + index + 1
         val first = lines[i].trim()
         val (method, url) = when (val kind = HttpLineSyntax.classifyRequestLine(first)) {
-            is RequestLineKind.Method -> kind.word.uppercase() to HttpLineSyntax.stripHttpVersion(kind.rest)
+            is RequestLineKind.Method -> {
+                val target = HttpLineSyntax.stripHttpVersion(kind.rest)
+                // `QUERY HTTP/1.1` has no URL: the version would otherwise be taken as the URL.
+                if (target.isBlank() || target.trim().startsWith("HTTP/")) throw HttpParseException(lineNo(i), "request line '${kind.word}' has no URL")
+                kind.word.uppercase() to target
+            }
             // A bare URL means GET, as in IntelliJ.
             RequestLineKind.BareUrl -> "GET" to first.substringBefore(" HTTP/")
             is RequestLineKind.UnknownMethod -> throw HttpParseException(

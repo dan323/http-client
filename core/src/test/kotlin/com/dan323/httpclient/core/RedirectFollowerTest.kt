@@ -86,6 +86,13 @@ class RedirectFollowerTest {
         }
     }
 
+    @Test fun queryKeepsMethodAndBodyOn307() {
+        script += redirect(307, "/n"); script += ok()
+        follower.send(req("QUERY", headers = listOf(Header("Content-Type", "text/plain")), body = "q=1"))
+        assertEquals("QUERY", sent[1].method)
+        assertEquals("q=1", sent[1].body!!.toString(Charsets.UTF_8))
+    }
+
     @Test fun headStaysHeadOn303() {
         script += redirect(303, "/n"); script += ok()
         follower.send(req("HEAD"))

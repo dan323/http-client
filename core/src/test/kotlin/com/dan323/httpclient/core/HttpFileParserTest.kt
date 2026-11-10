@@ -112,6 +112,12 @@ class HttpFileParserTest {
     }
 
     @Test
+    fun `a method line with only an HTTP version has no URL`() {
+        val e = kotlin.test.assertFailsWith<HttpParseException> { parser.parse("GET http://x/\n\n###\nQUERY HTTP/1.1\n") }
+        assertEquals(4, e.line)
+    }
+
+    @Test
     fun `QUERY is a method and keeps its body`() {
         val r = parser.parse("QUERY http://x/search\nContent-Type: text/plain\n\nq=1\n").requests.single()
         assertEquals("QUERY", r.method)
