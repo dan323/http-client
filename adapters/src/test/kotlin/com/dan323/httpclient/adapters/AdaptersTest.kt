@@ -46,6 +46,23 @@ class AdaptersTest {
         assertEquals(mapOf("host" to "b", "port" to "8080"), dev.variables)
     }
 
+    @Test
+    fun `shared env variables apply to every environment and are not an environment`() {
+        val dir = Files.createTempDirectory("env")
+        Files.writeString(dir.resolve("http-client.env.json"), """{"${'$'}shared":{"v":"1","host":"x"},"dev":{"host":"a"},"prod":{}}""")
+        Files.writeString(dir.resolve("http-client.private.env.json"), """{"${'$'}shared":{"token":"t"}}""")
+        val envs = JsonEnvironmentRepository(dir).load().associate { it.name to it.variables }
+        assertEquals(mapOf("dev" to mapOf("v" to "1", "host" to "a", "token" to "t"), "prod" to mapOf("v" to "1", "host" to "x", "token" to "t")), envs)
+    }
+
+    @Test
+    fun `a public named value overrides a private shared value`() {
+        val dir = Files.createTempDirectory("env")
+        Files.writeString(dir.resolve("http-client.env.json"), """{"dev":{"host":"public-dev"}}""")
+        Files.writeString(dir.resolve("http-client.private.env.json"), """{"${'$'}shared":{"host":"private-shared"}}""")
+        assertEquals(mapOf("host" to "public-dev"), JsonEnvironmentRepository(dir).load().single().variables)
+    }
+
     private fun withServer(setup: (HttpServer) -> Unit, block: (Int) -> Unit) {
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         setup(server)
