@@ -63,6 +63,17 @@ class AdaptersTest {
         assertEquals(mapOf("host" to "public-dev"), JsonEnvironmentRepository(dir).load().single().variables)
     }
 
+    @Test
+    fun `shared only in the private file still applies, nulls are skipped and shared alone is no environment`() {
+        val dir = Files.createTempDirectory("env")
+        Files.writeString(dir.resolve("http-client.env.json"), """{"dev":{"a":"1"}}""")
+        Files.writeString(dir.resolve("http-client.private.env.json"), """{"${'$'}shared":{"token":"t","gone":null}}""")
+        assertEquals(mapOf("dev" to mapOf("a" to "1", "token" to "t")), JsonEnvironmentRepository(dir).load().associate { it.name to it.variables })
+        val only = Files.createTempDirectory("env")
+        Files.writeString(only.resolve("http-client.private.env.json"), """{"${'$'}shared":{"token":"t"}}""")
+        assertEquals(emptyList(), JsonEnvironmentRepository(only).load())
+    }
+
     private fun withServer(setup: (HttpServer) -> Unit, block: (Int) -> Unit) {
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         setup(server)
