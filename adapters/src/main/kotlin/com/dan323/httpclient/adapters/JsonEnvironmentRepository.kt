@@ -21,8 +21,10 @@ class JsonEnvironmentRepository(private val dir: Path) : EnvironmentRepository {
     override fun load(): List<Environment> {
         val shared = read(dir.resolve(SHARED_FILE))
         val private = read(dir.resolve(PRIVATE_FILE))
-        return (shared.keys + private.keys).map { name ->
-            Environment(name, (shared[name].orEmpty()) + (private[name].orEmpty()))
+        // `$shared` is not an environment: its variables apply to every environment, which overrides them.
+        val common = shared[SHARED_ENV].orEmpty() + private[SHARED_ENV].orEmpty()
+        return (shared.keys + private.keys).filter { it != SHARED_ENV }.map { name ->
+            Environment(name, common + (shared[name].orEmpty()) + (private[name].orEmpty()))
         }
     }
 
@@ -59,6 +61,8 @@ class JsonEnvironmentRepository(private val dir: Path) : EnvironmentRepository {
 
     companion object {
         private val OFFSET = Regex("""offset (\d+)""")
+        /** Name of the pseudo environment whose variables are added to all the others (as in JetBrains). */
+        const val SHARED_ENV = "\$shared"
         const val SHARED_FILE = "http-client.env.json"
         const val PRIVATE_FILE = "http-client.private.env.json"
     }

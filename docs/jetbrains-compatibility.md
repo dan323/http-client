@@ -31,14 +31,14 @@ cover it (see "Sources and limits"). Status: **Partial** (accepted with limits),
 | `<@ ./file` body | unverified | Partial | File is sent as is; variables inside are not substituted (warning). |
 | `application/x-www-form-urlencoded` | pairs, optionally one per line | Partial | Sent as written; we do not join or encode lines. |
 | `multipart/form-data` | boundaries and file parts | Partial | Hand-typed boundary text is sent as text; file parts are not supported (T8 in [PLAN.md](PLAN.md)). |
-| `# @no-auto-encoding` | sends unencoded | Not supported | Silently ignored. |
+| `# @no-auto-encoding` | sends unencoded | Not supported | Ignored with a warning. |
 | `Host`, `Content-Length`, `Connection`, `Expect`, `Upgrade` headers | sent | Different | The JDK client drops them silently ([known-limitations.md](known-limitations.md)). |
 
 ## Variables and environments
 
 | Feature | JetBrains HTTP Client | Status | What happens here |
 |---|---|---|---|
-| `$shared` in the env file | shared variables | Not supported | Not read as shared variables; it appears as a selectable environment named `$shared`. |
+| `$shared` in the env file | shared variables | Supported | Its variables are added to every environment (an environment overrides them); it is not listed as an environment. |
 | `SSLConfiguration` in env files | client certificates | Not supported | Not read as ordinary variables: only JSON primitives are kept, nested objects are dropped. No client certificates. |
 | "(none)" environment | n/a | Different | Means none: no fallback; a vanished name is an error ([features.md](features.md#environments)). |
 | Environment picker (IDE plugin) | selector in the `.http` editor | Same place | The picker sits in the header of each `.http` editor; the choice is per project until the IDE restarts and applies to runs from every file. |
@@ -56,8 +56,8 @@ cover it (see "Sources and limits"). Status: **Partial** (accepted with limits),
 | Feature | JetBrains HTTP Client | Status | What happens here |
 |---|---|---|---|
 | `# @timeout` | "new packet" timeout | Different | Total deadline for the exchange, default 60 s ([features.md](features.md#request-settings)). |
-| `# @connection-timeout` | yes | Not supported | Silently ignored; fixed 30 s connect timeout. |
-| `# @no-log`, `# @use-os-credentials` | yes / unverified | Not supported | Silently ignored. |
+| `# @connection-timeout` | yes | Not supported | Ignored with a warning; fixed 30 s connect timeout. |
+| `# @no-log`, `# @use-os-credentials` | yes / unverified | Not supported | Ignored with a warning. |
 | Unknown `# @setting` | n/a | Different | Silently ignored; invalid values of known settings are errors. |
 | `> {% ... %}`, `> ./handler.js` | JavaScript handlers | Not supported | Skipped with a warning; the request runs. Deferred in [competitive-gaps.md](competitive-gaps.md). |
 | `client.global.set`, `client.test`, `client.assert` | yes | Not supported | Scripts are skipped; use chaining, in-file variables or `# @assert` ([features.md](features.md#assertions)). |
