@@ -97,4 +97,22 @@ class ResponseDiffTest {
         assertEquals(listOf("  a", "- b", "  c"), diffLines(listOf("a", "b", "c"), listOf("a", "c"))!!.map { it.label })
         assertEquals(emptyList(), diffLines(emptyList(), emptyList()))
     }
+
+    @Test fun jsonKeyOrderIsIgnoredAtEveryLevelButArrayOrderIsNot() {
+        val a = resp(body = "{\"b\":{\"y\":1,\"x\":2},\"a\":[1,2]}")
+        assertEquals(BodyDiff.Same, diffResponses(a, resp(body = "{\"a\":[1,2],\"b\":{\"x\":2,\"y\":1}}")).body)
+        assertTrue(diffResponses(a, resp(body = "{\"a\":[2,1],\"b\":{\"x\":2,\"y\":1}}")).body is BodyDiff.Lines)
+    }
+
+    private fun stored(body: String, cut: Boolean, original: Long = body.length.toLong()) = com.dan323.httpclient.core.port.out.StoredResponse(
+        "r", java.time.Instant.EPOCH, 0, "n", "GET", "http://x", resp(body = body), cut, original,
+    )
+
+    @Test fun equalCutBodiesAreNotReportedAsTheSame() {
+        val d = diffStoredResponses(stored("abc", true, 10), stored("abc", true, 20))
+        val skipped = d.body as BodyDiff.Skipped
+        assertEquals(10, skipped.sizeA); assertEquals(20, skipped.sizeB)
+        assertTrue(!d.identical)
+        assertEquals(BodyDiff.Same, diffStoredResponses(stored("abc", false), stored("abc", false)).body)
+    }
 }

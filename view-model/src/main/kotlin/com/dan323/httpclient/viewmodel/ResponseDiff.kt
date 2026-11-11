@@ -1,6 +1,11 @@
 package com.dan323.httpclient.viewmodel
 
 import com.dan323.httpclient.core.domain.HttpResponse
+import com.dan323.httpclient.core.port.out.StoredResponse
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 
@@ -62,11 +67,40 @@ object ResponseDiffLimits {
 }
 
 /**
- * Compares [a] with [b]: status, duration, headers and body. JSON bodies are pretty-printed first so key order
+ * Compares [a] with [b]: status, duration, headers and body. JSON bodies are pretty-printed with sorted keys first so key order
  * and spacing do not hide the real change; other text is compared as is; a body that is not valid UTF-8 shows only sizes.
  */
-fun diffResponses(a: HttpResponse, b: HttpResponse): ResponseDiff =
-    ResponseDiff(a.statusCode, b.statusCode, a.durationMillis, b.durationMillis, diffHeaders(a, b), diffBodies(a.body, b.body))
+fun diffResponses(a: HttpResponse, b: HttpResponse): ResponseDiff = diffResponses(a, b, false, false, a.body.size.toLong(), b.body.size.toLong())
+
+/**
+ * Compares two stored responses. A stored body may be cut short, so equal retained bodies do not prove equal
+ * responses: that case reports the bodies as not compared, with the original sizes.
+ */
+fun diffStoredResponses(a: StoredResponse, b: StoredResponse): ResponseDiff =
+    diffResponses(a.response, b.response, a.bodyTruncated, b.bodyTruncated, a.originalBodySize, b.originalBodySize)
+
+private fun diffResponses(a: HttpResponse, b: HttpResponse, cutA: Boolean, cutB: Boolean, sizeA: Long, sizeB: Long): ResponseDiff {
+    val body = diffBodies(a.body, b.body)
+    val partial = (cutA || cutB) && body == BodyDiff.Same
+    val shown = if (partial) BodyDiff.Skipped("a stored body was cut short, so the complete bodies were not compared", sizeA.toIntSize(), sizeB.toIntSize()) else body
+    return ResponseDiff(a.statusCode, b.statusCode, a.durationMillis, b.durationMillis, diffHeaders(a, b), shown)
+}
+
+private fun Long.toIntSize(): Int = coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+
+private val canonicalPrinter = Json { prettyPrint = true }
+
+/** [text] pretty-printed with object keys sorted (arrays keep their order) when it is JSON, else unchanged. */
+private fun canonicalOrRaw(text: String): String {
+    val element = parseJsonContainer(text.trim()) ?: return text
+    return runCatching { canonicalPrinter.encodeToString(JsonElement.serializer(), sorted(element)) }.getOrDefault(text)
+}
+
+private fun sorted(e: JsonElement): JsonElement = when (e) {
+    is JsonObject -> JsonObject(e.entries.sortedBy { it.key }.associate { it.key to sorted(it.value) })
+    is JsonArray -> JsonArray(e.map(::sorted))
+    else -> e
+}
 
 private fun joined(r: HttpResponse): Map<String, Pair<String, String>> {
     val out = linkedMapOf<String, Pair<String, String>>() // lower-case name -> (name as first seen, values joined)
@@ -104,8 +138,8 @@ private fun diffBodies(a: ByteArray, b: ByteArray): BodyDiff {
     if (a.size > ResponseDiffLimits.MAX_BODY_BYTES || b.size > ResponseDiffLimits.MAX_BODY_BYTES) return skipped("a body is larger than 1 MB")
     val textA = utf8OrNull(a) ?: return skipped("a body is not text")
     val textB = utf8OrNull(b) ?: return skipped("a body is not text")
-    val left = prettyOrRaw(textA).lines()
-    val right = prettyOrRaw(textB).lines()
+    val left = canonicalOrRaw(textA).lines()
+    val right = canonicalOrRaw(textB).lines()
     if (left == right) return BodyDiff.Same // equal once JSON is pretty-printed
     if (left.size > ResponseDiffLimits.MAX_LINES || right.size > ResponseDiffLimits.MAX_LINES) return skipped("a body has more than 20000 lines")
     return diffLines(left, right)?.let { BodyDiff.Lines(it) } ?: skipped("too many lines differ to compare")

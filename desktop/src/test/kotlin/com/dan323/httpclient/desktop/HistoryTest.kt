@@ -206,4 +206,44 @@ class HistoryTest {
         view2.load(null)
         assertNull(view2.error)
     }
+
+    @Test fun `a response read that finishes after the selection changed is discarded`() {
+        val real = store()
+        val (first, second) = recordTwo(real)
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val slow = object : HistoryStore by real {
+            override fun readResponse(httpFile: Path, runId: String, index: Int) =
+                real.readResponse(httpFile, runId, index).also { if (runId == first.id) { entered.countDown(); release.await(5, TimeUnit.SECONDS) } }
+        }
+        val view = HistoryState(slow)
+        view.load(file.toAbsolutePath())
+        view.selectRun(first.id)
+        val reader = Thread { view.open(0) }.also { it.start() }
+        assertTrue(entered.await(5, TimeUnit.SECONDS))
+        view.selectRun(second.id)                   // moves on while the first read is pending
+        release.countDown(); reader.join(5000)
+        assertNull(view.opened)
+        assertNull(view.openedIndex)
+        view.open(0)
+        assertEquals(second.id, view.opened?.runId)
+    }
+
+    @Test fun `a history load that finishes after a file switch is discarded`() {
+        val real = store()
+        recordTwo(real)
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val a = file.toAbsolutePath()
+        val slow = object : HistoryStore by real {
+            override fun list(httpFile: Path): List<HistoryRun> =
+                real.list(httpFile).also { if (httpFile == a) { entered.countDown(); release.await(5, TimeUnit.SECONDS) } }
+        }
+        val view = HistoryState(slow)
+        val loader = Thread { view.load(a) }.also { it.start() }
+        assertTrue(entered.await(5, TimeUnit.SECONDS))
+        view.load(root.resolve("other.http").toAbsolutePath())   // the user switched files meanwhile
+        release.countDown(); loader.join(5000)
+        assertEquals(emptyList(), view.runs)
+    }
 }
