@@ -73,7 +73,7 @@ because installers require a major version of at least 1; its major is the proje
 
 ## Not yet implemented
 
-A browsable request history, and opening `<>`-linked responses.
+Opening `<>`-linked responses.
 
 `{{$env.NAME}}` reads nothing by default: allow names with `-Dhttpclient.allowEnv=NAME,NAME` (JVM option) or the environment variable `HTTPC_ALLOW_ENV=NAME,NAME`; see [docs/features.md](../docs/features.md).
 
