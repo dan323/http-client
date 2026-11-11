@@ -275,8 +275,9 @@ class HistoryTest {
             s.open(linked)
             s.environment = "dev"                          // opening a file forgets the choice
             s.selected = 1
-            assertFalse(s.canOpenLinked)                 // no <> line on this request
+            assertFalse(s.selectedHasLink)               // no <> line on this request
             s.selected = 0
+            assertTrue(s.selectedHasLink)
             assertTrue(s.canOpenLinked)
             s.showLinkedResponse()
             assertTrue(s.historyOpen)
@@ -294,9 +295,63 @@ class HistoryTest {
     @Test fun `no link button without a history store`() {
         AppState(runner = DesktopRunner(history = store())).use { s ->
             s.open(Files.writeString(root.resolve("n.http"), "GET http://x/\n<> a.json\n"))
+            assertFalse(s.selectedHasLink)
             assertFalse(s.canOpenLinked)
             s.showLinkedResponse()
             assertFalse(s.historyOpen)
         }
+    }
+
+    private val linkedText = "# @name ok\nGET {{base}}/get\n<> ok.json\n"
+
+    @Test fun `unsaved edits and a missing link refuse the lookup`() {
+        val linked = Files.writeString(root.resolve("e.http"), linkedText)
+        state().use { s ->
+            s.open(linked); s.environment = "dev"
+            s.edit("\n" + linkedText)                    // lines were added above: the saved key may no longer match
+            assertTrue(s.dirty)
+            assertTrue(s.selectedHasLink)
+            assertFalse(s.canOpenLinked)
+            s.showLinkedResponse()
+            assertFalse(s.historyOpen)
+        }
+    }
+
+    @Test fun `showing the linked response closes an open comparison`() {
+        val store = store()
+        val (first, second) = recordTwo(store)
+        val linked = Files.writeString(root.resolve("c.http"), linkedText)
+        val view = HistoryState(store)
+        val abs = file.toAbsolutePath()
+        view.load(abs)
+        view.selectRun(first.id); view.open(0); view.markOpenedAsA()
+        view.selectRun(second.id); view.open(0); view.markOpenedAsB()
+        view.compare()
+        assertNotNull(view.diff)
+        view.openLinked(com.dan323.httpclient.core.application.HttpFileParser().parse(linkedText).requests.single())
+        assertNull(view.diff)
+        assertNull(view.selectedRun)
+        assertNotNull(view.markA)                          // the marks stay for a later comparison
+        assertTrue(linked.toFile().exists())
+    }
+
+    @Test fun `a failing store is reported for a linked response and for a stored one`() {
+        val real = store()
+        val (first, _) = recordTwo(real)
+        val broken = object : HistoryStore by real {
+            override fun latestLinked(httpFile: Path, key: String) = throw IllegalStateException("gone")
+            override fun readResponse(httpFile: Path, runId: String, index: Int) = throw IllegalStateException("unreadable")
+        }
+        val view = HistoryState(broken)
+        view.openLinked(com.dan323.httpclient.core.application.HttpFileParser().parse(linkedText).requests.single())   // no file yet: nothing happens
+        assertNull(view.error)
+        view.load(file.toAbsolutePath())
+        view.open(0)                                        // no run selected: nothing happens
+        assertNull(view.openedIndex)
+        view.openLinked(com.dan323.httpclient.core.application.HttpFileParser().parse(linkedText).requests.single())
+        assertEquals("Could not read the linked response: gone", view.error)
+        view.selectRun(first.id)
+        view.open(0)
+        assertEquals("Could not read the stored response: unreadable", view.error)
     }
 }

@@ -97,53 +97,47 @@ class HistoryState(private val store: HistoryStore) {
 
     /** Shows the stored response of request [index] of the selected run; a request without one leaves [opened] empty. */
     fun open(index: Int) {
-        val run: HistoryRun
+        var run: HistoryRun? = null
+        showStored(
+            readFailed = "Could not read the stored response", missing = "That request has no stored response.",
+            begin = { run = selectedRun; if (run != null) openedIndex = index; run != null },
+            read = { f -> store.readResponse(f, run!!.id, index) },
+        )
+    }
+
+    /**
+     * Shows the latest response recorded for the `<>` link of [request] (see [ResponseLinks]), with no run selected
+     * and any open comparison closed. Nothing recorded yet is reported in [error], not thrown.
+     */
+    fun openLinked(request: RequestTemplate) = showStored(
+        readFailed = "Could not read the linked response", missing = "No response is recorded for this request's <> link yet. Run it first.",
+        begin = { selectedRun = null; openedIndex = null; diff = null; true },
+        read = { f -> ResponseLinks.latest(store, f, request) },
+    )
+
+    /**
+     * The shared shape of [open] and [openLinked]: [begin] sets the selection under the lock (false: nothing to show),
+     * [read] runs without it, and the result is published only if the selection did not change meanwhile.
+     */
+    private fun showStored(readFailed: String, missing: String, begin: () -> Boolean, read: (Path) -> StoredResponse?) {
         val f: Path
         val generation: Long
         synchronized(this) {
-            run = selectedRun ?: return
             f = file ?: return
+            if (!begin()) return
             error = null
-            openedIndex = index
             opened = null
             generation = ++selectionGeneration
         }
         var problem: String? = null
-        val stored = try { store.readResponse(f, run.id, index) } catch (e: Exception) {
-            problem = "Could not read the stored response: ${e.message ?: e::class.simpleName}"
+        val stored = try { read(f) } catch (e: Exception) {
+            problem = "$readFailed: ${e.message ?: e::class.simpleName}"
             null
         }
         synchronized(this) {
             if (generation != selectionGeneration) return   // the selection moved on while this was reading
             opened = stored
-            error = problem ?: if (stored == null) "That request has no stored response." else null
-        }
-    }
-
-    /**
-     * Shows the latest response recorded for the `<>` link of [request] (see [ResponseLinks]), with no run selected.
-     * Nothing recorded yet is reported in [error], not thrown.
-     */
-    fun openLinked(request: RequestTemplate) {
-        val f: Path
-        val generation: Long
-        synchronized(this) {
-            f = file ?: return
-            error = null
-            selectedRun = null
-            openedIndex = null
-            opened = null
-            generation = ++selectionGeneration
-        }
-        var problem: String? = null
-        val stored = try { ResponseLinks.latest(store, f, request) } catch (e: Exception) {
-            problem = "Could not read the linked response: ${e.message ?: e::class.simpleName}"
-            null
-        }
-        synchronized(this) {
-            if (generation != selectionGeneration) return
-            opened = stored
-            error = problem ?: if (stored == null) "No response is recorded for this request's <> link yet. Run it first." else null
+            error = problem ?: if (stored == null) missing else null
         }
     }
 
