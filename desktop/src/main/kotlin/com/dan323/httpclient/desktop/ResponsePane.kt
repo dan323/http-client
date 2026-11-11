@@ -47,6 +47,8 @@ import kotlinx.coroutines.withContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.ui.Alignment
@@ -316,6 +318,7 @@ private fun OutcomeUi.toggle(path: String) { if (!collapsed.remove(path)) collap
 
 @Composable
 private fun OutcomeHeader(outcome: OutcomeDisplay, ui: OutcomeUi?, source: RunOutcome, bodyCutNote: String?) {
+    val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(outcome.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
         when (outcome) {
@@ -353,7 +356,17 @@ private fun OutcomeHeader(outcome: OutcomeDisplay, ui: OutcomeUi?, source: RunOu
                         OutlinedButton(contentPadding = CompactButtonPadding, onClick = { copy(copyText(outcome, ui)) }) { Text("Copy", maxLines = 1) }
                         (source as? RunOutcome.Success)?.let { ok ->
                             OutlinedButton(
-                                contentPadding = CompactButtonPadding, onClick = { ui.saveMessage = saveBodyWithDialog(ok, bodyCutNote) },
+                                contentPadding = CompactButtonPadding, onClick = {
+                                    val target = chooseSavePath(ok)
+                                    if (target != null) {
+                                        ui.saveMessage = "Saving…"
+                                        // The write can be slow (a big body, a network drive): off the UI thread.
+                                        scope.launch(Dispatchers.IO) {
+                                            val message = writeBody(target, ok.response.body) + (bodyCutNote?.let { " Not the whole response: $it" } ?: "")
+                                            ui.saveMessage = message   // Compose state may be set from any thread
+                                        }
+                                    }
+                                },
                                 modifier = Modifier.testTag("save-body"),
                             ) { Text("Save body", maxLines = 1) }
                         }
@@ -442,14 +455,14 @@ private fun copyText(resp: OutcomeDisplay.Response, ui: OutcomeUi): String = whe
 private fun copy(text: String) =
     runCatching { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null) }
 
-/** Asks where to save the body of [ok] and writes it there; null when the dialog was cancelled, else the result message. */
-private fun saveBodyWithDialog(ok: RunOutcome.Success, cutNote: String?): String? {
+/** Asks where to save the body of [ok] (a modal dialog, so on the calling thread); null when it was cancelled. */
+private fun chooseSavePath(ok: RunOutcome.Success): Path? {
     val r = ok.response
     val dialog = FileDialog(null as Frame?, "Save response body", FileDialog.SAVE)
     dialog.file = suggestedFileName(ok.request.url, r.header("Content-Disposition"), r.header("Content-Type"))
     dialog.isVisible = true
     val name = dialog.file ?: return null
-    return writeBody(Path.of(dialog.directory, name), r.body) + (cutNote?.let { " Not the whole response: $it" } ?: "")
+    return Path.of(dialog.directory, name)
 }
 
 /**
