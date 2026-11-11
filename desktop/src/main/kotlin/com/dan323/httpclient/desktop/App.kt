@@ -146,6 +146,13 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
     Column(Modifier.weight(1.2f).fillMaxHeight().padding(12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(if (state.historyOpen) "History" else "Response", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).padding(vertical = 8.dp))
+            if (state.canOpenLinked) {
+                OutlinedButton(
+                    contentPadding = CompactButtonPadding,
+                    onClick = { scope.launch(Dispatchers.IO) { state.showLinkedResponse() } },
+                    modifier = Modifier.testTag("open-linked"),
+                ) { Text("Linked response", maxLines = 1) }
+            }
             if (state.canRecordHistory) {
                 Checkbox(checked = state.recordHistory, onCheckedChange = { state.recordHistory = it }, modifier = Modifier.testTag("record-history"))
                 Text("Record history", style = MaterialTheme.typography.bodySmall)

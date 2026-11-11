@@ -102,7 +102,7 @@ Decided in review, not bugs (also in [known-limitations.md](known-limitations.md
 
 From [PLAN.md](PLAN.md) and [competitive-gaps.md](competitive-gaps.md):
 
-- Planned: editor completion and inspections (T16, T22); opening `<>` links (T27).
+- Planned: editor completion and inspections (T16, T22); opening `<>` links in the plugin (T27; the desktop app has it).
 - Later or out of scope: GraphQL, WebSocket, gRPC; full OAuth 2 and Digest; handler scripts; Postman and cURL import; team sync.
 - Not on any list: `import`/`run`, client certificates, `# @connection-timeout`, `# @no-log`, Faker-based `$random.*`.
 

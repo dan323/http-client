@@ -3,6 +3,8 @@ package com.dan323.httpclient.desktop
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.dan323.httpclient.core.application.ResponseLinks
+import com.dan323.httpclient.core.domain.RequestTemplate
 import com.dan323.httpclient.core.port.out.HistoryRun
 import com.dan323.httpclient.core.port.out.HistoryStore
 import com.dan323.httpclient.core.port.out.StoredResponse
@@ -115,6 +117,33 @@ class HistoryState(private val store: HistoryStore) {
             if (generation != selectionGeneration) return   // the selection moved on while this was reading
             opened = stored
             error = problem ?: if (stored == null) "That request has no stored response." else null
+        }
+    }
+
+    /**
+     * Shows the latest response recorded for the `<>` link of [request] (see [ResponseLinks]), with no run selected.
+     * Nothing recorded yet is reported in [error], not thrown.
+     */
+    fun openLinked(request: RequestTemplate) {
+        val f: Path
+        val generation: Long
+        synchronized(this) {
+            f = file ?: return
+            error = null
+            selectedRun = null
+            openedIndex = null
+            opened = null
+            generation = ++selectionGeneration
+        }
+        var problem: String? = null
+        val stored = try { ResponseLinks.latest(store, f, request) } catch (e: Exception) {
+            problem = "Could not read the linked response: ${e.message ?: e::class.simpleName}"
+            null
+        }
+        synchronized(this) {
+            if (generation != selectionGeneration) return
+            opened = stored
+            error = problem ?: if (stored == null) "No response is recorded for this request's <> link yet. Run it first." else null
         }
     }
 

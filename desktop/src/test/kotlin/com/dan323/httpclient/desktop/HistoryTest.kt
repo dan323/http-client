@@ -268,4 +268,35 @@ class HistoryTest {
         view.loadInBackground(root.resolve("elsewhere.http").toAbsolutePath())
         assertEquals(emptyList(), view.runs)        // the old file's runs are gone immediately
     }
+
+    @Test fun `a request with a link opens its latest recorded response`() {
+        val linked = Files.writeString(root.resolve("l.http"), "# @name ok\nGET {{base}}/get\n<> ok.json\n\n###\n# @name plain\nGET {{base}}/get\n")
+        state().use { s ->
+            s.open(linked)
+            s.environment = "dev"                          // opening a file forgets the choice
+            s.selected = 1
+            assertFalse(s.canOpenLinked)                 // no <> line on this request
+            s.selected = 0
+            assertTrue(s.canOpenLinked)
+            s.showLinkedResponse()
+            assertTrue(s.historyOpen)
+            val view = s.historyView!!
+            assertNull(view.opened)
+            assertEquals("No response is recorded for this request's <> link yet. Run it first.", view.error)
+            s.run(all = false)                           // the run records the link's response
+            s.showLinkedResponse()
+            assertEquals(200, view.opened?.response?.statusCode)
+            assertNull(view.error)
+            assertNull(view.selectedRun)
+        }
+    }
+
+    @Test fun `no link button without a history store`() {
+        AppState(runner = DesktopRunner(history = store())).use { s ->
+            s.open(Files.writeString(root.resolve("n.http"), "GET http://x/\n<> a.json\n"))
+            assertFalse(s.canOpenLinked)
+            s.showLinkedResponse()
+            assertFalse(s.historyOpen)
+        }
+    }
 }
