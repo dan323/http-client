@@ -128,6 +128,7 @@ private fun DiffView(diff: ResponseDiff, modifier: Modifier = Modifier) {
                 items(diff.headers.map(::headerLine)) { (text, color) -> Text(text, style = mono, color = color) }
             }
             item { Text("Body", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp)) }
+            diff.truncationNote?.let { note -> item { Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline) } }
             when (val body = diff.body) {
                 BodyDiff.Same -> item { Text("The bodies are the same.") }
                 is BodyDiff.Skipped -> item {

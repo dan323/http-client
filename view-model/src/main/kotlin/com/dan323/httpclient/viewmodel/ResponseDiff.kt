@@ -42,6 +42,8 @@ data class ResponseDiff(
     val durationB: Long,
     val headers: List<HeaderChange>,
     val body: BodyDiff,
+    /** Set when a stored body was cut short, so the body comparison covers only what was kept. */
+    val truncationNote: String? = null,
 ) {
     val statusChanged: Boolean get() = statusA != statusB
 
@@ -87,7 +89,8 @@ private fun diffResponses(a: HttpResponse, b: HttpResponse, cutA: Boolean, cutB:
         (cutA || cutB) && body == BodyDiff.Same -> BodyDiff.Skipped(cut, sizeA.toIntSize(), sizeB.toIntSize())
         else -> body
     }
-    return ResponseDiff(a.statusCode, b.statusCode, a.durationMillis, b.durationMillis, diffHeaders(a, b), shown)
+    return ResponseDiff(a.statusCode, b.statusCode, a.durationMillis, b.durationMillis, diffHeaders(a, b), shown,
+        if (cutA || cutB) "A stored body was cut short (A: ${sizeLabel(sizeA.toIntSize())}, B: ${sizeLabel(sizeB.toIntSize())} originally); only the kept part was compared." else null)
 }
 
 private fun Long.toIntSize(): Int = coerceAtMost(Int.MAX_VALUE.toLong()).toInt()

@@ -126,4 +126,11 @@ class ResponseDiffTest {
         assertEquals(7_000_000, skipped.sizeA)
         assertEquals(3, skipped.sizeB)
     }
+
+    @Test fun differingCutBodiesCarryATruncationNote() {
+        val d = diffStoredResponses(stored("abc", true, 7_000_000), stored("abd", false))
+        assertTrue(d.body is BodyDiff.Lines)
+        assertTrue(d.truncationNote!!.contains("cut short"))
+        assertNull(diffStoredResponses(stored("abc", false), stored("abd", false)).truncationNote)
+    }
 }
