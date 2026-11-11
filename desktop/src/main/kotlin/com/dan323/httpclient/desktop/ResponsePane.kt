@@ -79,7 +79,7 @@ internal enum class Tab { BODY, HEADERS }
 private val SearchClock = java.util.concurrent.atomic.AtomicLong()
 
 /** Height of the sticky search row; a match is scrolled this far below the top edge so the row does not cover it. */
-private val SearchRowHeight = 60.dp
+private val SearchRowHeight = 104.dp
 
 /** What the user has toggled for one response: tab, raw/pretty, and which JSON nodes are collapsed. */
 internal class OutcomeUi(val json: JsonElement?) {
@@ -295,20 +295,20 @@ private fun SearchRow(ui: OutcomeUi, count: Int) {
     fun step(forward: Boolean) { ui.current = stepMatch(current, count, forward); ui.touch() }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }   // typing can start at once
-    Row(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
-    ) {
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // The field has a row of its own, so a narrow pane cannot squeeze it to nothing; the count and the steps sit below.
         OutlinedTextField(
             value = ui.query, onValueChange = { ui.query = it; ui.current = 0; ui.touch() },
             singleLine = true, textStyle = MaterialTheme.typography.bodySmall, placeholder = { Text("Search in body") },
-            modifier = Modifier.weight(1f).height(48.dp).focusRequester(focus).testTag("body-search").onPreviewKeyEvent { e ->
+            modifier = Modifier.fillMaxWidth().height(48.dp).focusRequester(focus).testTag("body-search").onPreviewKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown && e.key == Key.Enter) { step(!e.isShiftPressed); true } else false
             },
         )
-        Text(matchLabel(ui.query, current, count), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("body-search-count"))
-        OutlinedButton(enabled = count > 1, contentPadding = CompactButtonPadding, onClick = { step(false) }, modifier = Modifier.testTag("body-search-prev")) { Text("Prev") }
-        OutlinedButton(enabled = count > 1, contentPadding = CompactButtonPadding, onClick = { step(true) }, modifier = Modifier.testTag("body-search-next")) { Text("Next") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(matchLabel(ui.query, current, count), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f).testTag("body-search-count"))
+            OutlinedButton(enabled = count > 1, contentPadding = CompactButtonPadding, onClick = { step(false) }, modifier = Modifier.testTag("body-search-prev")) { Text("Prev", maxLines = 1) }
+            OutlinedButton(enabled = count > 1, contentPadding = CompactButtonPadding, onClick = { step(true) }, modifier = Modifier.testTag("body-search-next")) { Text("Next", maxLines = 1) }
+        }
     }
 }
 
@@ -452,10 +452,28 @@ private fun saveBodyWithDialog(ok: RunOutcome.Success, cutNote: String?): String
     return writeBody(Path.of(dialog.directory, name), r.body) + (cutNote?.let { " Not the whole response: $it" } ?: "")
 }
 
-/** Writes [bytes] exactly to [path] and says so; a failure is the message, not an exception. */
-internal fun writeBody(path: Path, bytes: ByteArray): String = try {
-    Files.write(path, bytes)
-    "Saved ${bytes.size} bytes to $path"
-} catch (e: Exception) {
-    "Could not save the body: ${e.message ?: e::class.simpleName}"
+/**
+ * Writes [bytes] exactly to [path] and says so; a failure is the message, not an exception. The bytes go to a temporary
+ * file next to [path] first and replace it only when complete, so a failed write cannot destroy an existing file
+ * (its permissions are kept).
+ */
+internal fun writeBody(path: Path, bytes: ByteArray): String {
+    var temp: Path? = null
+    return try {
+        val dir = path.toAbsolutePath().parent
+        temp = Files.createTempFile(dir, ".save-", ".tmp")
+        Files.write(temp, bytes)
+        if (Files.exists(path)) runCatching { Files.setPosixFilePermissions(temp, Files.getPosixFilePermissions(path)) }
+        try {
+            Files.move(temp, path, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+        } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
+            Files.move(temp, path, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        }
+        temp = null
+        "Saved ${bytes.size} bytes to $path"
+    } catch (e: Exception) {
+        "Could not save the body: ${e.message ?: e::class.simpleName}"
+    } finally {
+        temp?.let { runCatching { Files.deleteIfExists(it) } }
+    }
 }

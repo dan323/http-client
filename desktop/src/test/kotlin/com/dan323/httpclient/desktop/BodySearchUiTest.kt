@@ -108,6 +108,9 @@ class BodySearchUiTest {
             assertEquals("Saved 5 bytes to $target", writeBody(target, bytes))
             assertTrue(bytes.contentEquals(Files.readAllBytes(target)))
             assertTrue(writeBody(dir.resolve("missing").resolve("x"), bytes).startsWith("Could not save the body:"))
+            assertEquals("Saved 1 bytes to $target", writeBody(target, byteArrayOf(7)))        // replaces an existing file
+            assertTrue(byteArrayOf(7).contentEquals(Files.readAllBytes(target)))
+            assertEquals(listOf("out.bin"), Files.list(dir).use { s -> s.map { it.fileName.toString() }.toList() })   // no temp file is left behind
         } finally { dir.toFile().deleteRecursively() }
     }
 }

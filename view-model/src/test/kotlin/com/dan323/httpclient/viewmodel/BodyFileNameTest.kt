@@ -45,6 +45,18 @@ class BodyFileNameTest {
         assertEquals("q_x.txt", suggestedFileName("http://x/", "attachment; filename=\"q\\\"x.txt\"", null))
     }
 
+    @Test fun theLanguageFieldOfAnExtendedNameIsSkipped() {
+        assertEquals("report.txt", suggestedFileName("http://x/", "attachment; filename*=UTF-8'en'report.txt", null))
+        assertEquals("r é.txt", suggestedFileName("http://x/", "attachment; filename*=UTF-8'en-GB'r%20%C3%A9.txt", null))
+    }
+
+    @Test fun reservedWindowsNamesGetAPrefix() {
+        assertEquals("_NUL.txt", suggestedFileName("http://x/", "attachment; filename=\"NUL.txt\"", null))
+        assertEquals("_com1", suggestedFileName("http://x/", "attachment; filename=\"com1\"", null))
+        assertEquals("_Lpt9.bin", suggestedFileName("http://x/Lpt9", null, null))
+        assertEquals("console.txt", suggestedFileName("http://x/", "attachment; filename=\"console.txt\"", null))
+    }
+
     @Test fun anUnresolvedVariableIsNotAName() {
         assertEquals("response.json", suggestedFileName("{{host}}/files/{{id}}", null, "application/json"))
         assertEquals("files.json", suggestedFileName("{{host}}/files", null, "application/json"))

@@ -6,7 +6,7 @@ private const val MAX_NAME = 100
  * A file name to offer when saving a response body: the `filename` of `Content-Disposition` if there is one, else
  * the last segment of the URL path (unless it still holds a `{{variable}}`), else `response` plus an extension for the
  * content type. The result is at most 100 characters, never holds a path separator, a control character or a character
- * Windows rejects, never starts with a dot and never ends with a dot or a space.
+ * Windows rejects or reserves (`NUL.txt`), never starts with a dot and never ends with a dot or a space.
  */
 fun suggestedFileName(url: String, contentDisposition: String?, contentType: String?): String {
     val fromHeader = contentDisposition?.let(::dispositionName)?.let(::sanitize)?.takeIf { it.isNotEmpty() }
@@ -44,7 +44,8 @@ private fun dispositionName(header: String): String? {
     val params = splitParams(header).drop(1)
     params.firstOrNull { it.startsWith("filename*=", ignoreCase = true) }?.let { p ->
         val value = unquote(p.substringAfter('='))
-        val encoded = value.substringAfter("''", value)
+        val parts = value.split('\'', limit = 3)   // charset'language'percent-encoded name (RFC 8187)
+        val encoded = if (parts.size == 3) parts[2] else value
         runCatching { java.net.URLDecoder.decode(encoded.replace("+", "%2B"), Charsets.UTF_8) }.getOrNull()?.takeIf { it.isNotBlank() }?.let { return it }
     }
     return params.firstOrNull { it.startsWith("filename=", ignoreCase = true) }
@@ -61,7 +62,12 @@ private fun urlSegment(url: String): String? {
 private fun sanitize(name: String): String =
     name.filter { it >= ' ' && it != '\u007f' }
         .map { if (it in "/\\:<>\"|?*") '_' else it }.joinToString("")
-        .trim().trimStart('.').take(MAX_NAME).trimEnd('.', ' ')
+        .trim().trimStart('.').take(MAX_NAME).trimEnd('.', ' ').let(::avoidReserved)
+
+private val RESERVED = setOf("CON", "PRN", "AUX", "NUL") + (1..9).flatMap { listOf("COM$it", "LPT$it") }
+
+/** Windows reserves device names with or without an extension (`NUL.txt`); a leading underscore makes them ordinary. */
+private fun avoidReserved(name: String): String = if (name.substringBefore('.').trim().uppercase() in RESERVED) "_$name" else name
 
 private fun extensionFor(contentType: String?): String {
     val type = contentType?.substringBefore(';')?.trim()?.lowercase() ?: return ".bin"
