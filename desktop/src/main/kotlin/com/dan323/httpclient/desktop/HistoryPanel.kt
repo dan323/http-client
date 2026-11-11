@@ -101,7 +101,7 @@ fun HistoryPanel(state: AppState, modifier: Modifier = Modifier) {
             }
             truncationNotice(opened)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline) }
             val shown = remember(opened) { listOf<RunOutcome>(RunOutcome.Success(opened.asRequest(), opened.response)) }
-            ResponsePane(shown, Modifier.weight(1f).fillMaxWidth())
+            ResponsePane(shown, Modifier.weight(1f).fillMaxWidth(), bodyCutNote = truncationNotice(opened))
         }
         if (history.markA != null || history.markB != null) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {

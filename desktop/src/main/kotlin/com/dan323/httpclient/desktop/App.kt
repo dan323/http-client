@@ -57,7 +57,7 @@ import java.awt.Frame
 import java.nio.file.Path
 
 /** Tight horizontal padding so the three buttons under the request list fit the 300 dp column. */
-private val CompactButtonPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+internal val CompactButtonPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
 
 /** How long the transient notice (e.g. "Chain reset") stays visible. */
 private const val NOTICE_MILLIS = 4_000L
