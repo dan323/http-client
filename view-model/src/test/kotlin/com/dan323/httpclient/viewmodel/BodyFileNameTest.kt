@@ -25,11 +25,30 @@ class BodyFileNameTest {
     }
 
     @Test fun unsafeNamesAreCleaned() {
-        assertEquals("evil.txt", suggestedFileName("http://x/", "attachment; filename=\"../../evil.txt\"", null).substringAfterLast("_"))
-        assertEquals("hidden", suggestedFileName("http://x/", "attachment; filename=\".hidden\"", null))
-        assertEquals("response", suggestedFileName("http://x/", "attachment; filename=\"...\"", null))
-        assertEquals("ab", suggestedFileName("http://x/", "attachment; filename=\"a\u0001b\"", null))
-        assertEquals(100, suggestedFileName("http://x/", "attachment; filename=\"${"a".repeat(300)}\"", null).length)
-        assertEquals("C__x.txt", suggestedFileName("http://x/", "attachment; filename=\"C:\\x.txt\"", null))
+        fun header(name: String) = suggestedFileName("http://x/", "attachment; filename=\"$name\"", null)
+        assertEquals("_.._evil.txt", header("../../evil.txt"))   // no separator survives, the leading dots go
+        assertEquals("hidden", header(".hidden"))
+        assertEquals("response.bin", header("..."))
+        assertEquals("ab", header("a\u0001b"))
+        assertEquals("C__x.txt", header("C:\\x.txt"))
+        assertEquals("report_.pdf", header("report?.pdf"))
+        assertEquals("a_b_d_e_f.txt", header("a<b>d|e*f.txt"))
+        assertEquals("name", header("name. . "))
     }
+
+    @Test fun lengthIncludesTheExtensionAndTheHeaderIsParsedWithQuotes() {
+        assertEquals(100, header300().length)
+        val fromUrl = suggestedFileName("http://x/" + "a".repeat(150), null, "application/json")
+        assertEquals(100, fromUrl.length)
+        assertEquals(true, fromUrl.endsWith(".json"))
+        assertEquals("a;b.txt", suggestedFileName("http://x/", "attachment; filename=\"a;b.txt\"; size=3", null))
+        assertEquals("q_x.txt", suggestedFileName("http://x/", "attachment; filename=\"q\\\"x.txt\"", null))
+    }
+
+    @Test fun anUnresolvedVariableIsNotAName() {
+        assertEquals("response.json", suggestedFileName("{{host}}/files/{{id}}", null, "application/json"))
+        assertEquals("files.json", suggestedFileName("{{host}}/files", null, "application/json"))
+    }
+
+    private fun header300() = suggestedFileName("http://x/", "attachment; filename=\"${"a".repeat(300)}\"", null)
 }

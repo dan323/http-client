@@ -13,6 +13,7 @@ import com.dan323.httpclient.core.application.RunOutcome
 import com.dan323.httpclient.core.domain.Header
 import com.dan323.httpclient.core.domain.HttpResponse
 import com.dan323.httpclient.core.domain.RequestTemplate
+import com.dan323.httpclient.viewmodel.display
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -63,25 +64,40 @@ class BodySearchUiTest {
         onAllNodes(androidx.compose.ui.test.hasTestTag(tag)).fetchSemanticsNodes().firstOrNull()
             ?.config?.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
 
-    @Test fun highlightedLinesMarkMatchesAndTheCurrentOne() {
+    @Test fun highlightTextMarksMatchesAndTheCurrentOne() {
         val text = "ab\nxabx\nab"
-        val matches = listOf(0..1, 4..5, 8..9)
-        val lines = highlightedLines(text, matches, current = 1)
-        assertEquals(listOf("ab", "xabx", "ab"), lines.map { it.text })
-        assertEquals(1, lines[0].spanStyles.size)
-        assertEquals(1, lines[1].spanStyles.size)
-        assertEquals(1, lines[1].spanStyles.single().start)
-        assertEquals(3, lines[1].spanStyles.single().end)
-        assertTrue(lines[1].spanStyles.single().item.background != lines[0].spanStyles.single().item.background)   // the current one stands out
-        assertEquals(emptyList(), highlightedLines("a", emptyList(), 0).single().spanStyles)
+        val shown = highlightText(text, listOf(0..1, 4..5, 8..9), current = 1)
+        assertEquals(text, shown.text)
+        assertEquals(listOf(0 to 2, 4 to 6, 8 to 10), shown.spanStyles.map { it.start to it.end })
+        val backgrounds = shown.spanStyles.map { it.item.background }
+        assertTrue(backgrounds[1] != backgrounds[0])        // the current one stands out
+        assertEquals(backgrounds[0], backgrounds[2])
+        assertEquals(emptyList(), highlightText("a", emptyList(), 0).spanStyles)
     }
 
-    @Test fun aMatchSpanningALineBreakIsClippedToEachLine() {
-        val lines = highlightedLines("ab\ncd", listOf(1..3), 0)    // "b\nc"
-        assertEquals(1, lines[0].spanStyles.single().start)
-        assertEquals(2, lines[0].spanStyles.single().end)
-        assertEquals(0, lines[1].spanStyles.single().start)
-        assertEquals(1, lines[1].spanStyles.single().end)
+    private fun section(body: String, query: String, touched: Long, searchOpen: Boolean = true): Section {
+        val o = outcome(body)
+        val d = o.display()
+        val ui = OutcomeUi(null).also { it.searchOpen = searchOpen; it.query = query; it.touched = touched }
+        val text = (d as com.dan323.httpclient.viewmodel.OutcomeDisplay.Response).prettyBody
+        val matches = com.dan323.httpclient.viewmodel.findMatches(text, query)
+        return Section(d, ui, null, o, if (query.isEmpty()) null else highlightText(text, matches, 0), matches.firstOrNull()?.first, matches.size)
+    }
+
+    @Test fun theScrollTargetIsTheResponseSearchedLastAndCountsItemsOfEarlierOnes() {
+        val first = section("aaa needle", "needle", touched = 1)
+        val second = section("bbb needle", "needle", touched = 2)
+        val target = scrollTargetOf(listOf(first, second))!!
+        assertTrue(target.ui === second.ui)
+        assertEquals(first.itemCount + 2, target.item)          // the first section's items, then header and search row
+        assertEquals(4, target.matchStart)
+        assertTrue(scrollTargetOf(listOf(section("x", "", 5), section("y", "zzz", 6))) == null)       // nothing matches
+        val older = section("needle", "needle", touched = 9)
+        assertTrue(scrollTargetOf(listOf(older, section("needle", "needle", touched = 3)))!!.ui === older.ui)
+    }
+
+    @Test fun aResponseWithoutAnOpenSearchRowHasNoSearchItem() {
+        assertEquals(section("a", "", 0, searchOpen = true).itemCount, section("a", "", 0, searchOpen = false).itemCount + 1)
     }
 
     @Test fun writeBodyWritesTheExactBytesAndReportsFailures() {

@@ -13,7 +13,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import com.dan323.httpclient.viewmodel.findMatches
-import com.dan323.httpclient.viewmodel.lineOf
 import com.dan323.httpclient.viewmodel.matchLabel
 import com.dan323.httpclient.viewmodel.stepMatch
 import com.dan323.httpclient.viewmodel.suggestedFileName
@@ -55,6 +54,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
@@ -73,6 +76,11 @@ import java.awt.datatransfer.StringSelection
 
 internal enum class Tab { BODY, HEADERS }
 
+private val SearchClock = java.util.concurrent.atomic.AtomicLong()
+
+/** Height of the sticky search row; a match is scrolled this far below the top edge so the row does not cover it. */
+private val SearchRowHeight = 60.dp
+
 /** What the user has toggled for one response: tab, raw/pretty, and which JSON nodes are collapsed. */
 internal class OutcomeUi(val json: JsonElement?) {
     var tab by mutableStateOf(Tab.BODY)
@@ -83,6 +91,15 @@ internal class OutcomeUi(val json: JsonElement?) {
     var searchOpen by mutableStateOf(false)
     var query by mutableStateOf("")
     var current by mutableStateOf(0)
+
+    /** When this response's search last changed (a global sequence number); the pane scrolls to the most recent one. */
+    var touched by mutableStateOf(0L)
+
+    /** The layout of the searched text, to find the line of a match; [layoutVersion] changes when it does. */
+    var layout: TextLayoutResult? = null
+    var layoutVersion by mutableStateOf(0)
+
+    fun touch() { touched = SearchClock.incrementAndGet() }
 
     /** The result of the last **Save body**, shown under the header. */
     var saveMessage by mutableStateOf<String?>(null)
@@ -141,82 +158,98 @@ private class JsonColors(val key: Color, val string: Color, val number: Color, v
     }
 }
 
-/** What one response section shows: [lines] replaces the JSON tree and the text while a search is active. */
-private class Section(val display: OutcomeDisplay, val ui: OutcomeUi?, val rows: List<JsonRow>?, val outcome: RunOutcome, val lines: List<AnnotatedString>?, val matchLine: Int?, val matchCount: Int) {
+/** What one response section shows: [highlighted] replaces the JSON tree and the text while a search is active. */
+internal class Section(
+    val display: OutcomeDisplay,
+    val ui: OutcomeUi?,
+    val rows: List<JsonRow>?,
+    val outcome: RunOutcome,
+    val highlighted: AnnotatedString?,
+    /** Start of the current match in the shown text; null without matches. */
+    val matchStart: Int?,
+    val matchCount: Int,
+) {
     /** Header, search row (body tab of a response), content, divider. */
     val itemCount: Int get() = 1 + (if (hasSearchRow) 1 else 0) + contentCount + 1
     val hasSearchRow: Boolean get() = display is OutcomeDisplay.Response && ui != null && ui.tab == Tab.BODY && ui.searchOpen
     private val contentCount: Int get() = when {
         display !is OutcomeDisplay.Response || ui == null -> 0
         ui.tab == Tab.HEADERS -> display.headers.size
-        lines != null -> lines.size
+        highlighted != null -> 1
         rows != null -> rows.size
         else -> 1
     }
 }
 
+/** Where to scroll to show a match: the list item that holds the text, and the match's offset in it. */
+internal class ScrollTarget(val ui: OutcomeUi, val item: Int, val matchStart: Int)
+
+/** The match of the response whose search changed last (not just the first response that has a match), or null. */
+internal fun scrollTargetOf(sections: List<Section>): ScrollTarget? {
+    var before = 0
+    var best: ScrollTarget? = null
+    var bestTouched = Long.MIN_VALUE
+    for (sec in sections) {
+        val ui = sec.ui
+        if (ui != null && sec.matchStart != null && sec.highlighted != null && ui.touched >= bestTouched) {
+            bestTouched = ui.touched
+            best = ScrollTarget(ui, before + 2, sec.matchStart)   // header, search row, then the text item
+        }
+        before += sec.itemCount
+    }
+    return best
+}
+
 private val MatchColor = Color(0x66FFD54F)
 private val CurrentMatchColor = Color(0xCCFF9800)
 
-/** The [text] split into lines, with the [matches] (ranges over the whole text) highlighted and the [current] one stronger. */
-internal fun highlightedLines(text: String, matches: List<IntRange>, current: Int): List<AnnotatedString> {
-    var start = 0
-    var next = 0   // first match that can still touch the line
-    return text.split('\n').map { line ->
-        val end = start + line.length
-        while (next < matches.size && matches[next].last < start) next++
-        val built = buildAnnotatedString {
-            append(line)
-            var m = next
-            while (m < matches.size && matches[m].first <= end) {
-                val from = maxOf(matches[m].first, start) - start
-                val to = minOf(matches[m].last + 1, end) - start
-                if (from < to) addStyle(SpanStyle(background = if (m == current) CurrentMatchColor else MatchColor), from, to)
-                m++
-            }
-        }
-        start = end + 1
-        built
-    }
+/** [text] with the [matches] (ranges over the whole text) highlighted and the [current] one stronger. */
+internal fun highlightText(text: String, matches: List<IntRange>, current: Int): AnnotatedString = buildAnnotatedString {
+    append(text)
+    matches.forEachIndexed { i, m -> addStyle(SpanStyle(background = if (i == current) CurrentMatchColor else MatchColor), m.first, m.last + 1) }
+}
+
+/** The section of [o] for display. The search work is remembered, so it is not redone for unrelated recompositions. */
+@Composable
+private fun rememberSection(o: RunOutcome, entry: OutcomeEntry): Section {
+    val ui = entry.ui
+    val display = entry.display
+    val response = display as? OutcomeDisplay.Response
+    val searching = response != null && ui != null && ui.tab == Tab.BODY && ui.searchOpen && ui.query.isNotEmpty()
+    val text = if (response != null && ui != null) (if (ui.raw) response.rawBody else response.prettyBody) else ""
+    val query = if (searching) ui!!.query else ""
+    val matches = remember(text, query) { findMatches(text, query) }
+    val current = if (matches.isEmpty()) 0 else ui!!.current.coerceIn(0, matches.size - 1)
+    val highlighted = if (searching) remember(text, matches, current) { highlightText(text, matches, current) } else null
+    val rows = if (ui?.json != null && ui.tab == Tab.BODY && !ui.raw && !searching) flattenJson(ui.json, ui.collapsed) else null
+    return Section(display, ui, rows, o, highlighted, matches.getOrNull(current)?.first, matches.size)
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ResponsePane(outcomes: List<RunOutcome>, modifier: Modifier = Modifier) {
+fun ResponsePane(outcomes: List<RunOutcome>, modifier: Modifier = Modifier, bodyCutNote: String? = null) {
     val colors = if (isSystemInDarkTheme()) JsonColors.Dark else JsonColors.Light
     val models = remember { OutcomeModels() }
     LaunchedEffect(outcomes) { models.update(outcomes) }
     val listState = rememberLazyListState()
     // Read the collapsed sets and the search here, in composition, so toggling a node or typing recomposes the list.
-    val sections = outcomes.mapNotNull { o ->
-        val entry = models[o] ?: return@mapNotNull null
-        val ui = entry.ui
-        val display = entry.display
-        val searching = display is OutcomeDisplay.Response && ui != null && ui.tab == Tab.BODY && ui.searchOpen && ui.query.isNotEmpty()
-        val text = if (display is OutcomeDisplay.Response && ui != null) (if (ui.raw) display.rawBody else display.prettyBody) else ""
-        val matches = if (searching) findMatches(text, ui!!.query) else emptyList()
-        val current = if (matches.isEmpty()) 0 else ui!!.current.coerceIn(0, matches.size - 1)
-        val lines = if (searching) highlightedLines(text, matches, current) else null
-        val rows = if (ui?.json != null && ui.tab == Tab.BODY && !ui.raw && !searching) flattenJson(ui.json, ui.collapsed) else null
-        val matchLine = matches.getOrNull(current)?.let { lineOf(text, it.first) }
-        Section(display, ui, rows, o, lines, matchLine, matches.size)
-    }
+    val sections = outcomes.mapNotNull { o -> models[o]?.let { rememberSection(o, it) } }
 
-    // Scroll to the current match: its item index is the items of the sections before it plus its header, search row and line.
-    var before = 0
-    var target: Triple<String, Int, Int>? = null
-    for (sec in sections) {
-        val ui = sec.ui
-        if (ui != null && sec.matchLine != null && target == null) target = Triple(ui.query, ui.current, before + 2 + sec.matchLine)
-        before += sec.itemCount
+    // Scroll to the current match of the response searched last, a little below the top so the sticky search row does not cover it.
+    val target = scrollTargetOf(sections)
+    val stickyPx = with(LocalDensity.current) { SearchRowHeight.roundToPx() }
+    LaunchedEffect(target?.ui, target?.ui?.touched, target?.ui?.layoutVersion, target?.item) {
+        val t = target ?: return@LaunchedEffect
+        val layout = t.ui.layout
+        val top = layout?.let { it.getLineTop(it.getLineForOffset(t.matchStart.coerceAtMost(it.layoutInput.text.length))).toInt() } ?: 0
+        listState.animateScrollToItem(t.item, top - stickyPx)
     }
-    LaunchedEffect(target) { target?.let { listState.animateScrollToItem(it.third) } }
 
     LazyColumn(modifier, state = listState) {
         for (sec in sections) {
             val outcome = sec.display
             val ui = sec.ui
-            item { OutcomeHeader(outcome, ui, sec.outcome) }
+            item { OutcomeHeader(outcome, ui, sec.outcome, bodyCutNote) }
             if (sec.hasSearchRow && ui != null) stickyHeader { SearchRow(ui, sec.matchCount) }
             if (outcome is OutcomeDisplay.Response && ui != null) {
                 when {
@@ -232,7 +265,15 @@ fun ResponsePane(outcomes: List<RunOutcome>, modifier: Modifier = Modifier) {
                             )
                         }
                     }
-                    sec.lines != null -> items(sec.lines) { line -> SelectionContainer { Text(line, style = mono) } }
+                    sec.highlighted != null -> item {
+                        SelectionContainer {
+                            Text(sec.highlighted, style = mono, onTextLayout = { l ->
+                                val changed = ui.layout?.let { it.size != l.size || it.layoutInput.text != l.layoutInput.text } ?: true
+                                ui.layout = l
+                                if (changed) ui.layoutVersion++
+                            })
+                        }
+                    }
                     sec.rows != null -> items(sec.rows) { row -> JsonRowView(row, colors) { ui.toggle(row.path) } }
                     else -> item {
                         val text = if (ui.raw) outcome.rawBody else outcome.prettyBody
@@ -251,15 +292,17 @@ fun ResponsePane(outcomes: List<RunOutcome>, modifier: Modifier = Modifier) {
 @Composable
 private fun SearchRow(ui: OutcomeUi, count: Int) {
     val current = if (count == 0) 0 else ui.current.coerceIn(0, count - 1)
-    fun step(forward: Boolean) { ui.current = stepMatch(current, count, forward) }
+    fun step(forward: Boolean) { ui.current = stepMatch(current, count, forward); ui.touch() }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }   // typing can start at once
     Row(
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
         OutlinedTextField(
-            value = ui.query, onValueChange = { ui.query = it; ui.current = 0 },
+            value = ui.query, onValueChange = { ui.query = it; ui.current = 0; ui.touch() },
             singleLine = true, textStyle = MaterialTheme.typography.bodySmall, placeholder = { Text("Search in body") },
-            modifier = Modifier.weight(1f).height(48.dp).testTag("body-search").onPreviewKeyEvent { e ->
+            modifier = Modifier.weight(1f).height(48.dp).focusRequester(focus).testTag("body-search").onPreviewKeyEvent { e ->
                 if (e.type == KeyEventType.KeyDown && e.key == Key.Enter) { step(!e.isShiftPressed); true } else false
             },
         )
@@ -272,7 +315,7 @@ private fun SearchRow(ui: OutcomeUi, count: Int) {
 private fun OutcomeUi.toggle(path: String) { if (!collapsed.remove(path)) collapsed.add(path) }
 
 @Composable
-private fun OutcomeHeader(outcome: OutcomeDisplay, ui: OutcomeUi?, source: RunOutcome) {
+private fun OutcomeHeader(outcome: OutcomeDisplay, ui: OutcomeUi?, source: RunOutcome, bodyCutNote: String?) {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(outcome.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
         when (outcome) {
@@ -304,13 +347,13 @@ private fun OutcomeHeader(outcome: OutcomeDisplay, ui: OutcomeUi?, source: RunOu
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (ui.tab == Tab.BODY) {
-                            FilterChip(ui.searchOpen, { ui.searchOpen = !ui.searchOpen; if (!ui.searchOpen) { ui.query = ""; ui.current = 0 } },
+                            FilterChip(ui.searchOpen, { ui.searchOpen = !ui.searchOpen; if (!ui.searchOpen) { ui.query = ""; ui.current = 0 } else ui.touch() },
                                 label = { Text("Search") }, modifier = Modifier.testTag("body-search-toggle"))
                         }
                         OutlinedButton(contentPadding = CompactButtonPadding, onClick = { copy(copyText(outcome, ui)) }) { Text("Copy", maxLines = 1) }
                         (source as? RunOutcome.Success)?.let { ok ->
                             OutlinedButton(
-                                contentPadding = CompactButtonPadding, onClick = { ui.saveMessage = saveBodyWithDialog(ok) },
+                                contentPadding = CompactButtonPadding, onClick = { ui.saveMessage = saveBodyWithDialog(ok, bodyCutNote) },
                                 modifier = Modifier.testTag("save-body"),
                             ) { Text("Save body", maxLines = 1) }
                         }
@@ -400,13 +443,13 @@ private fun copy(text: String) =
     runCatching { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null) }
 
 /** Asks where to save the body of [ok] and writes it there; null when the dialog was cancelled, else the result message. */
-private fun saveBodyWithDialog(ok: RunOutcome.Success): String? {
+private fun saveBodyWithDialog(ok: RunOutcome.Success, cutNote: String?): String? {
     val r = ok.response
     val dialog = FileDialog(null as Frame?, "Save response body", FileDialog.SAVE)
     dialog.file = suggestedFileName(ok.request.url, r.header("Content-Disposition"), r.header("Content-Type"))
     dialog.isVisible = true
     val name = dialog.file ?: return null
-    return writeBody(Path.of(dialog.directory, name), r.body)
+    return writeBody(Path.of(dialog.directory, name), r.body) + (cutNote?.let { " Not the whole response: $it" } ?: "")
 }
 
 /** Writes [bytes] exactly to [path] and says so; a failure is the message, not an exception. */

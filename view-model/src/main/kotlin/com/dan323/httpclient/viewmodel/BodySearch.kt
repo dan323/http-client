@@ -35,9 +35,3 @@ fun matchLabel(query: String, current: Int, count: Int): String = when {
     else -> "${current + 1} of $count"
 }
 
-/** The 0-based line of [text] that holds [index]. */
-fun lineOf(text: String, index: Int): Int {
-    var line = 0
-    for (i in 0 until minOf(index, text.length)) if (text[i] == '\n') line++
-    return line
-}

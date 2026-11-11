@@ -29,11 +29,4 @@ class BodySearchTest {
         assertEquals("2 of 5", matchLabel("x", 1, 5))
         assertEquals("1 of $MAX_SEARCH_MATCHES+", matchLabel("x", 0, MAX_SEARCH_MATCHES))
     }
-
-    @Test fun lineOfCountsNewlinesBeforeTheIndex() {
-        val text = "one\ntwo\nthree"
-        assertEquals(0, lineOf(text, 2))
-        assertEquals(1, lineOf(text, 4))
-        assertEquals(2, lineOf(text, 99))
-    }
 }

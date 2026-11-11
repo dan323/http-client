@@ -4,39 +4,64 @@ private const val MAX_NAME = 100
 
 /**
  * A file name to offer when saving a response body: the `filename` of `Content-Disposition` if there is one, else
- * the last segment of the URL path, else `response` plus an extension for the content type. The result never holds a
- * path separator or a control character and never starts with a dot.
+ * the last segment of the URL path (unless it still holds a `{{variable}}`), else `response` plus an extension for the
+ * content type. The result is at most 100 characters, never holds a path separator, a control character or a character
+ * Windows rejects, never starts with a dot and never ends with a dot or a space.
  */
 fun suggestedFileName(url: String, contentDisposition: String?, contentType: String?): String {
-    val fromHeader = contentDisposition?.let(::dispositionName)
-    val fromUrl = urlSegment(url)
-    val extension = extensionFor(contentType)
-    val raw = fromHeader ?: fromUrl ?: "response"
-    val clean = sanitize(raw).ifEmpty { "response" }
-    return if (fromHeader == null && !clean.contains('.')) clean + extension else clean
+    val fromHeader = contentDisposition?.let(::dispositionName)?.let(::sanitize)?.takeIf { it.isNotEmpty() }
+    if (fromHeader != null) return fromHeader
+    val stem = urlSegment(url)?.let(::sanitize)?.takeIf { it.isNotEmpty() } ?: "response"
+    val extension = if (stem.contains('.')) "" else extensionFor(contentType)
+    return stem.take(MAX_NAME - extension.length).trimEnd('.', ' ') + extension
+}
+
+/** Splits a header value at `;` outside double quotes. */
+private fun splitParams(header: String): List<String> {
+    val out = mutableListOf<String>()
+    val current = StringBuilder()
+    var quoted = false
+    var escaped = false
+    for (c in header) {
+        when {
+            escaped -> { current.append(c); escaped = false }
+            c == '\\' && quoted -> { current.append(c); escaped = true }
+            c == '"' -> { quoted = !quoted; current.append(c) }
+            c == ';' && !quoted -> { out += current.toString(); current.clear() }
+            else -> current.append(c)
+        }
+    }
+    out += current.toString()
+    return out.map { it.trim() }
+}
+
+private fun unquote(value: String): String {
+    val v = value.trim()
+    return if (v.length >= 2 && v.startsWith('"') && v.endsWith('"')) v.substring(1, v.length - 1).replace("\\\"", "\"").replace("\\\\", "\\") else v
 }
 
 private fun dispositionName(header: String): String? {
-    val params = header.split(';').drop(1).map { it.trim() }
+    val params = splitParams(header).drop(1)
     params.firstOrNull { it.startsWith("filename*=", ignoreCase = true) }?.let { p ->
-        val value = p.substringAfter('=').trim().trim('"')
+        val value = unquote(p.substringAfter('='))
         val encoded = value.substringAfter("''", value)
         runCatching { java.net.URLDecoder.decode(encoded.replace("+", "%2B"), Charsets.UTF_8) }.getOrNull()?.takeIf { it.isNotBlank() }?.let { return it }
     }
     return params.firstOrNull { it.startsWith("filename=", ignoreCase = true) }
-        ?.substringAfter('=')?.trim()?.trim('"')?.takeIf { it.isNotBlank() }
+        ?.let { unquote(it.substringAfter('=')) }?.takeIf { it.isNotBlank() }
 }
 
 private fun urlSegment(url: String): String? {
     val path = url.substringBefore('#').substringBefore('?').substringAfter("://", url).substringAfter('/', "")
-    return path.trimEnd('/').substringAfterLast('/').takeIf { it.isNotBlank() }
-        ?.let { runCatching { java.net.URLDecoder.decode(it.replace("+", "%2B"), Charsets.UTF_8) }.getOrDefault(it) }
+    val segment = path.trimEnd('/').substringAfterLast('/')
+    if (segment.isBlank() || "{{" in segment) return null   // an unresolved variable is no name
+    return runCatching { java.net.URLDecoder.decode(segment.replace("+", "%2B"), Charsets.UTF_8) }.getOrDefault(segment)
 }
 
 private fun sanitize(name: String): String =
     name.filter { it >= ' ' && it != '\u007f' }
-        .replace('/', '_').replace('\\', '_').replace(':', '_')
-        .trim().trimStart('.').take(MAX_NAME)
+        .map { if (it in "/\\:<>\"|?*") '_' else it }.joinToString("")
+        .trim().trimStart('.').take(MAX_NAME).trimEnd('.', ' ')
 
 private fun extensionFor(contentType: String?): String {
     val type = contentType?.substringBefore(';')?.trim()?.lowercase() ?: return ".bin"
