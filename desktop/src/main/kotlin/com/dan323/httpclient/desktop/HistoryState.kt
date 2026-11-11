@@ -49,14 +49,27 @@ class HistoryState(private val store: HistoryStore) {
      * Lists the runs of [file] (newest first). A different file clears the selection and the marks; the same file
      * ([keepSelection], after a new run was recorded) keeps them and the selected run when it still exists.
      */
-    fun load(file: Path?, keepSelection: Boolean = false) {
-        val generation = synchronized(this) {
-            val same = keepSelection && this.file == file
-            this.file = file
-            if (!same) { selectedRun = null; openedIndex = null; opened = null; markA = null; markB = null; diff = null; selectionGeneration++ }
-            error = null
-            ++loadGeneration
-        }
+    fun load(file: Path?, keepSelection: Boolean = false) = finishLoad(beginLoad(file, keepSelection), file)
+
+    /**
+     * Like [load], but the disk read runs on a background thread: the state is cleared for a different file at once
+     * and the runs appear when the read is done. For callers that are on the UI thread.
+     */
+    fun loadInBackground(file: Path?, keepSelection: Boolean = false) {
+        val generation = beginLoad(file, keepSelection)
+        Thread({ finishLoad(generation, file) }, "history-load").apply { isDaemon = true }.start()
+    }
+
+    /** Switches to [file] without reading: a different file starts empty, so no run of the old one can be picked. */
+    private fun beginLoad(file: Path?, keepSelection: Boolean): Long = synchronized(this) {
+        val same = keepSelection && this.file == file
+        this.file = file
+        if (!same) { runs = emptyList(); selectedRun = null; openedIndex = null; opened = null; markA = null; markB = null; diff = null; selectionGeneration++ }
+        error = null
+        ++loadGeneration
+    }
+
+    private fun finishLoad(generation: Long, file: Path?) {
         var problem: String? = null
         val listed = if (file == null) emptyList() else try { store.list(file) } catch (e: Exception) {
             problem = "Could not read the history: ${e.message ?: e::class.simpleName}"

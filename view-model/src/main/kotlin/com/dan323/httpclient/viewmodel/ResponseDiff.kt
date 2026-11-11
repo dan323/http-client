@@ -81,8 +81,12 @@ fun diffStoredResponses(a: StoredResponse, b: StoredResponse): ResponseDiff =
 
 private fun diffResponses(a: HttpResponse, b: HttpResponse, cutA: Boolean, cutB: Boolean, sizeA: Long, sizeB: Long): ResponseDiff {
     val body = diffBodies(a.body, b.body)
-    val partial = (cutA || cutB) && body == BodyDiff.Same
-    val shown = if (partial) BodyDiff.Skipped("a stored body was cut short, so the complete bodies were not compared", sizeA.toIntSize(), sizeB.toIntSize()) else body
+    val cut = "a stored body was cut short, so the complete bodies were not compared"
+    val shown = when {
+        body is BodyDiff.Skipped -> body.copy(sizeA = sizeA.toIntSize(), sizeB = sizeB.toIntSize()) // the sizes the responses had, not what was kept
+        (cutA || cutB) && body == BodyDiff.Same -> BodyDiff.Skipped(cut, sizeA.toIntSize(), sizeB.toIntSize())
+        else -> body
+    }
     return ResponseDiff(a.statusCode, b.statusCode, a.durationMillis, b.durationMillis, diffHeaders(a, b), shown)
 }
 

@@ -136,7 +136,7 @@ class AppState(
         val key = canonical(path)
         settings?.update { it.opened(key) }
         recentFiles = settings?.let { existingRecents(it) } ?: recentFiles
-        if (historyOpen) historyView?.load(path.toAbsolutePath())
+        if (historyOpen) historyView?.loadInBackground(path.toAbsolutePath())   // not on the caller's thread: it may be the UI thread
         refreshEnvironments()
         // Restore the remembered environment only if it still exists; never an error for a vanished name.
         settings?.current?.environments?.get(key)?.takeIf { it in environments }?.let { chosenEnvironment = it }

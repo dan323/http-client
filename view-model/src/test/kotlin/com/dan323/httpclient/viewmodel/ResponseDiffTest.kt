@@ -115,4 +115,15 @@ class ResponseDiffTest {
         assertTrue(!d.identical)
         assertEquals(BodyDiff.Same, diffStoredResponses(stored("abc", false), stored("abc", false)).body)
     }
+
+    @Test fun skippedStoredComparisonsReportTheOriginalSizes() {
+        val d = diffStoredResponses(stored("abc", true, 7_000_000), stored("abd", false))
+        val lines = d.body as BodyDiff.Lines // small retained bodies still diff, so force a skip with binary content
+        assertTrue(lines.lines.isNotEmpty())
+        val bin = com.dan323.httpclient.core.port.out.StoredResponse("r", java.time.Instant.EPOCH, 0, "n", "GET", "http://x",
+            HttpResponse(200, emptyList(), byteArrayOf(-1, -2), 1), true, 7_000_000)
+        val skipped = diffStoredResponses(bin, stored("abc", false)).body as BodyDiff.Skipped
+        assertEquals(7_000_000, skipped.sizeA)
+        assertEquals(3, skipped.sizeB)
+    }
 }

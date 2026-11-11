@@ -246,4 +246,26 @@ class HistoryTest {
         release.countDown(); loader.join(5000)
         assertEquals(emptyList(), view.runs)
     }
+
+    @Test fun `switching file clears the old runs at once and loads the new ones in the background`() {
+        val real = store()
+        recordTwo(real)
+        val a = file.toAbsolutePath()
+        val view = HistoryState(real)
+        view.load(a)
+        assertEquals(2, view.runs.size)
+        val gate = CountDownLatch(1)
+        val gated = object : HistoryStore by real {
+            override fun list(httpFile: Path): List<HistoryRun> { gate.await(5, TimeUnit.SECONDS); return real.list(httpFile) }
+        }
+        val v3 = HistoryState(gated)
+        v3.loadInBackground(a)
+        assertEquals(emptyList(), v3.runs)          // returns before the read finished
+        gate.countDown()
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (v3.runs.isEmpty() && System.nanoTime() < deadline) Thread.sleep(10)
+        assertEquals(2, v3.runs.size)
+        view.loadInBackground(root.resolve("elsewhere.http").toAbsolutePath())
+        assertEquals(emptyList(), view.runs)        // the old file's runs are gone immediately
+    }
 }
