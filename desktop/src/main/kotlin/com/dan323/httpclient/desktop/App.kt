@@ -111,6 +111,15 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             OutlinedButton(enabled = controls.canSend, contentPadding = CompactButtonPadding, onClick = { state.resetChain() }) {
                 Text("Reset chain", maxLines = 1)
             }
+            if (state.selectedHasLink) {
+                OutlinedButton(
+                    enabled = state.canOpenLinked,
+                    contentPadding = CompactButtonPadding,
+                    onClick = { scope.launch(Dispatchers.IO) { state.showLinkedResponse() } },
+                    modifier = Modifier.testTag("open-linked"),
+                ) { Text("Linked response", maxLines = 1) }
+                if (state.dirty) Text("Save to look up", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline, maxLines = 1)
+            }
             // While a request runs the spinner sits next to the buttons; otherwise the short confirmation of Reset chain.
             if (state.running) {
                 CircularProgressIndicator(Modifier.size(20.dp).testTag("run-progress"), strokeWidth = 2.dp)

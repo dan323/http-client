@@ -81,6 +81,28 @@ class AppState(
         if (historyOpen) historyView?.load(file?.toAbsolutePath())
     }
 
+    /** True when the selected request has a `<>` link (and there is a history store to look it up in). */
+    val selectedHasLink: Boolean get() = history != null && requests.getOrNull(selected)?.responseLinks?.isNotEmpty() == true
+
+    /**
+     * True when [showLinkedResponse] can run: not while a request runs, and not with unsaved edits, because a link is
+     * found by the request's name or start line, which edits can change.
+     */
+    val canOpenLinked: Boolean get() = selectedHasLink && !running && !dirty
+
+    /** Opens the History panel on the latest response recorded for the selected request's `<>` link. Blocking (disk). */
+    fun showLinkedResponse() {
+        val view = historyView ?: return
+        if (!canOpenLinked) return
+        exclusive("open the linked response") {
+            val request = requests.getOrNull(selected)?.takeIf { it.responseLinks.isNotEmpty() } ?: return@exclusive
+            val abs = file?.toAbsolutePath() ?: return@exclusive
+            if (!historyOpen) view.load(abs)   // an open panel already follows the file
+            historyOpen = true
+            view.openLinked(request)
+        }
+    }
+
     /** What the run buttons offer now; the shared rule for Send, Cancel and the refusals while running. */
     val controls: RunControls get() = RunControls(running, file != null)
 

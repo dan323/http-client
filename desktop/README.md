@@ -71,9 +71,7 @@ Known UI problems are listed in [../docs/known-limitations.md](../docs/known-lim
 The installer version (`packageVersion` in `build.gradle.kts`) is separate from the project version,
 because installers require a major version of at least 1; its major is the project's major plus one.
 
-## Not yet implemented
-
-Opening `<>`-linked responses.
+## Environment and file access
 
 `{{$env.NAME}}` reads nothing by default: allow names with `-Dhttpclient.allowEnv=NAME,NAME` (JVM option) or the environment variable `HTTPC_ALLOW_ENV=NAME,NAME`; see [docs/features.md](../docs/features.md).
 

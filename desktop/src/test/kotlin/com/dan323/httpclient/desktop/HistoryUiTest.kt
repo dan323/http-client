@@ -82,4 +82,32 @@ class HistoryUiTest {
             assertEquals(null, state.historyView!!.diff)
         } finally { server.stop(); root.toFile().deleteRecursively() }
     }
+
+    @Test fun linkedResponseButtonOpensTheRecordedResponse() = runComposeUiTest {
+        val server = MockServer(0).start()
+        val root = Files.createTempDirectory("httpc-hui")
+        try {
+            Files.writeString(root.resolve("http-client.env.json"), """{"dev":{"base":"http://127.0.0.1:${server.port}"}}""")
+            val file = root.resolve("l.http")
+            Files.writeString(file, "# @name ok\nGET {{base}}/get\n<> ok.json\n\n###\n# @name plain\nGET {{base}}/get\n")
+            val history = FileHistoryStore(historyDirFor = { f -> root.resolve("store").resolve(f.fileName.toString()) }, onWarning = {})
+            val state = AppState(runner = DesktopRunner(history = history), history = history).also { it.open(file); it.environment = "dev" }
+            setContent { AppRoot(state) }
+            onNodeWithTag("open-linked").assertIsEnabled()
+            state.run(all = false)
+            onNodeWithTag("open-linked").performClick()
+            waitUntil(timeoutMillis = 10_000) { state.historyView!!.opened != null }
+            assertTrue(state.historyOpen)
+            assertEquals(200, state.historyView!!.opened?.response?.statusCode)
+
+            state.showHistory(false)
+            state.edit("# edited\n" + state.text)           // unsaved edits disable the lookup
+            waitForIdle()
+            onNodeWithTag("open-linked").assertIsNotEnabled()
+            onNodeWithText("Save to look up").assertExists()
+            state.selected = 1                               // a request without a link has no button
+            waitForIdle()
+            onNodeWithTag("open-linked").assertDoesNotExist()
+        } finally { server.stop(); root.toFile().deleteRecursively() }
+    }
 }
