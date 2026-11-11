@@ -127,6 +127,15 @@ class JsonSettingsStoreTest {
         assertFalse(Files.exists(dir.resolve("settings.json.corrupt")))
     }
 
+    @Test fun `the record history choice round trips and an older file without it means off`() {
+        assertNull(store().save(DesktopSettings(recordHistory = true)))
+        assertTrue(store().load().settings.recordHistory)
+        Files.writeString(dir.resolve("settings.json"), """{"version":1,"recentFiles":[]}""")
+        val loaded = store().load()
+        assertFalse(loaded.settings.recordHistory)
+        assertNull(loaded.warning)
+    }
+
     @Test fun `a transient read error never replaces the file and saving resumes after it clears`() {
         val a = realFile("a.http")
         val original = DesktopSettings(a, mapOf(a to "dev"), WindowSettings(900, 700, 10, 20), listOf(a))
@@ -223,11 +232,11 @@ class JsonSettingsStoreTest {
         assertEquals("Could not save settings: IOException", msg)
     }
 
-    @Test fun `settings never contain more than paths names and geometry`() {
+    @Test fun `settings never contain more than paths, names, geometry and the record history flag`() {
         val a = realFile("a.http")
         store().save(DesktopSettings(a, mapOf(a to "dev"), WindowSettings(1, 2), listOf(a)))
         val keys = Regex("\"(\\w+)\"\\s*:").findAll(Files.readString(dir.resolve("settings.json"))).map { it.groupValues[1] }.toSet()
-        assertEquals(setOf("version", "lastFile", "environments", "window", "width", "height", "x", "y", "maximized", "recentFiles"), keys)
+        assertEquals(setOf("version", "lastFile", "environments", "window", "width", "height", "x", "y", "maximized", "recentFiles", "recordHistory"), keys)
     }
 
     private fun q(s: String) = "\"" + s.replace("\\", "\\\\") + "\""

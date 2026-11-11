@@ -4,6 +4,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.dan323.httpclient.core.application.RunOutcome
+import com.dan323.httpclient.core.application.RunReport
+import com.dan323.httpclient.core.port.out.HistoryStore
 import com.dan323.httpclient.core.domain.RequestTemplate
 import com.dan323.httpclient.viewmodel.RunCancellation
 import com.dan323.httpclient.viewmodel.RunControls
@@ -16,6 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class AppState(
     private val runner: DesktopRunner = DesktopRunner(),
     private val settings: SettingsPersistence? = null,
+    private val history: HistoryStore? = null,
 ) : AutoCloseable {
     var file by mutableStateOf<Path?>(null)
         private set
@@ -51,6 +54,32 @@ class AppState(
     /** Changes every time [notice] is set, so the UI can restart its timer when the same text is shown again. */
     var noticeId by mutableStateOf(0)
         private set
+
+    /** The History panel's state; null when this app has no history store. */
+    val historyView: HistoryState? = history?.let { HistoryState(it) }
+
+    /** True when the History panel replaces the response pane. */
+    var historyOpen by mutableStateOf(false)
+        private set
+
+    private var recording by mutableStateOf(settings?.current?.recordHistory ?: false)
+
+    /** Whether ordinary runs are stored in the history (off by default; stored responses are raw). Remembered between sessions. */
+    var recordHistory: Boolean
+        get() = recording
+        set(value) {
+            recording = value
+            settings?.update { it.withRecordHistory(value) }
+        }
+
+    /** Recording needs a history store; without one the option is not offered. */
+    val canRecordHistory: Boolean get() = history != null
+
+    /** Shows or hides the History panel; showing it reads the runs of the open file. Blocking (disk). */
+    fun showHistory(show: Boolean) {
+        historyOpen = show && history != null
+        if (historyOpen) historyView?.load(file?.toAbsolutePath())
+    }
 
     /** What the run buttons offer now; the shared rule for Send, Cancel and the refusals while running. */
     val controls: RunControls get() = RunControls(running, file != null)
@@ -107,6 +136,7 @@ class AppState(
         val key = canonical(path)
         settings?.update { it.opened(key) }
         recentFiles = settings?.let { existingRecents(it) } ?: recentFiles
+        if (historyOpen) historyView?.load(path.toAbsolutePath())
         refreshEnvironments()
         // Restore the remembered environment only if it still exists; never an error for a vanished name.
         settings?.current?.environments?.get(key)?.takeIf { it in environments }?.let { chosenEnvironment = it }
@@ -202,6 +232,7 @@ class AppState(
             val tracked = cancellation.track {
                 runner.execute(path, t, if (all) null else index, environment) { o -> synchronized(lock) { outcomes = outcomes + o } }
             }
+            recordRun(path)
             // Outcomes that finished before the cancel stay; the cancelled request is not remembered (see RunController).
             if (tracked is Tracked.Cancelled) cancelled = true
         } catch (e: Exception) {
@@ -209,6 +240,21 @@ class AppState(
         } finally {
             running = false
             busy.set(false)
+        }
+    }
+
+    /** Stores the run in the history when recording is on; what finished before a cancel is stored too. A store failure only sets [message]. */
+    private fun recordRun(path: Path) {
+        val store = history ?: return
+        if (!recording) return
+        val done = synchronized(lock) { outcomes }
+        if (done.isEmpty()) return
+        val abs = path.toAbsolutePath()
+        try {
+            store.record(abs, RunReport.from(done), done.map { (it as? RunOutcome.Success)?.response })
+            if (historyOpen) historyView?.load(abs, keepSelection = true)
+        } catch (e: Exception) {
+            message = "Could not record history: ${e.message ?: e::class.simpleName}"
         }
     }
 

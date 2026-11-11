@@ -15,12 +15,14 @@ data class WindowSettings(
  *
  * @property environments the last chosen environment name, by file path, at most [MAX_ENVIRONMENTS] (least recently used dropped first)
  * @property recentFiles most recent first, without duplicates, at most [MAX_RECENT] entries
+ * @property recordHistory whether ordinary runs are stored in the run history (off by default: stored responses are raw)
  */
 data class DesktopSettings(
     val lastFile: String? = null,
     val environments: Map<String, String> = emptyMap(),
     val window: WindowSettings? = null,
     val recentFiles: List<String> = emptyList(),
+    val recordHistory: Boolean = false,
 ) {
     /** Marks [path] as the last opened file and moves it to the front of the recent files. */
     fun opened(path: String): DesktopSettings = copy(
@@ -37,6 +39,8 @@ data class DesktopSettings(
         copy(environments = if (name == null) environments - path else boundedEnvironments((environments - path) + (path to name)))
 
     fun withWindow(window: WindowSettings?): DesktopSettings = copy(window = window)
+
+    fun withRecordHistory(on: Boolean): DesktopSettings = copy(recordHistory = on)
 
     companion object {
         const val MAX_RECENT = 10
