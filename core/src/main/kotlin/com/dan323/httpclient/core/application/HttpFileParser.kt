@@ -17,7 +17,7 @@ class HttpParseException(val line: Int, reason: String) : IllegalArgumentExcepti
 class HttpFileParser : ParseHttpFile {
     private val nameTag = Regex("""^(?:#|//)\s*@name\s+(\S+)""")
     /** JetBrains settings this client knows of but does not implement; they warn instead of being dropped silently. */
-    private val IGNORED_SETTINGS = setOf("no-auto-encoding", "connection-timeout", "no-log", "use-os-credentials")
+    private val ignoredSettings = setOf("no-auto-encoding", "connection-timeout", "no-log", "use-os-credentials")
     private val settingTag = Regex("""^(?:#|//)\s*@([A-Za-z][\w-]*)(?:\s+(.*))?$""")
 
     override fun parse(text: String): HttpFile {
@@ -36,6 +36,7 @@ class HttpFileParser : ParseHttpFile {
         var name: String? = null
         val settings = linkedMapOf<String, String>()
         val assertions = mutableListOf<String>()
+        val ignoredWarnings = mutableListOf<String>() // reported only when the block turns out to hold a request
         var i = 0
         // Leading comments / blanks, picking up @name.
         while (i < lines.size) {
@@ -48,8 +49,8 @@ class HttpFileParser : ParseHttpFile {
                     if (m.groupValues[1] == "assert") assertions += stripTrailingComment(m.groupValues[2])
                     else if (m.groupValues[1] != "name") {
                         settings[m.groupValues[1]] = m.groupValues[2].trim()
-                        if (m.groupValues[1].lowercase() in IGNORED_SETTINGS) {
-                            warnings += "Line ${startLine + i + 1}: '@${m.groupValues[1]}' is ignored (not supported)"
+                        if (m.groupValues[1].lowercase() in ignoredSettings) {
+                            ignoredWarnings += "Line ${startLine + i + 1}: '@${m.groupValues[1]}' is ignored (not supported)"
                         }
                     }
                 }
@@ -58,6 +59,7 @@ class HttpFileParser : ParseHttpFile {
             break
         }
         if (i >= lines.size) return null
+        warnings += ignoredWarnings
 
         fun lineNo(index: Int) = startLine + index + 1
         val first = lines[i].trim()

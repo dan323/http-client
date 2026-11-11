@@ -62,7 +62,7 @@ class JsonEnvironmentRepository(private val dir: Path) : EnvironmentRepository {
 
     companion object {
         private val OFFSET = Regex("""offset (\d+)""")
-        /** Name of the pseudo environment whose variables are added to all the others (as in JetBrains). */
+        /** Name of the pseudo environment whose variables are added to all the others (this client's own feature; JetBrains does not document it). */
         const val SHARED_ENV = "\$shared"
         const val SHARED_FILE = "http-client.env.json"
         const val PRIVATE_FILE = "http-client.private.env.json"
