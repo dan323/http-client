@@ -62,7 +62,7 @@ cover it (see "Sources and limits"). Status: **Partial** (accepted with limits),
 | `> {% ... %}`, `> ./handler.js` | JavaScript handlers | Not supported | Skipped with a warning; the request runs. Deferred in [competitive-gaps.md](competitive-gaps.md). |
 | `client.global.set`, `client.test`, `client.assert` | yes | Not supported | Scripts are skipped; use chaining, in-file variables or `# @assert` ([features.md](features.md#assertions)). |
 | `<> file` | IDE rewrites your file | Different | Parsed and kept; we never edit the file, links go to `.http-history/` ([features.md](features.md#saved-responses)). |
-| Response history, compare | in the IDE | Partial | Viewer only; history browser and compare planned (T18). |
+| Response history, compare | in the IDE | Partial | Desktop app only: opt-in recording of runs, a History panel and a compare of two stored responses. The plugin and the CLI have no history browser. |
 | SSE / NDJSON streaming view | yes | Not supported | Body is read until the stream ends or the timeout; no incremental view. |
 
 ## Authentication, protocols, cookies, proxy, certificates, import
@@ -102,7 +102,7 @@ Decided in review, not bugs (also in [known-limitations.md](known-limitations.md
 
 From [PLAN.md](PLAN.md) and [competitive-gaps.md](competitive-gaps.md):
 
-- Planned: editor completion and inspections (T16, T22); history browser and `<>` links (T18, T27).
+- Planned: editor completion and inspections (T16, T22); opening `<>` links (T27).
 - Later or out of scope: GraphQL, WebSocket, gRPC; full OAuth 2 and Digest; handler scripts; Postman and cURL import; team sync.
 - Not on any list: `import`/`run`, client certificates, `# @connection-timeout`, `# @no-log`, Faker-based `$random.*`.
 

@@ -1,14 +1,21 @@
 package com.dan323.httpclient.desktop
 
+import com.dan323.httpclient.adapters.FileHistoryStore
 import com.dan323.httpclient.adapters.JsonSettingsStore
+import com.dan323.httpclient.core.port.out.HistoryStore
 import com.dan323.httpclient.core.port.out.SettingsStore
 import com.dan323.httpclient.core.port.out.WindowSettings
 import java.nio.file.Path
 
 /** Builds the app state for a start: settings never block startup, a path argument wins over the remembered last file. */
-fun createAppState(args: Array<String>, newStore: () -> SettingsStore = { JsonSettingsStore() }): AppState {
+fun createAppState(
+    args: Array<String>,
+    newHistory: () -> HistoryStore = { FileHistoryStore() },
+    newStore: () -> SettingsStore = { JsonSettingsStore() },
+): AppState {
     val persistence = try { SettingsPersistence(newStore()) } catch (_: Throwable) { null }
-    return AppState(settings = persistence).also { st ->
+    val history = newHistory() // one store for recording linked responses (the runner) and for the History panel
+    return AppState(runner = DesktopRunner(history = history), settings = persistence, history = history).also { st ->
         val arg = args.firstOrNull()
         if (arg != null) st.open(Path.of(arg)) else st.restoreLastFile()
     }

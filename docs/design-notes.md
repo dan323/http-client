@@ -64,6 +64,8 @@ The parser stores settings on `RequestTemplate.settings`; the executor honours t
 
 ### Run history store
 
+The desktop app records ordinary runs through the same store, only when the user turns **Record history** on (`DesktopSettings.recordHistory`, off by default because stored responses are raw): `AppState` calls `HistoryStore.record` after a run with the `RunReport` and one response (or null) per outcome, and a store failure only sets a message. The History panel reads through `HistoryState`; the comparison of two stored responses is `diffResponses` in `view-model`, a line diff over the lines left after the common start and end are removed, capped so that it stays cheap (`ResponseDiffLimits`).
+
 `HistoryStore` (port in `core`: `record`, `list`, `read`, `readResponse`, `latestResponse` by request name, `recordLinked`, `latestLinked`) is implemented by `FileHistoryStore` (`adapters`) in `.http-history/<file name>/` next to the `.http` file; the folder is injectable (`FileHistoryStore.underRoot(dir)` or any `(Path) -> Path`).
 
 - Layout: one folder per run, named by its id, e.g. `20261106T101500123Z-n0000-a1b2c3d4` (UTC time, a sequence number within the millisecond so equal-time runs keep their order, random suffix; older ids without the sequence stay readable and sort first). It holds `run.json` (version, id, timestamp, the report in `JsonRunReport` format, per response status, headers, duration, body size, `bodyTruncated`, `originalBodySize`) and `<index>.body` (raw bytes).

@@ -18,11 +18,11 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F6 | More dynamic variables (`$random.*`, `$env.X`, timestamp offsets, `$randomInt` range) | core | done |
 | F7 | More extraction: XPath, regex, headers (for chaining and assertions) | core | done |
 | F8 | Executor settings: redirects, timeouts, proxy | core | done |
-| F9 | Response history and saved responses | core, UIs | partial: `>>` / `>>!` / `<>` and link recording done (T26); history browser (T18, desktop) and opening a `<>`-linked response (T18 desktop, T27 plugin) open |
+| F9 | Response history and saved responses | core, UIs | partial: `>>` / `>>!` / `<>`, link recording (T26) and the desktop history browser (T18) done; opening a `<>`-linked response in the desktop app and the plugin (T27) open |
 | F10 | CLI: `--json`, `--junit`, `--quiet`, `--output`, `--var`, meaningful exit codes | CLI | done (T10): reports, exit codes 0/1/2/3, `--quiet`, `--output`, `--var`, summary line |
 | F11 | Desktop: remember last file, environment, window, recent files | desktop | done (T14): last file, environment, window, recent files |
 | F12 | Desktop: several files at once, folder view | desktop | open |
-| F13 | Desktop: history browser and response comparison | desktop | open |
+| F13 | Desktop: history browser and response comparison | desktop | done |
 | F14 | Editor intelligence: variable completion, undefined-variable and bad-reference diagnostics, find | desktop, plugin | open |
 | F15 | Desktop response extras: search in body, save to file, image/HTML preview | desktop | open |
 | F17 | Edit environments in the UI | desktop | open |
@@ -37,7 +37,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 
 Done tasks are listed in the CHANGELOG, not here: T1 (file variables, settings), T2 (executor options), T3 (cookie jar),
 T4 (`ResponseExtractor`), T5 (assertions), T6 (dynamic variables v2), T7 (Basic auth shortcut), T9 (`RunReport`, JSON and JUnit export),
-T8 (multipart bodies), T12 (`view-model`). Done as well: the review fixes R1-R13 (see [known-limitations.md](known-limitations.md) for what was left), including the
+T8 (multipart bodies), T12 (`view-model`), T18 (desktop history and compare). Done as well: the review fixes R1-R13 (see [known-limitations.md](known-limitations.md) for what was left), including the
 composition root, environment resolution, file confinement, the CI matrix part of T24 and build quality reports.
 
 Each remaining task is listed once even when it serves several features. Size: S ≈ 1 day, M ≈ 2 days, L ≈ 3 days
@@ -48,13 +48,12 @@ Each remaining task is listed once even when it serves several features. Size: S
 | T15 | **Desktop workspace:** several open files (tabs) and a folder view | F12 | L | – |
 | T16 | **Desktop editor intelligence:** variable completion, diagnostics from T13, find/replace | F14 | L | – (T13 done: `VariableAnalysis`) |
 | T17 | **Desktop response extras:** body search, save to file, image/HTML preview | F15 | M | – |
-| T18 | **Desktop history and compare:** browse stored responses, diff two | F13 | M | – (T11 done: `HistoryStore` / `FileHistoryStore`) |
 | T20 | **Environment editor:** write support on the environment port and a UI to edit variables | F17 | M | – |
 | T21 | **Plugin GUI verification:** checked by hand on Ultimate 2026.3 (IU-263.7307.200) with the 0.5.0-rc1 zip, see `intellij-plugin/README.md`; still open: a Community install and the 2026.1 baseline (the `Ctrl+Alt+R` run shortcut is still to be tried in an IDE) | F20, F19, F18 | S | – |
 | T22 | **Plugin intelligence:** completion, go-to-request, inspections from T13 | F18, F14 | L | T21 (T13 done: `VariableAnalysis`) |
 | T23 | **Plugin response panel:** remember the environment across restarts, run all | F19 | M | T21 |
 | T24 | **Packaging in CI** (rest of F20): done in `.github/workflows/release.yml` on tags `v*` (DMG/MSI/DEB best effort, plugin zip, CLI zip/tar); first real run on tag v0.5.0-rc1: all jobs passed | F20 | S | – |
-| T27 | **Plugin: open the linked/stored response** of a request (`<>` link, `ResponseLinks.latest`) in the plugin | F9 | S | T21 |
+| T27 | **Open the linked/stored response** of a request (`<>` link, `ResponseLinks.latest`) in the desktop app and the plugin | F9 | S | T21 (plugin part) |
 | T25 | **Final cross-platform QA and release notes:** Windows MSI and plugin checked by hand on 0.5.0-rc1; CLI zip checked on 0.5.0-rc1 (`--list`, smoke test with a JUnit report); still open: macOS DMG, Linux DEB and the native file dialogs; desktop UI polish (button text, dropdown position, request list highlighting, env file editing) planned after 0.5.0 | F20 | M | all |
 | T28 | **Guide build check:** build the Jekyll site on pull requests that change `docs/guide/**` and check links | F21 | S | – |
 | T29 | **Guide screenshots:** desktop images generated headless from the real composables, CLI transcripts from real runs, plugin images by checklist | F21 | M | – |
@@ -65,10 +64,9 @@ Each remaining task is listed once even when it serves several features. Size: S
 
 | Feature | Open tasks |
 |---|---|
-| F9 | T18, T27 |
+| F9 | T27 |
 | F11 | T14 |
 | F12 | T15 |
-| F13 | T18 |
 | F14 | T13, T16, T22 |
 | F15 | T17 |
 | F17 | T20 |
@@ -90,7 +88,7 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 | 2    | T13 (variable analysis), T14 (desktop persistence)                                                                         | disjoint areas                                               |
 | 3    | T23 (plugin panel)                                                                                  | (T8 done)                                                    |
 | 4    | T22 (plugin intelligence), T16 (desktop editor), T15 (workspace)                                                           | need T13 / T14                                               |
-| 5    | T17 (desktop extras), T18 (history browser), T20 (environment editor), T27 (plugin: open linked response) | up to three at a time                                        |
+| 5    | T17 (desktop extras), T20 (environment editor), T27 (plugin: open linked response) | up to three at a time                                        |
 | 6    | T25 (QA and release notes)                                                                                                 | needs everything                                             |
 | 7    | T28 (guide check), T29 (screenshots), T30 (guide module), T31 (links) | any time after wave 5 for T29-T31; T28 can go first       |
 

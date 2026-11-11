@@ -144,7 +144,28 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
 
     // Right: responses.
     Column(Modifier.weight(1.2f).fillMaxHeight().padding(12.dp)) {
-        Text("Response", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(if (state.historyOpen) "History" else "Response", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).padding(vertical = 8.dp))
+            if (state.canRecordHistory) {
+                Checkbox(checked = state.recordHistory, onCheckedChange = { state.recordHistory = it }, modifier = Modifier.testTag("record-history"))
+                Text("Record history", style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(
+                    contentPadding = CompactButtonPadding,
+                    onClick = { val show = !state.historyOpen; scope.launch(Dispatchers.IO) { state.showHistory(show) } },
+                    modifier = Modifier.testTag("history-toggle"),
+                ) { Text(if (state.historyOpen) "Back to response" else "History", maxLines = 1) }
+            }
+        }
+        if (state.canRecordHistory && state.recordHistory) {
+            Text(
+                "Stores raw responses in .http-history next to the file; keep it out of version control.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(bottom = 6.dp),
+            )
+        }
+        if (state.historyOpen) {
+            HistoryPanel(state, Modifier.fillMaxSize())
+            return@Column
+        }
         val cancelled = state.cancelledLabel
         if (cancelled != null) {
             // A cancelled run is an outcome, not an error: neutral colour, and the results that finished stay below.

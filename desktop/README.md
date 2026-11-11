@@ -17,6 +17,7 @@ It runs on Windows, macOS and Linux and reuses `core` and `adapters` unchanged; 
   searching upward from the file's folder like the CLI and the plugin. The default is "none" (variables from the file only); a name that no longer exists is an error.
 - Responses of earlier requests (a login) are remembered per file and environment, so **Send** does not resend them; **Reset chain** clears them and briefly shows `Chain reset` beside the button.
 - **Cancel** (next to **Send**, enabled only while a request runs) stops it: the response pane shows `Cancelled` instead of an error, responses that already arrived stay, and the cancelled request is not remembered, so the next run sends the chain again. A small spinner beside the buttons shows while a request runs.
+- **Record history** (off by default) stores each run of the open file in `.http-history` next to it; **History** then lists the runs and shows a stored response, and **Mark as A** / **Mark as B** with **Compare** shows the differences between two of them (status, headers, body). Stored responses are raw: keep the folder out of version control.
 - While a request runs, editing, saving, opening and creating files are disabled; a run saves the file first and a save error stops it.
 - The right pane shows each response: a colored status badge (2xx green, 3xx orange, 4xx red), time, size and
   content type, with **Body** and **Headers** tabs. JSON bodies are shown as a syntax-colored tree: click a
@@ -72,7 +73,7 @@ because installers require a major version of at least 1; its major is the proje
 
 ## Not yet implemented
 
-A browsable request history, and opening `<>`-linked responses.
+Opening `<>`-linked responses.
 
 `{{$env.NAME}}` reads nothing by default: allow names with `-Dhttpclient.allowEnv=NAME,NAME` (JVM option) or the environment variable `HTTPC_ALLOW_ENV=NAME,NAME`; see [docs/features.md](../docs/features.md).
 

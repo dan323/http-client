@@ -98,6 +98,7 @@ class JsonSettingsStore internal constructor(
         environments = stored.environments + mine.environments,
         window = mine.window ?: stored.window,
         recentFiles = DesktopSettings.bounded(mine.recentFiles + stored.recentFiles),
+        recordHistory = mine.recordHistory,
     )
 
     private fun ensureDir() {
@@ -144,6 +145,7 @@ class JsonSettingsStore internal constructor(
         val environments: Map<String, String> = emptyMap(),
         val window: WindowDto? = null,
         val recentFiles: List<String> = emptyList(),
+        val recordHistory: Boolean = false,
     ) {
         init { require(version >= 1) { "not a settings file" } }
 
@@ -153,6 +155,7 @@ class JsonSettingsStore internal constructor(
                 environments = DesktopSettings.boundedEnvironments(environments),
                 window = window?.let { WindowSettings(it.width, it.height, it.x, it.y, it.maximized) },
                 recentFiles = DesktopSettings.bounded(recentFiles),
+                recordHistory = recordHistory,
             )
         }
 
@@ -161,6 +164,7 @@ class JsonSettingsStore internal constructor(
                 VERSION, s.lastFile, DesktopSettings.boundedEnvironments(s.environments),
                 s.window?.let { WindowDto(it.width, it.height, it.x, it.y, it.maximized) },
                 DesktopSettings.bounded(s.recentFiles),
+                s.recordHistory,
             )
         }
     }
