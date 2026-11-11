@@ -1,12 +1,33 @@
 package com.dan323.httpclient.desktop
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.testTag
+import com.dan323.httpclient.viewmodel.findMatches
+import com.dan323.httpclient.viewmodel.lineOf
+import com.dan323.httpclient.viewmodel.matchLabel
+import com.dan323.httpclient.viewmodel.stepMatch
+import com.dan323.httpclient.viewmodel.suggestedFileName
+import java.awt.FileDialog
+import java.awt.Frame
+import java.nio.file.Files
+import java.nio.file.Path
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -57,6 +78,14 @@ internal class OutcomeUi(val json: JsonElement?) {
     var tab by mutableStateOf(Tab.BODY)
     var raw by mutableStateOf(false)
     val collapsed = mutableStateSetOf<String>()
+
+    /** The text searched for in the body (empty: no search) and the match the view is on. */
+    var searchOpen by mutableStateOf(false)
+    var query by mutableStateOf("")
+    var current by mutableStateOf(0)
+
+    /** The result of the last **Save body**, shown under the header. */
+    var saveMessage by mutableStateOf<String?>(null)
 }
 
 internal class OutcomeEntry(val display: OutcomeDisplay, val ui: OutcomeUi?)
@@ -112,22 +141,83 @@ private class JsonColors(val key: Color, val string: Color, val number: Color, v
     }
 }
 
+/** What one response section shows: [lines] replaces the JSON tree and the text while a search is active. */
+private class Section(val display: OutcomeDisplay, val ui: OutcomeUi?, val rows: List<JsonRow>?, val outcome: RunOutcome, val lines: List<AnnotatedString>?, val matchLine: Int?, val matchCount: Int) {
+    /** Header, search row (body tab of a response), content, divider. */
+    val itemCount: Int get() = 1 + (if (hasSearchRow) 1 else 0) + contentCount + 1
+    val hasSearchRow: Boolean get() = display is OutcomeDisplay.Response && ui != null && ui.tab == Tab.BODY && ui.searchOpen
+    private val contentCount: Int get() = when {
+        display !is OutcomeDisplay.Response || ui == null -> 0
+        ui.tab == Tab.HEADERS -> display.headers.size
+        lines != null -> lines.size
+        rows != null -> rows.size
+        else -> 1
+    }
+}
+
+private val MatchColor = Color(0x66FFD54F)
+private val CurrentMatchColor = Color(0xCCFF9800)
+
+/** The [text] split into lines, with the [matches] (ranges over the whole text) highlighted and the [current] one stronger. */
+internal fun highlightedLines(text: String, matches: List<IntRange>, current: Int): List<AnnotatedString> {
+    var start = 0
+    var next = 0   // first match that can still touch the line
+    return text.split('\n').map { line ->
+        val end = start + line.length
+        while (next < matches.size && matches[next].last < start) next++
+        val built = buildAnnotatedString {
+            append(line)
+            var m = next
+            while (m < matches.size && matches[m].first <= end) {
+                val from = maxOf(matches[m].first, start) - start
+                val to = minOf(matches[m].last + 1, end) - start
+                if (from < to) addStyle(SpanStyle(background = if (m == current) CurrentMatchColor else MatchColor), from, to)
+                m++
+            }
+        }
+        start = end + 1
+        built
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ResponsePane(outcomes: List<RunOutcome>, modifier: Modifier = Modifier) {
     val colors = if (isSystemInDarkTheme()) JsonColors.Dark else JsonColors.Light
     val models = remember { OutcomeModels() }
     LaunchedEffect(outcomes) { models.update(outcomes) }
-    // Read the collapsed sets here, in composition, so toggling a node recomposes the list.
+    val listState = rememberLazyListState()
+    // Read the collapsed sets and the search here, in composition, so toggling a node or typing recomposes the list.
     val sections = outcomes.mapNotNull { o ->
         val entry = models[o] ?: return@mapNotNull null
         val ui = entry.ui
-        val rows = if (ui?.json != null && ui.tab == Tab.BODY && !ui.raw) flattenJson(ui.json, ui.collapsed) else null
-        Triple(entry.display, ui, rows)
+        val display = entry.display
+        val searching = display is OutcomeDisplay.Response && ui != null && ui.tab == Tab.BODY && ui.searchOpen && ui.query.isNotEmpty()
+        val text = if (display is OutcomeDisplay.Response && ui != null) (if (ui.raw) display.rawBody else display.prettyBody) else ""
+        val matches = if (searching) findMatches(text, ui!!.query) else emptyList()
+        val current = if (matches.isEmpty()) 0 else ui!!.current.coerceIn(0, matches.size - 1)
+        val lines = if (searching) highlightedLines(text, matches, current) else null
+        val rows = if (ui?.json != null && ui.tab == Tab.BODY && !ui.raw && !searching) flattenJson(ui.json, ui.collapsed) else null
+        val matchLine = matches.getOrNull(current)?.let { lineOf(text, it.first) }
+        Section(display, ui, rows, o, lines, matchLine, matches.size)
     }
 
-    LazyColumn(modifier) {
-        for ((outcome, ui, rows) in sections) {
-            item { OutcomeHeader(outcome, ui) }
+    // Scroll to the current match: its item index is the items of the sections before it plus its header, search row and line.
+    var before = 0
+    var target: Triple<String, Int, Int>? = null
+    for (sec in sections) {
+        val ui = sec.ui
+        if (ui != null && sec.matchLine != null && target == null) target = Triple(ui.query, ui.current, before + 2 + sec.matchLine)
+        before += sec.itemCount
+    }
+    LaunchedEffect(target) { target?.let { listState.animateScrollToItem(it.third) } }
+
+    LazyColumn(modifier, state = listState) {
+        for (sec in sections) {
+            val outcome = sec.display
+            val ui = sec.ui
+            item { OutcomeHeader(outcome, ui, sec.outcome) }
+            if (sec.hasSearchRow && ui != null) stickyHeader { SearchRow(ui, sec.matchCount) }
             if (outcome is OutcomeDisplay.Response && ui != null) {
                 when {
                     ui.tab == Tab.HEADERS -> items(outcome.headers) { (name, value) ->
@@ -142,7 +232,8 @@ fun ResponsePane(outcomes: List<RunOutcome>, modifier: Modifier = Modifier) {
                             )
                         }
                     }
-                    rows != null -> items(rows) { row -> JsonRowView(row, colors) { ui.toggle(row.path) } }
+                    sec.lines != null -> items(sec.lines) { line -> SelectionContainer { Text(line, style = mono) } }
+                    sec.rows != null -> items(sec.rows) { row -> JsonRowView(row, colors) { ui.toggle(row.path) } }
                     else -> item {
                         val text = if (ui.raw) outcome.rawBody else outcome.prettyBody
                         SelectionContainer {
@@ -156,10 +247,32 @@ fun ResponsePane(outcomes: List<RunOutcome>, modifier: Modifier = Modifier) {
     }
 }
 
+/** The search box of one response: the count, previous and next (Enter / Shift+Enter in the box do the same). */
+@Composable
+private fun SearchRow(ui: OutcomeUi, count: Int) {
+    val current = if (count == 0) 0 else ui.current.coerceIn(0, count - 1)
+    fun step(forward: Boolean) { ui.current = stepMatch(current, count, forward) }
+    Row(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
+    ) {
+        OutlinedTextField(
+            value = ui.query, onValueChange = { ui.query = it; ui.current = 0 },
+            singleLine = true, textStyle = MaterialTheme.typography.bodySmall, placeholder = { Text("Search in body") },
+            modifier = Modifier.weight(1f).height(48.dp).testTag("body-search").onPreviewKeyEvent { e ->
+                if (e.type == KeyEventType.KeyDown && e.key == Key.Enter) { step(!e.isShiftPressed); true } else false
+            },
+        )
+        Text(matchLabel(ui.query, current, count), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("body-search-count"))
+        OutlinedButton(enabled = count > 1, contentPadding = CompactButtonPadding, onClick = { step(false) }, modifier = Modifier.testTag("body-search-prev")) { Text("Prev") }
+        OutlinedButton(enabled = count > 1, contentPadding = CompactButtonPadding, onClick = { step(true) }, modifier = Modifier.testTag("body-search-next")) { Text("Next") }
+    }
+}
+
 private fun OutcomeUi.toggle(path: String) { if (!collapsed.remove(path)) collapsed.add(path) }
 
 @Composable
-private fun OutcomeHeader(outcome: OutcomeDisplay, ui: OutcomeUi?) {
+private fun OutcomeHeader(outcome: OutcomeDisplay, ui: OutcomeUi?, source: RunOutcome) {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(outcome.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
         when (outcome) {
@@ -188,8 +301,21 @@ private fun OutcomeHeader(outcome: OutcomeDisplay, ui: OutcomeUi?) {
                             FilterChip(!ui.raw, { ui.raw = false }, label = { Text("Pretty") })
                             FilterChip(ui.raw, { ui.raw = true }, label = { Text("Raw") })
                         }
-                        OutlinedButton(onClick = { copy(copyText(outcome, ui)) }) { Text("Copy") }
                     }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (ui.tab == Tab.BODY) {
+                            FilterChip(ui.searchOpen, { ui.searchOpen = !ui.searchOpen; if (!ui.searchOpen) { ui.query = ""; ui.current = 0 } },
+                                label = { Text("Search") }, modifier = Modifier.testTag("body-search-toggle"))
+                        }
+                        OutlinedButton(contentPadding = CompactButtonPadding, onClick = { copy(copyText(outcome, ui)) }) { Text("Copy", maxLines = 1) }
+                        (source as? RunOutcome.Success)?.let { ok ->
+                            OutlinedButton(
+                                contentPadding = CompactButtonPadding, onClick = { ui.saveMessage = saveBodyWithDialog(ok) },
+                                modifier = Modifier.testTag("save-body"),
+                            ) { Text("Save body", maxLines = 1) }
+                        }
+                    }
+                    ui.saveMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline) }
                 }
             }
         }
@@ -272,3 +398,21 @@ private fun copyText(resp: OutcomeDisplay.Response, ui: OutcomeUi): String = whe
 
 private fun copy(text: String) =
     runCatching { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null) }
+
+/** Asks where to save the body of [ok] and writes it there; null when the dialog was cancelled, else the result message. */
+private fun saveBodyWithDialog(ok: RunOutcome.Success): String? {
+    val r = ok.response
+    val dialog = FileDialog(null as Frame?, "Save response body", FileDialog.SAVE)
+    dialog.file = suggestedFileName(ok.request.url, r.header("Content-Disposition"), r.header("Content-Type"))
+    dialog.isVisible = true
+    val name = dialog.file ?: return null
+    return writeBody(Path.of(dialog.directory, name), r.body)
+}
+
+/** Writes [bytes] exactly to [path] and says so; a failure is the message, not an exception. */
+internal fun writeBody(path: Path, bytes: ByteArray): String = try {
+    Files.write(path, bytes)
+    "Saved ${bytes.size} bytes to $path"
+} catch (e: Exception) {
+    "Could not save the body: ${e.message ?: e::class.simpleName}"
+}
