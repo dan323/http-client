@@ -21,9 +21,13 @@ fun imageFormatOf(contentType: String?): ImageFormat? {
     return ImageFormat.entries.firstOrNull { mime in it.mimeTypes }
 }
 
+/** Why a body of [bytes] bytes is not decoded at all (checked before decoding), or null when it may be. */
+fun bodyRefusal(bytes: Int): String? =
+    if (bytes > MAX_PREVIEW_BYTES) "the image is larger than ${MAX_PREVIEW_BYTES / 1_000_000} MB" else null
+
 /** Why an image of [bytes] bytes and [width] x [height] pixels is not decoded, or null when it may be. */
 fun previewRefusal(bytes: Int, width: Int, height: Int): String? = when {
-    bytes > MAX_PREVIEW_BYTES -> "the image is larger than ${MAX_PREVIEW_BYTES / 1_000_000} MB"
+    bodyRefusal(bytes) != null -> bodyRefusal(bytes)
     width <= 0 || height <= 0 -> "the image has no size"
     width.toLong() * height > MAX_PREVIEW_PIXELS -> "the image has more than ${MAX_PREVIEW_PIXELS / 1_000_000} million pixels"
     else -> null

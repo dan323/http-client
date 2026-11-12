@@ -19,6 +19,8 @@ class ImagePreviewTest {
     }
 
     @Test fun largeAndOddImagesAreRefusedWithAReason() {
+        assertNull(bodyRefusal(MAX_PREVIEW_BYTES))
+        assertTrue(bodyRefusal(MAX_PREVIEW_BYTES + 1)!!.contains("larger than 20 MB"))
         assertNull(previewRefusal(1000, 100, 100))
         assertTrue(previewRefusal(MAX_PREVIEW_BYTES + 1, 10, 10)!!.contains("larger than 20 MB"))
         assertTrue(previewRefusal(10, 0, 10)!!.contains("no size"))

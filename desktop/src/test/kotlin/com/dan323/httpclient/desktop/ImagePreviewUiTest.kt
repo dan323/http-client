@@ -68,4 +68,29 @@ class ImagePreviewUiTest {
         onNodeWithTag("tab-preview").performClick()
         waitUntil(timeoutMillis = 10_000) { exists("image-preview") }
     }
+
+    @Test fun anEmptyImageBodyHasNoPreviewTab() = runComposeUiTest {
+        setContent { ResponsePane(listOf(outcome(ByteArray(0), "image/png"))) }
+        waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("(empty body)").fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(!exists("tab-preview"))
+        assertTrue(!exists("image-failed"))
+    }
+
+    @Test fun aCutBodyIsNotDecodedAndSaysSo() = runComposeUiTest {
+        setContent { ResponsePane(listOf(outcome(png(), "image/png")), bodyCutNote = "only 5 MB of 9 MB were kept") }
+        waitUntil(timeoutMillis = 10_000) { exists("image-failed") }
+        assertTrue(!exists("image-preview"))
+    }
+
+    @Test fun theDecodedImageIsKeptWhenTheTabChanges() = runComposeUiTest {
+        val o = outcome(png(), "image/png")
+        setContent { ResponsePane(listOf(o)) }
+        waitUntil(timeoutMillis = 10_000) { exists("image-preview") }
+        onAllNodesWithText("Body")[0].performClick()
+        waitUntil(timeoutMillis = 10_000) { !exists("image-preview") }
+        onNodeWithTag("tab-preview").performClick()
+        waitForIdle()
+        assertTrue(exists("image-preview"), "shown at once from the kept decode")
+        assertTrue(!onAllNodesWithText("Decoding the image…").fetchSemanticsNodes().isNotEmpty())
+    }
 }
