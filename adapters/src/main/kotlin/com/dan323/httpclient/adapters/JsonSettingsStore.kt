@@ -101,6 +101,8 @@ class JsonSettingsStore internal constructor(
         recordHistory = mine.recordHistory,
         openFiles = mine.openFiles ?: stored.openFiles,   // an empty list of mine (every tab closed) wins: only null means 'not known'
         activeFile = if (mine.openFiles != null) mine.activeFile else stored.activeFile,
+        folder = mine.folder ?: stored.folder,
+        folderOpen = mine.folderOpen,
     )
 
     private fun ensureDir() {
@@ -150,6 +152,8 @@ class JsonSettingsStore internal constructor(
         val recordHistory: Boolean = false,
         val openFiles: List<String>? = null,
         val activeFile: String? = null,
+        val folder: String? = null,
+        val folderOpen: Boolean = false,
     ) {
         init { require(version >= 1) { "not a settings file" } }
 
@@ -163,6 +167,8 @@ class JsonSettingsStore internal constructor(
                 recordHistory = recordHistory,
                 openFiles = tabs?.openFiles,
                 activeFile = tabs?.activeFile,
+                folder = folder,
+                folderOpen = folderOpen,
             )
         }
 
@@ -174,7 +180,7 @@ class JsonSettingsStore internal constructor(
                     s.window?.let { WindowDto(it.width, it.height, it.x, it.y, it.maximized) },
                     DesktopSettings.bounded(s.recentFiles),
                     s.recordHistory,
-                    tabs?.openFiles, tabs?.activeFile,
+                    tabs?.openFiles, tabs?.activeFile, s.folder, s.folderOpen,
                 )
             }
         }

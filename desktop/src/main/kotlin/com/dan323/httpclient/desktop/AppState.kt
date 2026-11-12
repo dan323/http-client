@@ -31,6 +31,30 @@ class AppState(
     /** Index of the active tab (0 with no file open). */
     val activeTab: Int get() = activeIndex
 
+    /** The folder picked for the folder view; null means the folder of the file on screen. Remembered between sessions. */
+    var chosenFolder by mutableStateOf(settings?.current?.folder?.let { Path.of(it) })
+        private set
+
+    /** True when the folder view is shown next to the request list. Remembered between sessions. */
+    var folderOpen by mutableStateOf(settings?.current?.folderOpen ?: false)
+        private set
+
+    /** The folder the folder view lists: the picked one, else the folder of the file on screen, else none. */
+    val folderRoot: Path? get() = chosenFolder ?: active?.file?.toAbsolutePath()?.parent
+
+    /** Shows or hides the folder view. */
+    fun showFolder(show: Boolean) {
+        folderOpen = show
+        settings?.update { it.withFolderOpen(show) }
+    }
+
+    /** Lists [folder] in the folder view and shows it. */
+    fun chooseFolder(folder: Path) {
+        chosenFolder = folder
+        folderOpen = true
+        settings?.update { it.withFolder(folder.toAbsolutePath().toString()).withFolderOpen(true) }
+    }
+
     /** What a tab shows: its [label] (the file name, with parent folders when two open files share a name) and whether it has unsaved edits. */
     class TabInfo(val label: String, val dirty: Boolean)
 
