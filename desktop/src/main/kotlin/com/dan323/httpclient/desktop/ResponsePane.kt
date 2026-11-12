@@ -47,6 +47,11 @@ import kotlinx.coroutines.withContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
@@ -65,7 +70,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.dan323.httpclient.core.application.RunOutcome
+import com.dan323.httpclient.viewmodel.ImageFormat
 import com.dan323.httpclient.viewmodel.JsonKind
+import com.dan323.httpclient.viewmodel.imageFormatOf
+import com.dan323.httpclient.viewmodel.imageInfoLabel
+import com.dan323.httpclient.viewmodel.bodyRefusal
+import com.dan323.httpclient.viewmodel.previewRefusal
 import com.dan323.httpclient.viewmodel.JsonRow
 import com.dan323.httpclient.viewmodel.StatusClass
 import com.dan323.httpclient.viewmodel.OutcomeDisplay
@@ -76,16 +86,25 @@ import kotlinx.serialization.json.JsonElement
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 
-internal enum class Tab { BODY, HEADERS }
+internal enum class Tab { BODY, HEADERS, PREVIEW }
 
 private val SearchClock = java.util.concurrent.atomic.AtomicLong()
 
 /** Height of the sticky search row; a match is scrolled this far below the top edge so the row does not cover it. */
 private val SearchRowHeight = 104.dp
 
-/** What the user has toggled for one response: tab, raw/pretty, and which JSON nodes are collapsed. */
-internal class OutcomeUi(val json: JsonElement?) {
-    var tab by mutableStateOf(Tab.BODY)
+/** A previewable image body: its type and bytes. Only set for a response with an image type and a non-empty body. */
+internal class ImageSource(val format: ImageFormat, val bytes: ByteArray)
+
+/**
+ * What the user has toggled for one response: tab, raw/pretty, and which JSON nodes are collapsed. [image] is set
+ * when the response is a previewable image; such a response opens on the Preview tab.
+ */
+internal class OutcomeUi(val json: JsonElement?, val image: ImageSource? = null) {
+    var tab by mutableStateOf(if (image != null) Tab.PREVIEW else Tab.BODY)
+
+    /** The decoded image, kept so switching tabs or scrolling does not decode it again; null until decoded. */
+    var decoded by mutableStateOf<DecodedImage?>(null)
     var raw by mutableStateOf(false)
     val collapsed = mutableStateSetOf<String>()
 
@@ -141,10 +160,13 @@ internal class OutcomeModels(
 
     private fun build(o: RunOutcome): OutcomeEntry = try {
         val d = render(o)
-        val json = (d as? OutcomeDisplay.Response)?.let { r ->
-            try { parseJson(r.rawBody) } catch (e: Exception) { null }   // unparsable: show the raw body
+        val ui = (d as? OutcomeDisplay.Response)?.let { r ->
+            val json = try { parseJson(r.rawBody) } catch (e: Exception) { null }   // unparsable: show the raw body
+            val body = (o as? RunOutcome.Success)?.response?.body
+            val format = imageFormatOf(r.contentType)
+            OutcomeUi(json, if (format != null && body != null && body.isNotEmpty()) ImageSource(format, body) else null)
         }
-        OutcomeEntry(d, (d as? OutcomeDisplay.Response)?.let { OutcomeUi(json) })
+        OutcomeEntry(d, ui)
     } catch (e: Exception) {
         val title = o.request.name ?: "${o.request.method} ${o.request.url}"
         val body = (o as? RunOutcome.Success)?.let { runCatching { it.response.bodyAsString() }.getOrNull() }
@@ -177,6 +199,7 @@ internal class Section(
     private val contentCount: Int get() = when {
         display !is OutcomeDisplay.Response || ui == null -> 0
         ui.tab == Tab.HEADERS -> display.headers.size
+        ui.tab == Tab.PREVIEW -> 1
         highlighted != null -> 1
         rows != null -> rows.size
         else -> 1
@@ -267,6 +290,7 @@ fun ResponsePane(outcomes: List<RunOutcome>, modifier: Modifier = Modifier, body
                             )
                         }
                     }
+                    ui.tab == Tab.PREVIEW -> item { ui.image?.let { ImagePreview(ui, it, bodyCutNote) } }
                     sec.highlighted != null -> item {
                         SelectionContainer {
                             Text(sec.highlighted, style = mono, onTextLayout = { l ->
@@ -342,6 +366,9 @@ private fun OutcomeHeader(outcome: OutcomeDisplay, ui: OutcomeUi?, source: RunOu
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         FilterChip(ui.tab == Tab.BODY, { ui.tab = Tab.BODY }, label = { Text("Body") })
                         FilterChip(ui.tab == Tab.HEADERS, { ui.tab = Tab.HEADERS }, label = { Text("Headers (${outcome.headers.size})") })
+                        if (ui.image != null) {
+                            FilterChip(ui.tab == Tab.PREVIEW, { ui.tab = Tab.PREVIEW }, label = { Text("Preview") }, modifier = Modifier.testTag("tab-preview"))
+                        }
                         Box(Modifier.weight(1f))
                         if (ui.tab == Tab.BODY && ui.json != null) {
                             FilterChip(!ui.raw, { ui.raw = false }, label = { Text("Pretty") })
@@ -353,7 +380,9 @@ private fun OutcomeHeader(outcome: OutcomeDisplay, ui: OutcomeUi?, source: RunOu
                             FilterChip(ui.searchOpen, { ui.searchOpen = !ui.searchOpen; if (!ui.searchOpen) { ui.query = ""; ui.current = 0 } else ui.touch() },
                                 label = { Text("Search") }, modifier = Modifier.testTag("body-search-toggle"))
                         }
-                        OutlinedButton(contentPadding = CompactButtonPadding, onClick = { copy(copyText(outcome, ui)) }) { Text("Copy", maxLines = 1) }
+                        if (ui.tab != Tab.PREVIEW) {
+                            OutlinedButton(contentPadding = CompactButtonPadding, onClick = { copy(copyText(outcome, ui)) }) { Text("Copy", maxLines = 1) }
+                        }
                         (source as? RunOutcome.Success)?.let { ok ->
                             OutlinedButton(
                                 contentPadding = CompactButtonPadding, onClick = {
@@ -448,6 +477,7 @@ private fun rowText(row: JsonRow, c: JsonColors): AnnotatedString = buildAnnotat
 }
 
 private fun copyText(resp: OutcomeDisplay.Response, ui: OutcomeUi): String = when (ui.tab) {
+    Tab.PREVIEW -> ""   // an image has no text to copy
     Tab.HEADERS -> resp.headers.joinToString("\n") { (name, value) -> "$name: $value" }
     Tab.BODY -> if (ui.raw) resp.rawBody else resp.prettyBody
 }
@@ -488,5 +518,60 @@ internal fun writeBody(path: Path, bytes: ByteArray): String {
         "Could not save the body: ${e.message ?: e::class.simpleName}"
     } finally {
         temp?.let { runCatching { Files.deleteIfExists(it) } }
+    }
+}
+
+/** The result of decoding an image for the preview. */
+internal sealed interface DecodedImage {
+    class Ok(val bitmap: ImageBitmap, val width: Int, val height: Int) : DecodedImage
+    class Failed(val reason: String) : DecodedImage
+}
+
+/** Decodes [bytes] with Skia, refusing a body or an image that is too large first; never throws, not even when memory runs out. Blocking: call off the UI thread. */
+internal fun decodeImage(bytes: ByteArray): DecodedImage = try {
+    bodyRefusal(bytes.size)?.let { return DecodedImage.Failed(it) }
+    val image = org.jetbrains.skia.Image.makeFromEncoded(bytes)
+    try {
+        previewRefusal(bytes.size, image.width, image.height)?.let { DecodedImage.Failed(it) }
+            ?: DecodedImage.Ok(image.toComposeImageBitmap(), image.width, image.height)
+    } finally { image.close() }
+} catch (e: OutOfMemoryError) {
+    DecodedImage.Failed("there is not enough memory to decode the image")
+} catch (e: Exception) {
+    DecodedImage.Failed("the image could not be decoded (${e.message ?: e::class.simpleName})")
+}
+
+/**
+ * The image of a response body, scaled down to fit the pane; a body that cannot be shown says why. It is decoded once
+ * and kept on [ui]. A body that was cut short (a stored response) is not decoded: the picture would be incomplete.
+ */
+@Composable
+private fun ImagePreview(ui: OutcomeUi, source: ImageSource, bodyCutNote: String?) {
+    if (bodyCutNote != null) {
+        Text(
+            "No preview: the stored body was cut short, so the image is incomplete ($bodyCutNote). Save body writes the part that was kept.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("image-failed"),
+        )
+        return
+    }
+    LaunchedEffect(ui) {
+        if (ui.decoded == null) ui.decoded = withContext(Dispatchers.Default) { decodeImage(source.bytes) }
+    }
+    when (val d = ui.decoded) {
+        null -> Text("Decoding the image…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+        is DecodedImage.Failed -> Text(
+            "No preview: ${d.reason}. The Body tab shows the raw bytes; Save body writes them to a file.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("image-failed"),
+        )
+        is DecodedImage.Ok -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                imageInfoLabel(source.format, d.width, d.height, source.bytes.size),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.testTag("image-info"),
+            )
+            Image(
+                d.bitmap, contentDescription = "Response image", contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxWidth().heightIn(max = 480.dp).testTag("image-preview"),
+            )
+        }
     }
 }
