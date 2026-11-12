@@ -27,7 +27,7 @@ Hexagonal; dependencies point inward only.
 - Desktop installer runtime: `./gradlew :desktop:checkRuntimeModules` (fails if the app needs a JDK module missing from the jlink runtime; list in `desktop/build.gradle.kts`).
 - Coverage and reports: `./gradlew :quality-reports:qualityReports`. Fails if merged coverage drops below the floor in `quality-reports/build.gradle.kts` (lines 95 %, branches 80 %). Raise the floor, never lower it.
 - Sonar coverage ignores `intellij-plugin/**` (its tests need an IDE and are not in the JaCoCo report; bug and smell analysis still covers it), so keep logic that can be tested without an IDE in `view-model` on its merits, not for coverage.
-- Mutation tests on `core`: `./gradlew :core:pitest` (fails below 80 %; CI runs it weekly, not on every push).
+- Mutation tests on `core` and `view-model`: `./gradlew :core:pitest :view-model:pitest` (fail below 80 % and 85 %; CI runs them once a day, not on every push).
 - Dependency versions are in `gradle/libs.versions.toml`.
 
 Tests use `kotlin("test")` on JUnit Platform. There is no linter.
