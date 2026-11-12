@@ -36,7 +36,7 @@ data class DesktopSettings(
         )
 
     fun withoutRecent(path: String): DesktopSettings =
-        copy(recentFiles = recentFiles - path, lastFile = lastFile?.takeIf { it != path }, openFiles = openFiles?.minus(path), activeFile = activeFile?.takeIf { it != path })
+        copy(recentFiles = recentFiles - path, lastFile = lastFile?.takeIf { it != path })
 
     /** Remembers [name] for [path]; null forgets the choice. */
     fun withEnvironment(path: String, name: String?): DesktopSettings =

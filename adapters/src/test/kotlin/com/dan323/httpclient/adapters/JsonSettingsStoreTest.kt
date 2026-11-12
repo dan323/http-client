@@ -271,6 +271,17 @@ class JsonSettingsStoreTest {
         assertEquals(listOf(a), store().load().settings.openFiles)
     }
 
+    @Test fun `a hand edited file with too many tabs or an active file outside them is normalised on load`() {
+        Files.createDirectories(dir)
+        val files = (1..30).joinToString(",") { "\"f$it\"" }
+        Files.writeString(dir.resolve("settings.json"), """{"version":1,"openFiles":[$files],"activeFile":"f25","recentFiles":[]}""")
+        val loaded = store().load().settings
+        assertEquals(DesktopSettings.MAX_OPEN_FILES, loaded.openFiles!!.size)
+        assertNull(loaded.activeFile)
+        Files.writeString(dir.resolve("settings.json"), """{"version":1,"openFiles":["a","b"],"activeFile":"z","recentFiles":[]}""")
+        assertNull(store().load().settings.activeFile)
+    }
+
     @Test fun `no more than the limit of open files is stored`() {
         val many = (1..30).map { "f$it.http" }
         assertNull(store().save(DesktopSettings().withOpenFiles(many, "f25.http")))

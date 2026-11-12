@@ -354,4 +354,41 @@ class PersistenceTest {
             assertEquals("b.http", s.file!!.fileName.toString())
         }
     }
+
+    @Test fun `a tab whose file is missing at start stays stored and comes back with the file`() {
+        val a = http("a.http"); val b = http("b.http")
+        state().use { s -> s.open(a); s.open(b) }
+        val moved = root.resolve("moved.http")
+        Files.move(a, moved)
+        state().use { s ->
+            s.restoreTabs()
+            assertEquals(listOf("b.http"), s.tabs.map { it.label })
+            s.open(http("c.http"))                           // a change of the tabs rewrites the stored list: a.http is kept behind them
+        }
+        Files.move(moved, a)
+        state().use { s -> s.restoreTabs(); assertEquals(listOf("b.http", "c.http", "a.http"), s.tabs.map { it.label }) }
+    }
+
+    @Test fun `restoring the tabs does not change the recent files or the last file`() {
+        val a = http("a.http"); val b = http("b.http"); val c = http("c.http")
+        state().use { s -> s.open(a); s.open(b); s.open(c); s.switchTo(1); s.open(http("x.http")); s.closeTab(3) }   // x opens and closes again, so the recents and the active tab are not in plain opening order
+        val before = persistence().use { it.current }
+        state().use { s -> s.restoreTabs() }
+        val after = persistence().use { it.current }
+        assertEquals(before.recentFiles, after.recentFiles)
+        assertEquals(before.lastFile, after.lastFile)
+        assertEquals(before.openFiles, after.openFiles)
+    }
+
+    @Test fun `removing a recent does not change the remembered tabs`() {
+        val a = http("a.http")
+        val key = canonical(a)
+        state().use { s ->
+            s.open(a)
+            Files.delete(a)
+            s.openRecent(a)                                  // vanished: removed from the recents, its tab stays open
+            assertEquals(1, s.tabs.size)
+        }
+        assertEquals(listOf(key), persistence().use { it.current.openFiles })
+    }
 }

@@ -154,25 +154,29 @@ class JsonSettingsStore internal constructor(
         init { require(version >= 1) { "not a settings file" } }
 
         fun toSettings(): DesktopSettings {
+            val tabs = openFiles?.let { DesktopSettings().withOpenFiles(it, activeFile) }   // the same limit and rules as the app applies
             return DesktopSettings(
                 lastFile = lastFile,
                 environments = DesktopSettings.boundedEnvironments(environments),
                 window = window?.let { WindowSettings(it.width, it.height, it.x, it.y, it.maximized) },
                 recentFiles = DesktopSettings.bounded(recentFiles),
                 recordHistory = recordHistory,
-                openFiles = openFiles?.let { it.distinct().take(DesktopSettings.MAX_OPEN_FILES) },
-                activeFile = activeFile,
+                openFiles = tabs?.openFiles,
+                activeFile = tabs?.activeFile,
             )
         }
 
         companion object {
-            fun from(s: DesktopSettings) = SettingsDto(
-                VERSION, s.lastFile, DesktopSettings.boundedEnvironments(s.environments),
-                s.window?.let { WindowDto(it.width, it.height, it.x, it.y, it.maximized) },
-                DesktopSettings.bounded(s.recentFiles),
-                s.recordHistory,
-                s.openFiles, s.activeFile,
-            )
+            fun from(s: DesktopSettings): SettingsDto {
+                val tabs = s.openFiles?.let { DesktopSettings().withOpenFiles(it, s.activeFile) }
+                return SettingsDto(
+                    VERSION, s.lastFile, DesktopSettings.boundedEnvironments(s.environments),
+                    s.window?.let { WindowDto(it.width, it.height, it.x, it.y, it.maximized) },
+                    DesktopSettings.bounded(s.recentFiles),
+                    s.recordHistory,
+                    tabs?.openFiles, tabs?.activeFile,
+                )
+            }
         }
     }
 

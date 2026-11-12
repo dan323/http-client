@@ -9,7 +9,7 @@ It runs on Windows, macOS and Linux and reuses `core` and `adapters` unchanged; 
 - **Open…** / **New…** a `.http` file, or pass one at launch (`./gradlew :desktop:run --args="samples/basic.http"`).
   The text is editable in the middle pane with syntax highlighting (methods, URLs, header names, `{{variables}}`,
   comments, `###` separators, `< file` bodies; light and dark palettes). **Save** writes it back; running a request saves first.
-- The app remembers the last file, its environment, the window geometry and the 10 most recent files (**Recent files**) in `settings.json` in the user config folder; see [../docs/features.md](../docs/features.md#desktop-app) for the location and failure behaviour. Only paths, names and geometry are stored.
+- The app remembers the open files (tabs) and the one on screen, the last file, its environment, the window geometry and the 10 most recent files (**Recent files**) in `settings.json` in the user config folder; see [../docs/features.md](../docs/features.md#desktop-app) for the location and failure behaviour. Only paths, names and geometry are stored.
 - Shortcuts: **Ctrl/Cmd+S** saves, **Ctrl/Cmd+Enter** sends the selected request, **Esc** cancels the running request (ignored when none runs).
 - The left list shows the requests in the file, with each method coloured as in the editor. **Send** runs the selected one together with the
   requests it chains on (`{{login.response.body.$.token}}`); **Send all** runs every request in order.
