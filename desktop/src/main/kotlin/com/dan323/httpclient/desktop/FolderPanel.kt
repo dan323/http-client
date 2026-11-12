@@ -9,12 +9,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.runtime.produceState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -27,61 +27,49 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.dan323.httpclient.viewmodel.FolderContents
-import com.dan323.httpclient.viewmodel.FolderEntry
+import com.dan323.httpclient.viewmodel.FolderTree
 import com.dan323.httpclient.viewmodel.FolderListing
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.nio.file.Files
 import java.nio.file.Path
 
-/** One visible line of the tree: an [entry] at [depth], with whether a folder is [expanded]. */
-internal class FolderRow(val entry: FolderEntry?, val depth: Int, val expanded: Boolean, val note: String? = null)
-
 /**
- * The tree of the folder view: which folders are open and what each one held when it was listed. A folder is listed
- * (off the UI thread, by [load]) when it is first opened; [reload] forgets everything and lists the root again.
+ * The state holder of the folder view: the current [FolderTree] (replaced after each change, so composition sees it)
+ * and the listing, which runs off the UI thread. Changes are serialised, so a double click or a reload during a toggle
+ * cannot interleave.
  */
-internal class FolderTreeState(val root: Path, private val list: (Path) -> FolderContents = FolderListing::list) {
-    private val expanded = mutableStateMapOf<Path, Boolean>()
-    private val contents = mutableStateMapOf<Path, FolderContents>()
+internal class FolderTreeState(root: Path, private val list: (Path) -> FolderContents = FolderListing::list) {
+    var tree by mutableStateOf(FolderTree(root))
+        private set
+    private val mutex = Mutex()
 
-    fun isExpanded(dir: Path) = expanded[dir] == true
+    val root: Path get() = tree.root
 
-    /** Lists [dir] unless it already was; blocking. */
-    suspend fun load(dir: Path) {
-        if (dir in contents) return
-        contents[dir] = withContext(Dispatchers.IO) { list(dir) }
+    /** Lists the root unless that was done. */
+    suspend fun load() = mutex.withLock { if (!tree.isListed(tree.root)) listInto(tree.root) }
+
+    /** Opens or closes [dir]; an opened folder is listed first. */
+    suspend fun toggle(dir: Path) = mutex.withLock {
+        if (!tree.isExpanded(dir) && !tree.isListed(dir)) listInto(dir)
+        tree = tree.toggled(dir)
     }
 
-    suspend fun toggle(dir: Path) {
-        if (isExpanded(dir)) { expanded.remove(dir); return }
-        load(dir)
-        expanded[dir] = true
+    /** Lists the root and the open folders again (in parallel) and swaps the new listings in at once, so the tree never goes blank. */
+    suspend fun reload() = mutex.withLock {
+        val folders = tree.foldersToList()
+        val fresh = coroutineScope { folders.map { d -> async(Dispatchers.IO) { d to list(d) } }.awaitAll() }.toMap()
+        tree = tree.reloaded(fresh)
     }
 
-    suspend fun reload() {
-        contents.clear()
-        load(root)   // the opened folders are listed again as they are drawn
-        for (dir in expanded.keys.toList()) load(dir)
-    }
-
-    /** The visible lines, depth first: the root's entries, and below each opened folder its own. */
-    fun rows(): List<FolderRow> {
-        val out = mutableListOf<FolderRow>()
-        fun add(dir: Path, depth: Int) {
-            val c = contents[dir] ?: return
-            c.error?.let { out += FolderRow(null, depth, false, "Could not read this folder: $it") }
-            if (c.entries.isEmpty() && c.error == null) out += FolderRow(null, depth, false, "(no .http files)")
-            for (e in c.entries) {
-                val open = e.directory && isExpanded(e.path)
-                out += FolderRow(e, depth, open)
-                if (open) add(e.path, depth + 1)
-            }
-            if (c.hidden > 0) out += FolderRow(null, depth, false, "… and ${c.hidden} more")
-        }
-        add(root, 0)
-        return out
+    private suspend fun listInto(dir: Path) {
+        val listed = withContext(Dispatchers.IO) { list(dir) }
+        tree = tree.withListing(dir, listed)
     }
 }
 
@@ -95,31 +83,31 @@ internal fun FolderPanel(state: AppState, pickFolder: () -> Path?, modifier: Mod
             Text("Folder", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text("×", Modifier.clickable { state.showFolder(false) }.padding(horizontal = 6.dp).testTag("folder-close"))
         }
-        if (root == null || !Files.isDirectory(root)) {
-            Text(
-                if (root == null) "Open a file or pick a folder." else "The folder ${root.fileName ?: root} does not exist.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline,
-            )
+        if (root == null) {
+            Text("Open a file or pick a folder.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
         } else {
             val tree = remember(root) { FolderTreeState(root) }
-            LaunchedEffect(tree) { tree.load(root) }
+            LaunchedEffect(tree) { tree.load() }
             Text(root.toString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline, maxLines = 2)
-            val current = state.file?.let { canonical(it) }
+            // The file on screen as a key like the entries have; resolved off the UI thread (it touches the disk).
+            val current by produceState<String?>(null, state.file) { value = state.file?.let { f -> withContext(Dispatchers.IO) { FolderListing.realKey(f) } } }
+            val rows = tree.tree.rows()
             LazyColumn(Modifier.weight(1f).testTag("folder-tree")) {
-                itemsIndexed(tree.rows()) { i, row ->
+                itemsIndexed(rows, key = { _, row -> row.key }) { _, row ->
                     val e = row.entry
                     if (e == null) {
                         Text(row.note ?: "", Modifier.padding(start = (8 + row.depth * 12).dp, top = 2.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                     } else {
-                        val shown = !e.directory && current == canonical(e.path)
+                        val shown = !e.directory && current == e.key
                         Text(
                             (if (e.directory) (if (row.expanded) "▾ " else "▸ ") else "") + e.name,
                             Modifier.fillMaxWidth().testTag("folder-row-${e.name}")
                                 .background(if (shown) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
-                                .clickable { if (e.directory) scope.launch { tree.toggle(e.path) } else state.open(e.path) }
+                                .clickable(enabled = e.directory || !state.running) { if (e.directory) scope.launch { tree.toggle(e.path) } else state.open(e.path) }
                                 .padding(start = (8 + row.depth * 12).dp, top = 3.dp, bottom = 3.dp, end = 4.dp),
                             maxLines = 1,
                             fontWeight = if (e.directory) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (!e.directory && state.running) MaterialTheme.colorScheme.outline else Color.Unspecified,
                         )
                     }
                 }
@@ -127,5 +115,8 @@ internal fun FolderPanel(state: AppState, pickFolder: () -> Path?, modifier: Mod
             OutlinedButton(contentPadding = CompactButtonPadding, onClick = { scope.launch { tree.reload() } }, modifier = Modifier.testTag("folder-reload")) { Text("Reload", maxLines = 1) }
         }
         OutlinedButton(contentPadding = CompactButtonPadding, onClick = { pickFolder()?.let(state::chooseFolder) }, modifier = Modifier.testTag("folder-pick")) { Text("Open folder…", maxLines = 1) }
+        if (state.chosenFolder != null) {
+            OutlinedButton(contentPadding = CompactButtonPadding, onClick = { state.followFile() }, modifier = Modifier.testTag("folder-follow")) { Text("Folder of the open file", maxLines = 1) }
+        }
     }
 }

@@ -4,7 +4,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class FolderListingTest {
@@ -19,9 +18,15 @@ class FolderListingTest {
         assertEquals(listOf(true, true, false, false, false), e.map { it.directory })
     }
 
-    @Test fun leavesOutHiddenAndGeneratedFolders() {
-        dir(".git"); dir("build"); dir("node_modules"); dir("api"); file(".hidden.http"); file("ok.http")
-        assertEquals(listOf("api", "ok.http"), FolderListing.list(root).entries.map { it.name })
+    @Test fun leavesOutHiddenEntriesAndListsBuildLikeFoldersLastInsteadOfHidingThem() {
+        dir(".git"); dir("build"); dir("node_modules"); dir("out"); dir("api"); file(".hidden.http"); file("ok.http")
+        assertEquals(listOf("api", "build", "node_modules", "out", "ok.http"), FolderListing.list(root).entries.map { it.name })
+    }
+
+    @Test fun filesCarryTheRealPathAsKey() {
+        file("a.http")
+        val e = FolderListing.list(root).entries.single()
+        assertEquals(root.resolve("a.http").toRealPath().toString(), e.key)
     }
 
     @Test fun listsOnlyTheFolderItselfNotItsChildren() {
@@ -38,10 +43,18 @@ class FolderListingTest {
         assertEquals(7, c.hidden)
     }
 
+    @Test fun manyFoldersDoNotHideTheFiles() {
+        repeat(FolderListing.MAX_ENTRIES + 3) { dir("d$it") }
+        file("keep.http")
+        val c = FolderListing.list(root)
+        assertTrue(c.entries.any { it.name == "keep.http" })
+        assertEquals(3, c.hidden)
+    }
+
     @Test fun aFolderThatCannotBeReadHasAnErrorAndNoEntries() {
         val c = FolderListing.list(root.resolve("missing"))
         assertTrue(c.entries.isEmpty())
-        assertNotNull(c.error)
+        assertEquals("the folder does not exist", c.error)
     }
 
     @Test fun anEmptyFolderIsEmptyWithoutAnError() {

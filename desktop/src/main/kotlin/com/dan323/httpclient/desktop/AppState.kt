@@ -32,19 +32,37 @@ class AppState(
     val activeTab: Int get() = activeIndex
 
     /** The folder picked for the folder view; null means the folder of the file on screen. Remembered between sessions. */
-    var chosenFolder by mutableStateOf(settings?.current?.folder?.let { Path.of(it) })
+    var chosenFolder by mutableStateOf(settings?.current?.folder?.let { try { Path.of(it) } catch (_: Exception) { null } })   // a stored path that is not valid here is ignored
         private set
+
+    /** The folder of a file shown earlier, kept while later files are inside it, so the tree does not re-root each time a file is opened from it. */
+    private var implicitFolder by mutableStateOf<Path?>(null)
 
     /** True when the folder view is shown next to the request list. Remembered between sessions. */
     var folderOpen by mutableStateOf(settings?.current?.folderOpen ?: false)
         private set
 
-    /** The folder the folder view lists: the picked one, else the folder of the file on screen, else none. */
-    val folderRoot: Path? get() = chosenFolder ?: active?.file?.toAbsolutePath()?.parent
+    /** The folder the folder view lists: the picked one, else the folder of a file shown (kept until a file outside it comes on screen), else none. */
+    val folderRoot: Path? get() = chosenFolder ?: implicitFolder
+
+    /** Moves [implicitFolder] to the folder of the file on screen when that file is not inside it. */
+    private fun followActiveFile() {
+        val file = active?.file?.toAbsolutePath() ?: return
+        val kept = implicitFolder
+        if (kept == null || !file.startsWith(kept)) implicitFolder = file.parent
+    }
+
+    /** Forgets the picked folder: the view follows the files shown again. Remembered. */
+    fun followFile() {
+        chosenFolder = null
+        followActiveFile()
+        settings?.update { it.withFolder(null) }
+    }
 
     /** Shows or hides the folder view. */
     fun showFolder(show: Boolean) {
         folderOpen = show
+        if (show) followActiveFile()
         settings?.update { it.withFolderOpen(show) }
     }
 
@@ -90,6 +108,7 @@ class AppState(
             if (historyOpen) historyView?.loadInBackground(d.file.toAbsolutePath())
             d
         }
+        followActiveFile()
         if (restoring) return   // the start-up restore touches neither the environments nor the recency
         refreshQuietly(doc)
         rememberFile(doc)
@@ -151,7 +170,7 @@ class AppState(
             if (wasActive && historyOpen) historyView?.loadInBackground(active?.file?.toAbsolutePath())
             if (wasActive) active else null
         }
-        if (shown != null) rememberFile(shown) else rememberTabs()
+        if (shown != null) { followActiveFile(); rememberFile(shown) } else rememberTabs()
     }
 
     val file: Path? get() = active?.file
@@ -282,6 +301,7 @@ class AppState(
             documents = documents + doc
             activeIndex = documents.size - 1
         }
+        followActiveFile()
         if (remember) rememberFile(doc)
         if (historyOpen) historyView?.loadInBackground(path.toAbsolutePath())   // not on the caller's thread: it may be the UI thread
         refreshEnvironments(doc)
