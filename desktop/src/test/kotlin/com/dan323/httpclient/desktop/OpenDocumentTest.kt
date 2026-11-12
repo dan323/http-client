@@ -46,6 +46,9 @@ class OpenDocumentTest {
                 app.edit("GET {{base}}/c\n")
                 assertTrue(app.dirty)
 
+                app.closeTab(0)
+                app.confirmClose(save = false)
+                assertNull(app.file)
                 app.open(f)
                 assertEquals(0, app.selected)
                 assertNull(app.environment)          // the choice belongs to the earlier document (nothing is remembered without settings)
