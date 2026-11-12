@@ -74,6 +74,14 @@ class AppState(
     private fun rememberFile(doc: OpenDocument) {
         settings?.update { it.opened(canonical(doc.file)) }
         recentFiles = settings?.let { existingRecents(it) } ?: recentFiles
+        rememberTabs()
+    }
+
+    /** Remembers which files are open (in tab order) and which is on screen, for the next start. */
+    private fun rememberTabs() {
+        val s = settings ?: return
+        val (files, shown) = synchronized(tabsLock) { documents.map { canonical(it.file) } to active?.let { canonical(it.file) } }
+        s.update { it.withOpenFiles(files, shown) }
     }
 
     /**
@@ -110,8 +118,7 @@ class AppState(
             if (wasActive && historyOpen) historyView?.loadInBackground(active?.file?.toAbsolutePath())
             if (wasActive) active else null
         }
-        // With no tab left the last file stays remembered: the settings cannot say "none" yet (restoring the tabs will).
-        shown?.let { rememberFile(it) }
+        if (shown != null) rememberFile(shown) else rememberTabs()
     }
 
     val file: Path? get() = active?.file
@@ -247,6 +254,23 @@ class AppState(
         refreshEnvironments(doc)
         // Restore the remembered environment only if it still exists; never an error for a vanished name.
         settings?.current?.environments?.get(key)?.takeIf { it in doc.environments }?.let { doc.chosenEnvironment = it }
+    }
+
+    /**
+     * Reopens the tabs of the previous session, in order, and puts the one that was on screen back on screen. A file that is gone
+     * or unreadable is skipped without a message: the app starts with what is left. Settings from before tabs existed
+     * reopen the last file instead.
+     */
+    fun restoreTabs() {
+        val saved = settings?.current ?: return
+        val files = saved.openFiles ?: return restoreLastFile()
+        exclusive("open a file") {
+            for (f in files) {
+                val path = Path.of(f)
+                if (Files.isRegularFile(path)) try { openLocked(path) } catch (_: Exception) { }
+            }
+            saved.activeFile?.let { a -> documents.indexOfFirst { canonical(it.file) == a }.takeIf { it >= 0 }?.let(::activate) }
+        }
     }
 
     /** Opens the last file of the previous session. A file that is gone is skipped without a message: the app starts empty. */

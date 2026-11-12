@@ -45,7 +45,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 
 | ID | Task | Serves | Size | Needs |
 |---|---|---|---|---|
-| T15 | **Desktop workspace:** several open files (tabs) and a folder view. In steps: (1) one `OpenDocument` per file behind `AppState`, no visible change (done); (2) the tab bar with close prompts (done); (3) restoring the open tabs at start (settings change); (4) the folder view | F12 | L | – |
+| T15 | **Desktop workspace:** several open files (tabs) and a folder view. In steps: (1) one `OpenDocument` per file behind `AppState`, no visible change (done); (2) the tab bar with close prompts (done); (3) restoring the open tabs at start (done); (4) the folder view | F12 | L | – |
 | T16 | **Desktop editor intelligence:** variable completion, diagnostics from T13, find/replace | F14 | L | – (T13 done: `VariableAnalysis`) |
 | T20 | **Environment editor:** write support on the environment port and a UI to edit variables | F17 | M | – |
 | T21 | **Plugin GUI verification:** checked by hand on Ultimate 2026.3 (IU-263.7307.200) with the 0.5.0-rc1 zip, see `intellij-plugin/README.md`; still open: a Community install and the 2026.1 baseline (the `Ctrl+Alt+R` run shortcut is still to be tried in an IDE) | F20, F19, F18 | S | – |
