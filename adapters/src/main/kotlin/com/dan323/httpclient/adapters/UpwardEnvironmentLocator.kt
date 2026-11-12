@@ -1,6 +1,8 @@
 package com.dan323.httpclient.adapters
 
 import com.dan323.httpclient.core.port.out.EnvironmentFileException
+import com.dan323.httpclient.core.port.out.EnvironmentFileStore
+import com.dan323.httpclient.core.port.out.EnvironmentFileStoreLocator
 import com.dan323.httpclient.core.port.out.EnvironmentLocator
 import com.dan323.httpclient.core.port.out.EnvironmentRepository
 import java.nio.file.Files
@@ -14,15 +16,21 @@ import java.nio.file.Path
  */
 class UpwardEnvironmentLocator(
     private val boundaries: Set<Path> = defaultBoundaries(),
-) : EnvironmentLocator {
-    override fun find(httpFile: Path): EnvironmentRepository? {
+): EnvironmentLocator, EnvironmentFileStoreLocator {
+    override fun find(httpFile: Path): EnvironmentRepository? = findDirectory(httpFile)?.let { JsonEnvironmentRepository(it) }
+
+    /** The files to edit for [httpFile]: those of the folder [find] uses, or, when there are none, new ones next to the `.http` file. */
+    override fun storeFor(httpFile: Path): EnvironmentFileStore =
+        JsonEnvironmentFileStore(findDirectory(httpFile) ?: httpFile.toAbsolutePath().normalize().parent ?: Path.of("").toAbsolutePath())
+
+    private fun findDirectory(httpFile: Path): Path? {
         val start = real(httpFile.toAbsolutePath().normalize().parent ?: return null)
         // Symlink aliases are resolved on both sides, so a link to home/temp cannot bypass the boundary.
         val resolvedBoundaries = boundaries.map(::real).toSet()
         var dir: Path? = start
         while (dir != null) {
             if (dir != start && dir in resolvedBoundaries) return null
-            if (hasEnvFile(dir)) return JsonEnvironmentRepository(dir)
+            if (hasEnvFile(dir)) return dir
             if (Files.exists(dir.resolve(".git"))) return null
             dir = dir.parent
         }
