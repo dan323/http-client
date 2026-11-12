@@ -21,7 +21,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F9 | Response history and saved responses | core, UIs | partial: `>>` / `>>!` / `<>`, link recording (T26) and the desktop history browser (T18) done; opening a `<>`-linked response is done in the desktop app (T27); the plugin part (T27) is open |
 | F10 | CLI: `--json`, `--junit`, `--quiet`, `--output`, `--var`, meaningful exit codes | CLI | done (T10): reports, exit codes 0/1/2/3, `--quiet`, `--output`, `--var`, summary line |
 | F11 | Desktop: remember last file, environment, window, recent files | desktop | done (T14): last file, environment, window, recent files |
-| F12 | Desktop: several files at once, folder view | desktop | open |
+| F12 | Desktop: several files at once, folder view | desktop | done (T15): tabs, restored at start, folder view |
 | F13 | Desktop: history browser and response comparison | desktop | done |
 | F14 | Editor intelligence: variable completion, undefined-variable and bad-reference diagnostics, find | desktop, plugin | open |
 | F15 | Desktop response extras: search in body, save to file, image/HTML preview | desktop | done (T17): search, save and image preview; HTML and SVG previews are not planned (no web view in Compose Desktop) |
@@ -37,7 +37,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 
 Done tasks are listed in the CHANGELOG, not here: T1 (file variables, settings), T2 (executor options), T3 (cookie jar),
 T4 (`ResponseExtractor`), T5 (assertions), T6 (dynamic variables v2), T7 (Basic auth shortcut), T9 (`RunReport`, JSON and JUnit export),
-T8 (multipart bodies), T12 (`view-model`), T17 (desktop search, save and image preview), T18 (desktop history and compare). Done as well: the review fixes R1-R13 (see [known-limitations.md](known-limitations.md) for what was left), including the
+T8 (multipart bodies), T12 (`view-model`), T15 (desktop tabs, restored tabs and folder view), T17 (desktop search, save and image preview), T18 (desktop history and compare). Done as well: the review fixes R1-R13 (see [known-limitations.md](known-limitations.md) for what was left), including the
 composition root, environment resolution, file confinement, the CI matrix part of T24 and build quality reports.
 
 Each remaining task is listed once even when it serves several features. Size: S ≈ 1 day, M ≈ 2 days, L ≈ 3 days
@@ -45,7 +45,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 
 | ID | Task | Serves | Size | Needs |
 |---|---|---|---|---|
-| T15 | **Desktop workspace:** several open files (tabs) and a folder view. In steps: (1) one `OpenDocument` per file behind `AppState`, no visible change (done); (2) the tab bar with close prompts (done); (3) restoring the open tabs at start (done); (4) the folder view | F12 | L | – |
 | T16 | **Desktop editor intelligence:** variable completion, diagnostics from T13, find/replace | F14 | L | – (T13 done: `VariableAnalysis`) |
 | T20 | **Environment editor:** write support on the environment port and a UI to edit variables | F17 | M | – |
 | T21 | **Plugin GUI verification:** checked by hand on Ultimate 2026.3 (IU-263.7307.200) with the 0.5.0-rc1 zip, see `intellij-plugin/README.md`; still open: a Community install and the 2026.1 baseline (the `Ctrl+Alt+R` run shortcut is still to be tried in an IDE) | F20, F19, F18 | S | – |
@@ -65,7 +64,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 |---|---|
 | F9 | T27 |
 | F11 | T14 |
-| F12 | T15 |
 | F14 | T13, T16, T22 |
 | F17 | T20 |
 | F18 | T13, T21, T22 |
@@ -85,7 +83,7 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 | 1    | T21 (plugin GUI check)                                                                                                     | Done on Ultimate 2026.3 (Community and 2026.1 baseline still open); its findings may reshape T22/T23 |
 | 2    | T13 (variable analysis), T14 (desktop persistence)                                                                         | disjoint areas                                               |
 | 3    | T23 (plugin panel)                                                                                  | (T8 done)                                                    |
-| 4    | T22 (plugin intelligence), T16 (desktop editor), T15 (workspace)                                                           | need T13 / T14                                               |
+| 4    | T22 (plugin intelligence), T16 (desktop editor)                                                                        | need T13 / T14                                               |
 | 5    | T20 (environment editor), T27 (plugin part: open linked response) | up to three at a time                                        |
 | 6    | T25 (QA and release notes)                                                                                                 | needs everything                                             |
 | 7    | T28 (guide check), T29 (screenshots), T30 (guide module), T31 (links) | any time after wave 5 for T29-T31; T28 can go first       |

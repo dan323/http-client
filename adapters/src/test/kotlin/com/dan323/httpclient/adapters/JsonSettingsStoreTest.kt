@@ -234,9 +234,9 @@ class JsonSettingsStoreTest {
 
     @Test fun `settings never contain more than paths, names, geometry and the record history flag`() {
         val a = realFile("a.http")
-        store().save(DesktopSettings(a, mapOf(a to "dev"), WindowSettings(1, 2), listOf(a), openFiles = listOf(a), activeFile = a))
+        store().save(DesktopSettings(a, mapOf(a to "dev"), WindowSettings(1, 2), listOf(a), openFiles = listOf(a), activeFile = a, folder = root.toString(), folderOpen = true))
         val keys = Regex("\"(\\w+)\"\\s*:").findAll(Files.readString(dir.resolve("settings.json"))).map { it.groupValues[1] }.toSet()
-        assertEquals(setOf("version", "lastFile", "environments", "window", "width", "height", "x", "y", "maximized", "recentFiles", "recordHistory", "openFiles", "activeFile"), keys)
+        assertEquals(setOf("version", "lastFile", "environments", "window", "width", "height", "x", "y", "maximized", "recentFiles", "recordHistory", "openFiles", "activeFile", "folder", "folderOpen"), keys)
     }
 
     @Test fun `the open tabs round trip and a file without them means not known, not none`() {
@@ -280,6 +280,32 @@ class JsonSettingsStoreTest {
         assertNull(loaded.activeFile)
         Files.writeString(dir.resolve("settings.json"), """{"version":1,"openFiles":["a","b"],"activeFile":"z","recentFiles":[]}""")
         assertNull(store().load().settings.activeFile)
+    }
+
+    @Test fun `the folder view choice round trips and an older file means no folder and closed`() {
+        assertNull(store().save(DesktopSettings(folder = root.toString(), folderOpen = true)))
+        val loaded = store().load().settings
+        assertEquals(root.toString(), loaded.folder)
+        assertTrue(loaded.folderOpen)
+        Files.writeString(dir.resolve("settings.json"), """{"version":1,"recentFiles":[]}""")
+        val old = store().load().settings
+        assertNull(old.folder)
+        assertFalse(old.folderOpen)
+    }
+
+    @Test fun `the folder view choice of the running app wins over the stored one after an unreadable file`() {
+        assertNull(store().save(DesktopSettings(folder = "/stored", folderOpen = true)))
+        var failing = true
+        val st = JsonSettingsStore(dir, AtomicReportWriter()) { if (failing) throw java.io.IOException("locked") else Files.readString(it) }
+        st.load(); failing = false
+        assertNull(st.save(DesktopSettings(folder = "/mine", folderOpen = false)))
+        assertEquals("/mine", store().load().settings.folder)
+        assertFalse(store().load().settings.folderOpen)
+        failing = true
+        val st2 = JsonSettingsStore(dir, AtomicReportWriter()) { if (failing) throw java.io.IOException("locked") else Files.readString(it) }
+        st2.load(); failing = false
+        assertNull(st2.save(DesktopSettings(window = WindowSettings(1, 2))))   // knows no folder: the stored one stays
+        assertEquals("/mine", store().load().settings.folder)
     }
 
     @Test fun `no more than the limit of open files is stored`() {

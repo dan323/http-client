@@ -30,6 +30,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -70,11 +71,18 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
     val scope = rememberCoroutineScope()
     val dark = isSystemInDarkTheme()
 
+    // Far left: the folder view, when shown.
+    if (state.folderOpen) {
+        FolderPanel(state, pickFolder = { state.pick { chooseFolder(parent) } }, modifier = Modifier.width(220.dp).fillMaxHeight().padding(12.dp))
+        VerticalDivider()
+    }
+
     // Left: file, environment and request list.
     Column(Modifier.width(300.dp).fillMaxHeight().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(enabled = !state.running, onClick = { state.pick { chooseFile(parent, "Open .http file", save = false) }?.let(state::open) }) { Text("Open…") }
             OutlinedButton(enabled = !state.running, onClick = { state.pick { chooseFile(parent, "New .http file", save = true) }?.let(state::create) }) { Text("New…") }
+            OutlinedButton(contentPadding = CompactButtonPadding, onClick = { state.showFolder(!state.folderOpen) }, modifier = Modifier.testTag("folder-toggle")) { Text("Folder") }
         }
         if (state.file == null) Text("No file open", fontWeight = FontWeight.Bold)   // with a file open its tab shows the name
         RecentFilesMenu(state)
@@ -250,6 +258,15 @@ private fun EnvironmentPicker(state: AppState) {
             }
         }
     }
+}
+
+/** Asks for a folder with the Swing chooser (the AWT file dialog cannot pick folders on every platform). */
+private fun chooseFolder(parent: Frame?): Path? {
+    val chooser = javax.swing.JFileChooser().apply {
+        dialogTitle = "Open folder"
+        fileSelectionMode = javax.swing.JFileChooser.DIRECTORIES_ONLY
+    }
+    return if (chooser.showOpenDialog(parent) == javax.swing.JFileChooser.APPROVE_OPTION) chooser.selectedFile.toPath() else null
 }
 
 private fun chooseFile(parent: Frame?, title: String, save: Boolean): Path? {
