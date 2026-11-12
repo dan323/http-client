@@ -65,6 +65,8 @@ subprojects {
                 val mutations = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
                     .parse(mutationsXml.get().asFile).getElementsByTagName("mutation")
                 val issues = mutableListOf<String>()
+                var skipped = 0
+                val lineCounts = mutableMapOf<java.io.File, Int>()
                 for (i in 0 until mutations.length) {
                     val mutation = mutations.item(i) as org.w3c.dom.Element
                     val status = mutation.getAttribute("status")
@@ -73,14 +75,18 @@ subprojects {
                     fun text(tag: String) = mutation.getElementsByTagName(tag).item(0).textContent
                     val packagePath = text("mutatedClass").substringBeforeLast('.', "").replace('.', '/')
                     val file = sourceRoot.file("$packagePath/${text("sourceFile")}").asFile
-                    if (!file.isFile) continue
+                    if (!file.isFile) { skipped++; continue }
+                    // Mutants in inlined code can carry a line number from another file, past the end of this one;
+                    // SonarCloud rejects an issue on a line that does not exist and fails the whole analysis.
+                    val line = text("lineNumber").toInt()
+                    if (line !in 1..lineCounts.getOrPut(file) { file.readLines().size }) { skipped++; continue }
                     val path = file.relativeTo(repoRoot.asFile).invariantSeparatorsPath
                     val message = "Mutant survived: ${text("description")} in ${text("mutatedMethod")} (no test fails)"
                     issues += """{"engineId":"pitest","ruleId":"survived-mutant","severity":"MAJOR","type":"CODE_SMELL",""" +
-                        """"primaryLocation":{"message":${json(message)},"filePath":${json(path)},"textRange":{"startLine":${text("lineNumber")}}}}"""
+                        """"primaryLocation":{"message":${json(message)},"filePath":${json(path)},"textRange":{"startLine":$line}}}"""
                 }
                 output.get().asFile.writeText("""{"issues":[${issues.joinToString(",")}]}""")
-                logger.lifecycle("PIT -> Sonar: ${issues.size} mutant issues in ${output.get().asFile}")
+                logger.lifecycle("PIT -> Sonar: ${issues.size} mutant issues in ${output.get().asFile} ($skipped skipped: no source file or line)")
             }
         }
         // Always convert after a PIT run.
