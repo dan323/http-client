@@ -234,9 +234,60 @@ class JsonSettingsStoreTest {
 
     @Test fun `settings never contain more than paths, names, geometry and the record history flag`() {
         val a = realFile("a.http")
-        store().save(DesktopSettings(a, mapOf(a to "dev"), WindowSettings(1, 2), listOf(a)))
+        store().save(DesktopSettings(a, mapOf(a to "dev"), WindowSettings(1, 2), listOf(a), openFiles = listOf(a), activeFile = a))
         val keys = Regex("\"(\\w+)\"\\s*:").findAll(Files.readString(dir.resolve("settings.json"))).map { it.groupValues[1] }.toSet()
-        assertEquals(setOf("version", "lastFile", "environments", "window", "width", "height", "x", "y", "maximized", "recentFiles", "recordHistory"), keys)
+        assertEquals(setOf("version", "lastFile", "environments", "window", "width", "height", "x", "y", "maximized", "recentFiles", "recordHistory", "openFiles", "activeFile"), keys)
+    }
+
+    @Test fun `the open tabs round trip and a file without them means not known, not none`() {
+        val a = realFile("a.http"); val b = realFile("b.http")
+        assertNull(store().save(DesktopSettings(a, openFiles = listOf(a, b), activeFile = b)))
+        val loaded = store().load().settings
+        assertEquals(listOf(a, b), loaded.openFiles)
+        assertEquals(b, loaded.activeFile)
+        assertNull(store().save(DesktopSettings(a, openFiles = emptyList())))
+        assertEquals(emptyList(), store().load().settings.openFiles)   // every tab closed is remembered as none
+        Files.writeString(dir.resolve("settings.json"), """{"version":1,"lastFile":"x","recentFiles":[]}""")
+        assertNull(store().load().settings.openFiles)                  // written before tabs: the last file is used instead
+    }
+
+    @Test fun `closing every tab wins over the stored tabs when an unreadable file becomes readable`() {
+        val a = realFile("a.http")
+        assertNull(store().save(DesktopSettings(a, openFiles = listOf(a), activeFile = a)))
+        var failing = true
+        val st = JsonSettingsStore(dir, AtomicReportWriter()) { if (failing) throw java.io.IOException("locked") else Files.readString(it) }
+        st.load()
+        failing = false
+        assertNull(st.save(DesktopSettings(openFiles = emptyList())))
+        assertEquals(emptyList(), store().load().settings.openFiles)
+        assertNull(store().load().settings.activeFile)
+        // an in-memory value that does not know the tabs keeps the stored ones
+        assertNull(store().save(DesktopSettings(a, openFiles = listOf(a), activeFile = a)))
+        failing = true
+        val st2 = JsonSettingsStore(dir, AtomicReportWriter()) { if (failing) throw java.io.IOException("locked") else Files.readString(it) }
+        st2.load()
+        failing = false
+        assertNull(st2.save(DesktopSettings(window = WindowSettings(1, 2))))
+        assertEquals(listOf(a), store().load().settings.openFiles)
+    }
+
+    @Test fun `a hand edited file with too many tabs or an active file outside them is normalised on load`() {
+        Files.createDirectories(dir)
+        val files = (1..30).joinToString(",") { "\"f$it\"" }
+        Files.writeString(dir.resolve("settings.json"), """{"version":1,"openFiles":[$files],"activeFile":"f25","recentFiles":[]}""")
+        val loaded = store().load().settings
+        assertEquals(DesktopSettings.MAX_OPEN_FILES, loaded.openFiles!!.size)
+        assertNull(loaded.activeFile)
+        Files.writeString(dir.resolve("settings.json"), """{"version":1,"openFiles":["a","b"],"activeFile":"z","recentFiles":[]}""")
+        assertNull(store().load().settings.activeFile)
+    }
+
+    @Test fun `no more than the limit of open files is stored`() {
+        val many = (1..30).map { "f$it.http" }
+        assertNull(store().save(DesktopSettings().withOpenFiles(many, "f25.http")))
+        val loaded = store().load().settings
+        assertEquals(many.take(DesktopSettings.MAX_OPEN_FILES), loaded.openFiles)
+        assertNull(loaded.activeFile)   // the active one was cut off
     }
 
     private fun q(s: String) = "\"" + s.replace("\\", "\\\\") + "\""

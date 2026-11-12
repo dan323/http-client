@@ -16,6 +16,8 @@ data class WindowSettings(
  * @property environments the last chosen environment name, by file path, at most [MAX_ENVIRONMENTS] (least recently used dropped first)
  * @property recentFiles most recent first, without duplicates, at most [MAX_RECENT] entries
  * @property recordHistory whether ordinary runs are stored in the run history (off by default: stored responses are raw)
+ * @property openFiles the files open in tabs when the app was last used, in tab order, at most [MAX_OPEN_FILES]; null in settings written before tabs existed (then [lastFile] is reopened), empty when no tab was open
+ * @property activeFile the one of [openFiles] that was on screen, or null
  */
 data class DesktopSettings(
     val lastFile: String? = null,
@@ -23,6 +25,8 @@ data class DesktopSettings(
     val window: WindowSettings? = null,
     val recentFiles: List<String> = emptyList(),
     val recordHistory: Boolean = false,
+    val openFiles: List<String>? = null,
+    val activeFile: String? = null,
 ) {
     /** Marks [path] as the last opened file and moves it to the front of the recent files. */
     fun opened(path: String): DesktopSettings = copy(
@@ -42,9 +46,16 @@ data class DesktopSettings(
 
     fun withRecordHistory(on: Boolean): DesktopSettings = copy(recordHistory = on)
 
+    /** Remembers the open tabs ([files] in tab order, at most [MAX_OPEN_FILES]) and which one is on screen. */
+    fun withOpenFiles(files: List<String>, active: String?): DesktopSettings {
+        val kept = files.distinct().take(MAX_OPEN_FILES)
+        return copy(openFiles = kept, activeFile = active?.takeIf { it in kept })
+    }
+
     companion object {
         const val MAX_RECENT = 10
         const val MAX_ENVIRONMENTS = 50
+        const val MAX_OPEN_FILES = 20
 
         /** Keeps the last [MAX_ENVIRONMENTS] entries (the map is ordered least recently used first). */
         fun boundedEnvironments(environments: Map<String, String>): Map<String, String> =

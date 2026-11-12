@@ -99,6 +99,8 @@ class JsonSettingsStore internal constructor(
         window = mine.window ?: stored.window,
         recentFiles = DesktopSettings.bounded(mine.recentFiles + stored.recentFiles),
         recordHistory = mine.recordHistory,
+        openFiles = mine.openFiles ?: stored.openFiles,   // an empty list of mine (every tab closed) wins: only null means 'not known'
+        activeFile = if (mine.openFiles != null) mine.activeFile else stored.activeFile,
     )
 
     private fun ensureDir() {
@@ -146,26 +148,35 @@ class JsonSettingsStore internal constructor(
         val window: WindowDto? = null,
         val recentFiles: List<String> = emptyList(),
         val recordHistory: Boolean = false,
+        val openFiles: List<String>? = null,
+        val activeFile: String? = null,
     ) {
         init { require(version >= 1) { "not a settings file" } }
 
         fun toSettings(): DesktopSettings {
+            val tabs = openFiles?.let { DesktopSettings().withOpenFiles(it, activeFile) }   // the same limit and rules as the app applies
             return DesktopSettings(
                 lastFile = lastFile,
                 environments = DesktopSettings.boundedEnvironments(environments),
                 window = window?.let { WindowSettings(it.width, it.height, it.x, it.y, it.maximized) },
                 recentFiles = DesktopSettings.bounded(recentFiles),
                 recordHistory = recordHistory,
+                openFiles = tabs?.openFiles,
+                activeFile = tabs?.activeFile,
             )
         }
 
         companion object {
-            fun from(s: DesktopSettings) = SettingsDto(
-                VERSION, s.lastFile, DesktopSettings.boundedEnvironments(s.environments),
-                s.window?.let { WindowDto(it.width, it.height, it.x, it.y, it.maximized) },
-                DesktopSettings.bounded(s.recentFiles),
-                s.recordHistory,
-            )
+            fun from(s: DesktopSettings): SettingsDto {
+                val tabs = s.openFiles?.let { DesktopSettings().withOpenFiles(it, s.activeFile) }
+                return SettingsDto(
+                    VERSION, s.lastFile, DesktopSettings.boundedEnvironments(s.environments),
+                    s.window?.let { WindowDto(it.width, it.height, it.x, it.y, it.maximized) },
+                    DesktopSettings.bounded(s.recentFiles),
+                    s.recordHistory,
+                    tabs?.openFiles, tabs?.activeFile,
+                )
+            }
         }
     }
 

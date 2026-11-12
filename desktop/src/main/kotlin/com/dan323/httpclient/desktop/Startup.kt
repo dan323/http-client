@@ -7,7 +7,7 @@ import com.dan323.httpclient.core.port.out.SettingsStore
 import com.dan323.httpclient.core.port.out.WindowSettings
 import java.nio.file.Path
 
-/** Builds the app state for a start: settings never block startup, a path argument wins over the remembered last file. */
+/** Builds the app state for a start: settings never block startup; the tabs of the last session are reopened and a path argument is opened (and shown) on top of them. */
 fun createAppState(
     args: Array<String>,
     newHistory: () -> HistoryStore = { FileHistoryStore() },
@@ -17,7 +17,8 @@ fun createAppState(
     val history = newHistory() // one store for recording linked responses (the runner) and for the History panel
     return AppState(runner = DesktopRunner(history = history), settings = persistence, history = history).also { st ->
         val arg = args.firstOrNull()
-        if (arg != null) st.open(Path.of(arg)) else st.restoreLastFile()
+        st.restoreTabs()
+        if (arg != null) st.open(Path.of(arg))
     }
 }
 

@@ -59,13 +59,14 @@ class AppState(
     }
 
     /** Puts the tab on screen: the history panel follows it, its environments are read again, and it becomes the file remembered for the next start. */
-    private fun activate(index: Int) {
+    private fun activate(index: Int, restoring: Boolean = false) {
         val doc = synchronized(tabsLock) {
             val d = documents.getOrNull(index) ?: return
             activeIndex = index
             if (historyOpen) historyView?.loadInBackground(d.file.toAbsolutePath())
             d
         }
+        if (restoring) return   // the start-up restore touches neither the environments nor the recency
         refreshQuietly(doc)
         rememberFile(doc)
     }
@@ -74,7 +75,23 @@ class AppState(
     private fun rememberFile(doc: OpenDocument) {
         settings?.update { it.opened(canonical(doc.file)) }
         recentFiles = settings?.let { existingRecents(it) } ?: recentFiles
+        rememberTabs()
     }
+
+    /** Remembers which files are open (in tab order) and which is on screen, for the next start. */
+    private fun rememberTabs() {
+        val s = settings ?: return
+        // The tabs are read inside the change, which the settings run one at a time: the newest state is always the last one stored.
+        s.update { current ->
+            synchronized(tabsLock) {
+                val open = documents.map { canonical(it.file) }
+                current.withOpenFiles(open + unavailable.filter { it !in open }, active?.let { canonical(it.file) })
+            }
+        }
+    }
+
+    /** Files of the last session that could not be opened at start (an absent drive, say); kept in the stored list, behind the open tabs, until they open again. */
+    private var unavailable: List<String> = emptyList()
 
     /**
      * Closes the tab at [index]. A tab with unsaved edits is not closed: [closePrompt] asks first. The tab whose request is
@@ -110,8 +127,7 @@ class AppState(
             if (wasActive && historyOpen) historyView?.loadInBackground(active?.file?.toAbsolutePath())
             if (wasActive) active else null
         }
-        // With no tab left the last file stays remembered: the settings cannot say "none" yet (restoring the tabs will).
-        shown?.let { rememberFile(it) }
+        if (shown != null) rememberFile(shown) else rememberTabs()
     }
 
     val file: Path? get() = active?.file
@@ -227,7 +243,7 @@ class AppState(
         openLocked(path)
     }
 
-    private fun openLocked(path: Path) {
+    private fun openLocked(path: Path, remember: Boolean = true) {
         val key = canonical(path)
         notice = null
         // A file that is already open is shown as it is (its unsaved edits and results are kept), not read again.
@@ -242,11 +258,32 @@ class AppState(
             documents = documents + doc
             activeIndex = documents.size - 1
         }
-        rememberFile(doc)
+        if (remember) rememberFile(doc)
         if (historyOpen) historyView?.loadInBackground(path.toAbsolutePath())   // not on the caller's thread: it may be the UI thread
         refreshEnvironments(doc)
         // Restore the remembered environment only if it still exists; never an error for a vanished name.
         settings?.current?.environments?.get(key)?.takeIf { it in doc.environments }?.let { doc.chosenEnvironment = it }
+    }
+
+    /**
+     * Reopens the tabs of the previous session, in order, and puts the one that was on screen back on screen. A file that is gone
+     * or unreadable is skipped without a message: the app starts with what is left. Settings from before tabs existed
+     * reopen the last file instead.
+     */
+    fun restoreTabs() {
+        val saved = settings?.current ?: return
+        val files = saved.openFiles ?: return restoreLastFile()
+        exclusive("open a file") {
+            val missing = mutableListOf<String>()
+            for (f in files) {
+                val path = Path.of(f)
+                val opened = Files.isRegularFile(path) && try { openLocked(path, remember = false); true } catch (_: Exception) { documents.any { canonical(it.file) == canonical(path) } }
+                if (!opened) missing += f
+            }
+            unavailable = missing
+            saved.activeFile?.let { a -> documents.indexOfFirst { canonical(it.file) == a }.takeIf { it >= 0 }?.let { activate(it, restoring = true) } }
+            rememberTabs()   // once, for the whole restore; the recents and the last file stay as the user left them
+        }
     }
 
     /** Opens the last file of the previous session. A file that is gone is skipped without a message: the app starts empty. */
