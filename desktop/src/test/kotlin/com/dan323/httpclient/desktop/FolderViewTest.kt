@@ -129,6 +129,6 @@ class FolderViewSettingsTest {
             override fun load() = com.dan323.httpclient.core.port.out.LoadedSettings(com.dan323.httpclient.core.port.out.DesktopSettings(folder = "bad\u0000path", folderOpen = true))
             override fun save(settings: com.dan323.httpclient.core.port.out.DesktopSettings): String? = null
         }
-        SettingsPersistence(store).use { p -> AppState(settings = p).use { app -> assertNull(app.chosenFolder); assertTrue(app.folderOpen) } }
+        SettingsPersistence(store).use { p -> AppState(settings = p).use { app -> assertNull(app.chosenFolder); assertTrue(app.folderOpen); assertTrue(app.message!!.contains("remembered folder")) } }
     }
 }

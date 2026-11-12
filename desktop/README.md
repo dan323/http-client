@@ -63,7 +63,7 @@ Known UI problems are listed in [../docs/known-limitations.md](../docs/known-lim
 
 - `Workspace.kt` — parsing, environment names and `DesktopRunner` (no UI).
 - `AppState.kt` — Compose state: the open files (tabs), the active one, the run guard, settings and history.
-- `FolderPanel.kt` — the folder view (`FolderTreeState` and the panel); the listing rules are `FolderListing` in `view-model`.
+- `FolderPanel.kt` — the folder view (the panel and `FolderTreeState`, which lists off the UI thread); the listing rules and the tree itself are `FolderListing` and `FolderTree` in `view-model`.
 - `OpenDocument.kt` — the state of one open file: text, requests, selection, environment, results.
 - `App.kt` / `Main.kt` — the Compose UI and window (`AppRoot` is the testable content).
 - `DesktopRunner` (in `Workspace.kt`) runs requests through the shared `RunController` (one session per file and environment, so a login request runs once; closed with the window).

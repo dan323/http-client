@@ -267,6 +267,7 @@ class AppState(
         settings?.let { s ->
             recentFiles = existingRecents(s)
             message = s.loadWarning
+            if (chosenFolder == null && s.current.folder != null) message = listOfNotNull(message, "The remembered folder is not a valid path here and was ignored.").joinToString(" ")
         }
     }
 
