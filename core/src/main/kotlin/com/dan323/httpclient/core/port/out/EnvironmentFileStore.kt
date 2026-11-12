@@ -2,6 +2,7 @@ package com.dan323.httpclient.core.port.out
 
 import com.dan323.httpclient.core.domain.EditableEnvironments
 import com.dan323.httpclient.core.domain.EnvironmentEdit
+import com.dan323.httpclient.core.domain.HiddenContent
 import java.nio.file.Path
 
 /** The two files an environment folder can hold: the shared one (committed) and the private one (secrets, overriding the shared values). */
@@ -12,7 +13,12 @@ enum class EnvironmentScope { SHARED, PRIVATE }
  * included as an entry), only variables with a text, number or boolean value, and a [version] that identifies the content
  * (null when the file does not exist). Pass the version back to [EnvironmentFileStore.write].
  */
-class EnvironmentFileContent(val environments: EditableEnvironments, val version: String?)
+class EnvironmentFileContent(
+    val environments: EditableEnvironments,
+    val version: String?,
+    /** What the view leaves out (environments that are not objects, variables holding objects or arrays); pass it to `applying` to preview an edit as the store will judge it. */
+    val hidden: HiddenContent = HiddenContent.NONE,
+)
 
 /** The file changed (or appeared, or vanished) after it was read; nothing was written. */
 class EnvironmentFileChangedException(val file: Path) :

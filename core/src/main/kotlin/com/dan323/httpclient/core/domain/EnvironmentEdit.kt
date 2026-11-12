@@ -59,19 +59,42 @@ fun EnvironmentEdit.problem(): String? = when (this) {
     is EnvironmentEdit.RemoveEnvironment -> null
 }
 
-/** [this] after [edits], without touching the original. Throws [EnvironmentEditException] for an edit that cannot be applied. */
-fun EditableEnvironments.applying(edits: List<EnvironmentEdit>): EditableEnvironments {
+/**
+ * What the editable view leaves out of a file: the environments that are not JSON objects ([notObjects]) and, per
+ * environment, the variables whose value is an object or an array ([hidden]). An edit never replaces or edits these:
+ * the file store and the editor model apply the same refusals through [applying].
+ */
+class HiddenContent(val notObjects: Set<String> = emptySet(), val hidden: Map<String, Set<String>> = emptyMap()) {
+    companion object { val NONE = HiddenContent() }
+}
+
+/**
+ * [this] after [edits], without touching the original. Throws [EnvironmentEditException] for an edit that cannot be
+ * applied, among them one that would replace or edit something the view does not show ([content]).
+ */
+fun EditableEnvironments.applying(edits: List<EnvironmentEdit>, content: HiddenContent = HiddenContent.NONE): EditableEnvironments {
     val result = LinkedHashMap<String, Map<String, String>>(this)
+    val notObjects = content.notObjects.toMutableSet()
+    val hidden = content.hidden.mapValues { it.value.toSet() }.toMutableMap()
+    fun editable(environment: String): Map<String, String> {
+        val vars = result[environment] ?: throw unknown(environment)
+        if (environment in notObjects) throw EnvironmentEditException("The environment $environment is not a JSON object, so its variables cannot be edited.")
+        return vars
+    }
     for (edit in edits) {
         edit.problem()?.let { throw EnvironmentEditException(it) }
         when (edit) {
             is EnvironmentEdit.SetVariable -> {
-                val vars = result[edit.environment] ?: throw unknown(edit.environment)
+                val vars = editable(edit.environment)
+                if (edit.name in hidden[edit.environment].orEmpty()) {
+                    throw EnvironmentEditException("The variable ${edit.name} in ${edit.environment} holds an object or an array the editor cannot show, and is not replaced.")
+                }
                 result[edit.environment] = LinkedHashMap(vars).also { it[edit.name] = edit.value }
             }
-            is EnvironmentEdit.RemoveVariable -> result[edit.environment]?.let { vars ->
+            is EnvironmentEdit.RemoveVariable -> {
+                val vars = editable(edit.environment)
                 result[edit.environment] = LinkedHashMap(vars).also { it.remove(edit.name) }
-            } ?: throw unknown(edit.environment)
+            }
             is EnvironmentEdit.AddEnvironment -> {
                 if (edit.name in result) throw EnvironmentEditException("The environment ${edit.name} already exists.")
                 result[edit.name] = emptyMap()
@@ -82,8 +105,14 @@ fun EditableEnvironments.applying(edits: List<EnvironmentEdit>): EditableEnviron
                 val renamed = LinkedHashMap<String, Map<String, String>>()
                 for ((k, v) in result) renamed[if (k == edit.from) edit.to else k] = v
                 result.clear(); result.putAll(renamed)
+                if (notObjects.remove(edit.from)) notObjects += edit.to
+                hidden.remove(edit.from)?.let { hidden[edit.to] = it }
             }
-            is EnvironmentEdit.RemoveEnvironment -> if (result.remove(edit.name) == null) throw unknown(edit.name)
+            is EnvironmentEdit.RemoveEnvironment -> {
+                if (result.remove(edit.name) == null) throw unknown(edit.name)
+                notObjects -= edit.name
+                hidden -= edit.name
+            }
         }
     }
     return result

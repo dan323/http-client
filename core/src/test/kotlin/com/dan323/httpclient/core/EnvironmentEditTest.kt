@@ -4,11 +4,14 @@ import com.dan323.httpclient.core.domain.EditableEnvironments
 import com.dan323.httpclient.core.domain.EnvironmentEdit
 import com.dan323.httpclient.core.domain.EnvironmentEditException
 import com.dan323.httpclient.core.domain.EnvironmentNames
+import com.dan323.httpclient.core.domain.HiddenContent
 import com.dan323.httpclient.core.domain.applying
 import com.dan323.httpclient.core.domain.problem
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
@@ -80,5 +83,30 @@ class EnvironmentEditTest {
 
     @Test fun anEmptyListChangesNothing() {
         assertEquals(base, base.applying(emptyList()))
+    }
+
+    @Test fun whatTheViewLeavesOutIsNeverReplacedOrEdited() {
+        val content = HiddenContent(notObjects = setOf("list"), hidden = mapOf("dev" to setOf("nested")))
+        val withList: EditableEnvironments = linkedMapOf("dev" to linkedMapOf("host" to "h"), "list" to emptyMap())
+        fun fail(edit: EnvironmentEdit) = assertFailsWith<EnvironmentEditException> { withList.applying(listOf(edit), content) }.message!!
+        assertEquals("The environment list is not a JSON object, so its variables cannot be edited.", fail(EnvironmentEdit.SetVariable("list", "a", "v")))
+        assertEquals("The environment list is not a JSON object, so its variables cannot be edited.", fail(EnvironmentEdit.RemoveVariable("list", "a")))
+        assertTrue(fail(EnvironmentEdit.SetVariable("dev", "nested", "secret")).contains("holds an object or an array"))
+        assertFalse(fail(EnvironmentEdit.SetVariable("dev", "nested", "secret")).contains("secret"))
+        withList.applying(listOf(EnvironmentEdit.SetVariable("dev", "other", "v"), EnvironmentEdit.RemoveVariable("dev", "nested")), content)   // fine
+        withList.applying(listOf(EnvironmentEdit.RemoveEnvironment("list")), content)   // a whole environment can still be removed
+    }
+
+    @Test fun whatIsLeftOutFollowsARenameAndEndsWithARemoval() {
+        val content = HiddenContent(notObjects = setOf("list"), hidden = mapOf("dev" to setOf("nested")))
+        val view: EditableEnvironments = linkedMapOf("dev" to emptyMap(), "list" to emptyMap())
+        assertFailsWith<EnvironmentEditException> {
+            view.applying(listOf(EnvironmentEdit.RenameEnvironment("dev", "local"), EnvironmentEdit.SetVariable("local", "nested", "v")), content)
+        }
+        assertFailsWith<EnvironmentEditException> {
+            view.applying(listOf(EnvironmentEdit.RenameEnvironment("list", "l2"), EnvironmentEdit.SetVariable("l2", "a", "v")), content)
+        }
+        // an environment added again under a removed name starts clean
+        view.applying(listOf(EnvironmentEdit.RemoveEnvironment("list"), EnvironmentEdit.AddEnvironment("list"), EnvironmentEdit.SetVariable("list", "a", "v")), content)
     }
 }

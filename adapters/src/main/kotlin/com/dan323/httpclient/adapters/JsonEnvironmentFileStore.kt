@@ -2,7 +2,7 @@ package com.dan323.httpclient.adapters
 
 import com.dan323.httpclient.core.domain.EnvironmentEdit
 import com.dan323.httpclient.core.domain.EnvironmentEditException
-import com.dan323.httpclient.core.domain.problem
+import com.dan323.httpclient.core.domain.applying
 import com.dan323.httpclient.core.port.out.EnvironmentFileChangedException
 import com.dan323.httpclient.core.port.out.EnvironmentFileContent
 import com.dan323.httpclient.core.port.out.EnvironmentFileException
@@ -51,61 +51,67 @@ class JsonEnvironmentFileStore(
         } catch (_: java.nio.charset.CharacterCodingException) {
             throw EnvironmentFileException(file, "the file is not valid UTF-8 text")
         }
-        return Snapshot(EnvironmentJson.parse(file, text), versionOf(bytes))
+        val root = EnvironmentJson.parse(file, text)
+        EnvironmentJson.duplicateKey(text)?.let { (key, line) ->
+            throw EnvironmentFileException(file, "the key \"$key\" appears twice (line $line); remove one of them, because editing would keep only the last")
+        }
+        return Snapshot(root, versionOf(bytes))
     }
 
     override fun read(scope: EnvironmentScope): EnvironmentFileContent {
         val s = snapshot(file(scope))
-        return EnvironmentFileContent(EnvironmentJson.variables(s.root), s.version)
+        return EnvironmentFileContent(EnvironmentJson.variables(s.root), s.version, EnvironmentJson.hidden(s.root))
     }
 
     override fun write(scope: EnvironmentScope, edits: List<EnvironmentEdit>, expectedVersion: String?): String? {
         val file = file(scope)
-        val current = snapshot(file)
-        if (current.version != expectedVersion) throw EnvironmentFileChangedException(file)
-        if (edits.isEmpty()) return current.version
-        if (Files.isSymbolicLink(file)) throw EnvironmentFileException(file, "it is a link; edit the file it points to")
-        val updated = edits.fold(current.root) { root, edit -> apply(root, edit) }
-        val text = json.encodeToString(JsonElement.serializer(), updated) + "\n"
-        writer.write(file, text)
-        return versionOf(text.toByteArray(Charsets.UTF_8))
+        // one writer at a time per file in this process, so two saves cannot both pass the version check
+        synchronized(lockFor(file)) {
+            val current = snapshot(file)
+            if (current.version != expectedVersion) throw EnvironmentFileChangedException(file)
+            if (edits.isEmpty()) return current.version
+            if (Files.isSymbolicLink(file)) throw EnvironmentFileException(file, "it is a link; edit the file it points to")
+            // the rules (unknown or duplicate names, what the editor cannot show) are the pure ones, so a preview and the store agree
+            EnvironmentJson.variables(current.root).applying(edits, EnvironmentJson.hidden(current.root))
+            val updated = edits.fold(current.root) { root, edit -> apply(root, edit) }
+            val text = json.encodeToString(JsonElement.serializer(), updated) + "\n"
+            val existed = Files.exists(file)
+            try {
+                writer.write(file, text)
+            } catch (e: java.io.IOException) {
+                throw EnvironmentFileException(file, "could not write the file: ${e.message ?: e::class.simpleName}", e)
+            }
+            if (!existed && scope == EnvironmentScope.SHARED) openUp(file)
+            return versionOf(text.toByteArray(Charsets.UTF_8))
+        }
     }
 
+    /** A new shared file is committed and holds no secrets: give it the usual permissions, not the owner-only ones of a new report. */
+    private fun openUp(file: Path) {
+        try { Files.setPosixFilePermissions(file, SHARED_PERMISSIONS) } catch (_: UnsupportedOperationException) { } catch (_: java.io.IOException) { }
+    }
+
+    /** Applies one edit to the JSON. The edit was already judged by the pure rules, so only the effect is here. */
     private fun apply(root: JsonObject, edit: EnvironmentEdit): JsonObject {
-        edit.problem()?.let { throw EnvironmentEditException(it) }
         val entries = LinkedHashMap(root)
         when (edit) {
             is EnvironmentEdit.SetVariable -> {
-                val env = environment(entries, edit.environment)
-                val vars = LinkedHashMap(env)
+                val vars = LinkedHashMap(entries.getValue(edit.environment) as JsonObject)
                 // the same text keeps the value as written: a number stays a number
                 val kept = (vars[edit.name] as? JsonPrimitive)?.takeIf { it !is JsonNull && it.content == edit.value }
                 vars[edit.name] = kept ?: JsonPrimitive(edit.value)
                 entries[edit.environment] = JsonObject(vars)
             }
-            is EnvironmentEdit.RemoveVariable -> {
-                val env = environment(entries, edit.environment)
-                entries[edit.environment] = JsonObject(LinkedHashMap(env).also { it.remove(edit.name) })
-            }
-            is EnvironmentEdit.AddEnvironment -> {
-                if (edit.name in entries) throw EnvironmentEditException("The environment ${edit.name} already exists.")
-                entries[edit.name] = JsonObject(emptyMap())
-            }
+            is EnvironmentEdit.RemoveVariable ->
+                entries[edit.environment] = JsonObject(LinkedHashMap(entries.getValue(edit.environment) as JsonObject).also { it.remove(edit.name) })
+            is EnvironmentEdit.AddEnvironment -> entries[edit.name] = JsonObject(emptyMap())
             is EnvironmentEdit.RenameEnvironment -> {
-                if (edit.from !in entries) throw EnvironmentEditException("Unknown environment: ${edit.from}")
-                if (edit.to in entries) throw EnvironmentEditException("The environment ${edit.to} already exists.")
                 entries.clear()
                 for ((k, v) in root) entries[if (k == edit.from) edit.to else k] = v
             }
-            is EnvironmentEdit.RemoveEnvironment ->
-                if (entries.remove(edit.name) == null) throw EnvironmentEditException("Unknown environment: ${edit.name}")
+            is EnvironmentEdit.RemoveEnvironment -> entries.remove(edit.name)
         }
         return JsonObject(entries)
-    }
-
-    private fun environment(entries: Map<String, JsonElement>, name: String): JsonObject {
-        val env = entries[name] ?: throw EnvironmentEditException("Unknown environment: $name")
-        return env as? JsonObject ?: throw EnvironmentEditException("The environment $name is not a JSON object, so its variables cannot be edited.")
     }
 
     private fun versionOf(bytes: ByteArray): String =
@@ -113,5 +119,8 @@ class JsonEnvironmentFileStore(
 
     private companion object {
         val json = Json { prettyPrint = true; prettyPrintIndent = "  " }
+        val SHARED_PERMISSIONS: Set<java.nio.file.attribute.PosixFilePermission> = java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--")
+        private val locks = java.util.concurrent.ConcurrentHashMap<Path, Any>()
+        fun lockFor(file: Path): Any = locks.computeIfAbsent(file.toAbsolutePath().normalize()) { Any() }
     }
 }

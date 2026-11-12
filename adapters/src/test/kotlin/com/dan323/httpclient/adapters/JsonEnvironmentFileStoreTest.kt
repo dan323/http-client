@@ -185,4 +185,86 @@ class JsonEnvironmentFileStoreTest {
         val dev = JsonEnvironmentRepository(dir).load().single { it.name == "dev" }
         assertEquals(mapOf("common" to "c", "host" to "private-h"), dev.variables)
     }
+
+    @Test fun aValueTheEditorCannotShowIsNotReplacedButANullIs() {
+        Files.writeString(shared, original)
+        val c = store.read(EnvironmentScope.SHARED)
+        assertEquals(setOf("extra"), c.hidden.notObjects)
+        assertEquals(mapOf("dev" to setOf("nested")), c.hidden.hidden)
+        val e = assertFailsWith<EnvironmentEditException> { store.write(EnvironmentScope.SHARED, listOf(EnvironmentEdit.SetVariable("dev", "nested", "x")), c.version) }
+        assertTrue(e.message!!.contains("not replaced"))
+        assertEquals(original, Files.readString(shared))
+        // a null means undefined: defining the variable replaces it
+        store.write(EnvironmentScope.SHARED, listOf(EnvironmentEdit.SetVariable("dev", "gone", "now")), c.version)
+        assertEquals("now", store.read(EnvironmentScope.SHARED).environments.getValue("dev").getValue("gone"))
+        assertTrue(Files.readString(shared).contains("\"nested\""))
+    }
+
+    @Test fun thePreviewWithWhatIsLeftOutAgreesWithTheStore() {
+        Files.writeString(shared, original)
+        val c = store.read(EnvironmentScope.SHARED)
+        val edits = listOf(EnvironmentEdit.SetVariable("extra", "a", "v"))
+        assertFailsWith<EnvironmentEditException> { c.environments.applying(edits, c.hidden) }
+        assertFailsWith<EnvironmentEditException> { store.write(EnvironmentScope.SHARED, edits, c.version) }
+    }
+
+    @Test fun duplicateKeysAreRefusedWithTheKeyAndLineButNeverTheValue() {
+        fun refused(text: String): String {
+            Files.writeString(shared, text)
+            return assertFailsWith<EnvironmentFileException> { store.read(EnvironmentScope.SHARED) }.message!!
+        }
+        val env = refused("{\n  \"dev\": {\"a\": \"1\"},\n  \"dev\": {\"b\": \"top-secret\"}\n}")
+        assertTrue(env.contains("\"dev\" appears twice (line 3)"), env)
+        assertFalse(env.contains("top-secret"))
+        assertTrue(refused("""{"dev": {"a": "1", "a": "2"}}""").contains("\"a\" appears twice"))
+        assertTrue(assertFailsWith<EnvironmentFileException> {
+            store.write(EnvironmentScope.SHARED, listOf(EnvironmentEdit.AddEnvironment("qa")), "x")
+        }.message!!.contains("appears twice"))
+    }
+
+    @Test fun equalKeysInDifferentObjectsOrInsideStringsAreNotDuplicates() {
+        Files.writeString(shared, """{"dev": {"host": "a", "note": "\"host\": \"x\", \"host\": 1"}, "prod": {"host": "b"}, "list": [{"host": 1}, {"host": 2}]}""")
+        assertEquals(listOf("dev", "prod", "list"), store.read(EnvironmentScope.SHARED).environments.keys.toList())
+    }
+
+    @Test fun anIoErrorOnWritingIsReportedWithTheFileName() {
+        val failing = AtomicReportWriter({ _, _ -> throw java.io.IOException("disk full") }, { a, b, o -> Files.move(a, b, *o) })
+        val s = JsonEnvironmentFileStore(dir, failing)
+        val e = assertFailsWith<EnvironmentFileException> { s.write(EnvironmentScope.SHARED, listOf(EnvironmentEdit.AddEnvironment("qa")), null) }
+        assertTrue(e.message!!.contains("http-client.env.json") && e.message!!.contains("disk full"), e.message)
+        assertFalse(Files.exists(shared))
+    }
+
+    @Test fun aNewSharedFileKeepsTheUsualPermissionsAndAPrivateOneStaysOwnerOnly() {
+        assumeTrue(Files.getFileStore(dir).supportsFileAttributeView("posix"))
+        store.write(EnvironmentScope.SHARED, listOf(EnvironmentEdit.AddEnvironment("dev")), null)
+        store.write(EnvironmentScope.PRIVATE, listOf(EnvironmentEdit.AddEnvironment("dev")), null)
+        assertEquals("rw-r--r--", PosixFilePermissions.toString(Files.getPosixFilePermissions(shared)))
+        assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(private)))
+        // an existing file keeps what it has
+        Files.setPosixFilePermissions(shared, PosixFilePermissions.fromString("rw-rw----"))
+        store.write(EnvironmentScope.SHARED, listOf(EnvironmentEdit.AddEnvironment("qa")), store.read(EnvironmentScope.SHARED).version)
+        assertEquals("rw-rw----", PosixFilePermissions.toString(Files.getPosixFilePermissions(shared)))
+    }
+
+    @Test fun twoSavesWithTheSameVersionLetExactlyOneSucceed() {
+        Files.writeString(shared, original)
+        val v = store.read(EnvironmentScope.SHARED).version
+        repeat(20) { n ->
+            Files.writeString(shared, original)
+            val version = store.read(EnvironmentScope.SHARED).version
+            val results = java.util.concurrent.ConcurrentLinkedQueue<String>()
+            val start = java.util.concurrent.CountDownLatch(1)
+            val threads = (1..2).map { t ->
+                Thread {
+                    start.await()
+                    try { JsonEnvironmentFileStore(dir).write(EnvironmentScope.SHARED, listOf(EnvironmentEdit.AddEnvironment("e$n$t")), version); results += "ok" }
+                    catch (_: EnvironmentFileChangedException) { results += "changed" }
+                }.also { it.start() }
+            }
+            start.countDown(); threads.forEach { it.join(10_000) }
+            assertEquals(listOf("changed", "ok"), results.sorted(), "round $n")
+        }
+        assertNotEquals(null, v)
+    }
 }
