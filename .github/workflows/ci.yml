@@ -145,12 +145,10 @@ jobs:
         with:
           fetch-depth: 0 # for the SonarCloud analysis below
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
-        if: needs.changes.outputs.code == 'true'
         with:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
-        if: needs.changes.outputs.code == 'true'
       - name: PIT (core, view-model)
         run: ./gradlew :core:pitest :view-model:pitest --console=plain --continue
       # Full analysis (coverage + surviving mutants as external issues, see docs/ci-sonar.md). It has to include the
