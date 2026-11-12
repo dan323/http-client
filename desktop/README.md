@@ -62,7 +62,8 @@ Known UI problems are listed in [../docs/known-limitations.md](../docs/known-lim
 ## Layout
 
 - `Workspace.kt` — parsing, environment names and `DesktopRunner` (no UI).
-- `AppState.kt` — Compose state: open file, editor text, selection, environment, outcomes, the run guard.
+- `AppState.kt` — Compose state: the open files (tabs), the active one, the run guard, settings and history.
+- `OpenDocument.kt` — the state of one open file: text, requests, selection, environment, results.
 - `App.kt` / `Main.kt` — the Compose UI and window (`AppRoot` is the testable content).
 - `DesktopRunner` (in `Workspace.kt`) runs requests through the shared `RunController` (one session per file and environment, so a login request runs once; closed with the window).
 - `ResponsePane.kt` — the response viewer and the collapsible JSON tree; the pure logic (JSON flattening in `JsonTree.kt`, status/size/duration labels) lives in the shared `view-model` module and is tested there. Durations are shown as `1.5 s` (or `2m 5s`) instead of `1500 ms`, and numbers are always formatted with `.` regardless of the system locale.

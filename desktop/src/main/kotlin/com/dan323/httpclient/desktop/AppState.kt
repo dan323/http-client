@@ -20,12 +20,99 @@ class AppState(
     private val settings: SettingsPersistence? = null,
     private val history: HistoryStore? = null,
 ) : AutoCloseable {
-    /** The open files. For now at most one; the others forward to [active]. */
+    /** The open files, in tab order. The editor, the request list and Send work on [active]; the properties below forward to it. */
     internal var documents by mutableStateOf<List<OpenDocument>>(emptyList())
         private set
+    private var activeIndex by mutableStateOf(0)
 
-    /** The document the editor, the request list and Send work on; null until a file is opened. */
-    internal val active: OpenDocument? get() = documents.firstOrNull()
+    /** The document on screen; null until a file is opened. */
+    internal val active: OpenDocument? get() = documents.getOrNull(activeIndex)
+
+    /** Index of the active tab (0 with no file open). */
+    val activeTab: Int get() = activeIndex
+
+    /** What a tab shows: its [label] (the file name, with parent folders when two open files share a name) and whether it has unsaved edits. */
+    class TabInfo(val label: String, val dirty: Boolean)
+
+    val tabs: List<TabInfo> get() {
+        val docs = documents
+        val labels = tabLabels(docs.map { it.file })
+        return docs.mapIndexed { i, d -> TabInfo(labels[i], d.dirty) }
+    }
+
+    /** Guards the tab list and the active index: tabs change from the UI thread (switch, close) and from the thread that opens a file. */
+    private val tabsLock = Any()
+
+    /** The document whose run is in progress, if any; its results land there even when another tab is on screen. */
+    private var runningDocument by mutableStateOf<OpenDocument?>(null)
+
+    /** True while the run in progress belongs to the tab on screen (other tabs show their own results, not "Sending…"). */
+    val runningHere: Boolean get() = running && runningDocument === active
+
+    /** The tab whose close asked about unsaved edits ([confirmClose] / [cancelClose] answer it); null when nothing is asked. */
+    private var closing by mutableStateOf<OpenDocument?>(null)
+    val closePrompt: TabInfo? get() = closing?.let { d -> tabs.getOrNull(documents.indexOf(d)) }
+
+    /** Shows the tab at [index]. Allowed while a request runs (the run keeps going on its own tab). */
+    fun switchTo(index: Int) {
+        if (index in documents.indices && index != activeIndex) activate(index)
+    }
+
+    /** Puts the tab on screen: the history panel follows it, its environments are read again, and it becomes the file remembered for the next start. */
+    private fun activate(index: Int) {
+        val doc = synchronized(tabsLock) {
+            val d = documents.getOrNull(index) ?: return
+            activeIndex = index
+            if (historyOpen) historyView?.loadInBackground(d.file.toAbsolutePath())
+            d
+        }
+        refreshQuietly(doc)
+        rememberFile(doc)
+    }
+
+    /** Marks [doc]'s file as the last opened one and moves it to the front of the recent files. */
+    private fun rememberFile(doc: OpenDocument) {
+        settings?.update { it.opened(canonical(doc.file)) }
+        recentFiles = settings?.let { existingRecents(it) } ?: recentFiles
+    }
+
+    /**
+     * Closes the tab at [index]. A tab with unsaved edits is not closed: [closePrompt] asks first. The tab whose request is
+     * running cannot be closed.
+     */
+    fun closeTab(index: Int) {
+        val doc = documents.getOrNull(index) ?: return
+        if (doc.dirty && !isRunning(doc)) { closing = doc; return }
+        remove(doc)
+    }
+
+    /** Answers [closePrompt]: saves the file first when [save], then closes the tab; a failed save keeps the tab open with the error in [message]. */
+    fun confirmClose(save: Boolean) {
+        val doc = closing ?: return
+        if (!isRunning(doc) && save && !saveDocument(doc)) return
+        closing = null
+        remove(doc)
+    }
+
+    fun cancelClose() { closing = null }
+
+    private fun isRunning(doc: OpenDocument) = running && runningDocument === doc
+
+    /** Removes [doc] (refused while its request runs). The tab that comes on screen becomes the file remembered for the next start. */
+    private fun remove(doc: OpenDocument) {
+        val shown = synchronized(tabsLock) {
+            if (isRunning(doc)) { message = "Cannot close ${doc.file.fileName} while its request is running."; return }
+            val index = documents.indexOf(doc)
+            if (index < 0) return
+            val wasActive = index == activeIndex
+            documents = documents - doc
+            activeIndex = if (index < activeIndex) activeIndex - 1 else activeIndex.coerceAtMost((documents.size - 1).coerceAtLeast(0))
+            if (wasActive && historyOpen) historyView?.loadInBackground(active?.file?.toAbsolutePath())
+            if (wasActive) active else null
+        }
+        // With no tab left the last file stays remembered: the settings cannot say "none" yet (restoring the tabs will).
+        shown?.let { rememberFile(it) }
+    }
 
     val file: Path? get() = active?.file
     val text: String get() = active?.text ?: ""
@@ -141,15 +228,21 @@ class AppState(
     }
 
     private fun openLocked(path: Path) {
-        val content = Files.readString(path)   // read first: a failure leaves the current file and text untouched
-        val doc = OpenDocument(path, content)   // a fresh document: nothing of the previous file's choices or results carries over
-        // One slot for now: the previous document is replaced without looking at its unsaved edits (they were always dropped
-        // on opening another file). Tabs must not keep this: a document with edits has to be saved or discarded first.
-        documents = listOf(doc)
-        notice = null
         val key = canonical(path)
-        settings?.update { it.opened(key) }
-        recentFiles = settings?.let { existingRecents(it) } ?: recentFiles
+        notice = null
+        // A file that is already open is shown as it is (its unsaved edits and results are kept), not read again.
+        val existing = documents.indexOfFirst { canonical(it.file) == key }
+        if (existing >= 0) {
+            activate(existing)
+            return
+        }
+        val content = Files.readString(path)   // read first: a failure leaves the tabs untouched
+        val doc = OpenDocument(path, content)
+        synchronized(tabsLock) {
+            documents = documents + doc
+            activeIndex = documents.size - 1
+        }
+        rememberFile(doc)
         if (historyOpen) historyView?.loadInBackground(path.toAbsolutePath())   // not on the caller's thread: it may be the UI thread
         refreshEnvironments(doc)
         // Restore the remembered environment only if it still exists; never an error for a vanished name.
@@ -192,14 +285,16 @@ class AppState(
         doc.edit(newText)
     }
 
-    /** Returns false (with [message] set) when the file could not be written; refused while a run is in progress. */
-    fun save(): Boolean {
+    /** Saves the tab on screen. Returns false (with [message] set) when the file could not be written; refused while a run is in progress. */
+    fun save(): Boolean = saveDocument(active)
+
+    private fun saveDocument(doc: OpenDocument?): Boolean {
         if (!busy.compareAndSet(false, true)) {
             message = "Cannot save while a request is running."
             return false
         }
         try {
-            val doc = active ?: return true
+            if (doc == null) return true
             if (!write(doc, doc.text)) return false
             message = null
             refreshQuietly(doc)
@@ -230,9 +325,11 @@ class AppState(
         try {
             val doc = active ?: return
             val path = doc.file
+            if (closing === doc) closing = null   // the run saves the file, so the question about its edits is moot
             cancellation.reset()
             notice = null
             running = true
+            runningDocument = doc
             synchronized(lock) { doc.beginRun() }   // never leave the previous run's results next to a new error
             val t = doc.text   // one snapshot for the write and the run
             if (!write(doc, t)) return   // keep the save error visible instead of running stale text
@@ -254,6 +351,7 @@ class AppState(
             message = e.message ?: e::class.simpleName
         } finally {
             running = false
+            runningDocument = null
             busy.set(false)
         }
     }
@@ -267,7 +365,7 @@ class AppState(
         val abs = doc.file.toAbsolutePath()
         try {
             store.record(abs, RunReport.from(done), done.map { (it as? RunOutcome.Success)?.response })
-            if (historyOpen) historyView?.load(abs, keepSelection = true)
+            synchronized(tabsLock) { if (historyOpen && active === doc) historyView?.load(abs, keepSelection = true) }   // not when another tab is on screen; checked under the lock so a switch cannot slip in between
         } catch (e: Exception) {
             message = "Could not record history: ${e.message ?: e::class.simpleName}"
         }
@@ -335,3 +433,23 @@ internal fun canonical(path: Path): String = try {
 
 /** Shown after **Reset chain**; the plugin reports the same event. */
 internal const val CHAIN_RESET_NOTICE = "Chain reset"
+
+/**
+ * The label of each open file: its name, with parent folders added (`dev/api.http`) for the files whose names collide,
+ * until the labels differ or a path has no more folders.
+ */
+internal fun tabLabels(files: List<Path>): List<String> {
+    val depth = IntArray(files.size)
+    fun label(i: Int): String {
+        val p = files[i]
+        val last = p.nameCount - 1
+        return (depth[i] downTo 0).map { k -> p.getName((last - k).coerceAtLeast(0)).toString() }.joinToString("/")
+    }
+    repeat(files.maxOfOrNull { it.nameCount } ?: 0) {
+        val groups = files.indices.groupBy { label(it) }.values.filter { it.size > 1 }
+        var changed = false
+        for (g in groups) for (i in g) if (depth[i] + 1 < files[i].nameCount) { depth[i]++; changed = true }
+        if (!changed) return@repeat
+    }
+    return files.indices.map { label(it) }
+}

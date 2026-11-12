@@ -367,8 +367,12 @@ class AppStateTest {
             t.join(15_000)
             assertEquals("Cancelled (1 request had finished)", state.cancelledLabel)
             assertEquals(1, state.outcomes.size)
-            state.open(file)   // opening a file clears the notice
+            state.open(dir.resolve("other.http").also { Files.writeString(it, "GET {{base}}/echo\n") })   // another tab has its own results
             assertEquals(null, state.cancelledLabel)
+            assertTrue(state.outcomes.isEmpty())
+            state.switchTo(0)
+            assertEquals("Cancelled (1 request had finished)", state.cancelledLabel)
+            assertEquals(1, state.outcomes.size)
         }
     }
 

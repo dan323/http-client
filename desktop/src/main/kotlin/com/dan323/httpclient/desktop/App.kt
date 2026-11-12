@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -75,7 +76,7 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             Button(enabled = !state.running, onClick = { state.pick { chooseFile(parent, "Open .http file", save = false) }?.let(state::open) }) { Text("Open…") }
             OutlinedButton(enabled = !state.running, onClick = { state.pick { chooseFile(parent, "New .http file", save = true) }?.let(state::create) }) { Text("New…") }
         }
-        Text(state.file?.fileName?.toString()?.plus(if (state.dirty) " •" else "") ?: "No file open", fontWeight = FontWeight.Bold)
+        if (state.file == null) Text("No file open", fontWeight = FontWeight.Bold)   // with a file open its tab shows the name
         RecentFilesMenu(state)
         EnvironmentPicker(state)
         HorizontalDivider()
@@ -133,8 +134,9 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
         }
     }
 
-    // Middle: editor.
+    // Middle: tabs and editor.
     Column(Modifier.weight(1f).fillMaxHeight().padding(vertical = 12.dp)) {
+        if (state.tabs.isNotEmpty()) TabBar(state)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(enabled = state.file != null && state.dirty && !state.running, onClick = { state.save() }) { Text("Save") }
             state.message?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
@@ -181,11 +183,37 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             Text(cancelled, color = MaterialTheme.colorScheme.outline, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
         } else if (state.outcomes.isEmpty()) {
             Text(
-                if (state.running) "Sending…" else "Select a request and press Send (Ctrl/Cmd+Enter).",
+                if (state.runningHere) "Sending…" else "Select a request and press Send (Ctrl/Cmd+Enter).",
                 color = MaterialTheme.colorScheme.outline,
             )
         }
         ResponsePane(state.outcomes, Modifier.fillMaxSize())
+    }
+}
+
+/** One tab per open file: its name (a bullet when it has unsaved edits) and a close button; the active tab is highlighted. */
+@Composable
+private fun TabBar(state: AppState) {
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        state.tabs.forEachIndexed { i, tab ->
+            val selected = i == state.activeTab
+            Row(
+                Modifier.background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                    .clickable { state.switchTo(i) }.padding(start = 10.dp).testTag("tab-$i"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(tab.label + if (tab.dirty) " •" else "", fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, maxLines = 1)
+                Text("×", Modifier.clickable { state.closeTab(i) }.padding(horizontal = 8.dp, vertical = 4.dp).testTag("tab-close-$i"))
+            }
+        }
+    }
+    state.closePrompt?.let { prompt ->
+        Row(Modifier.padding(bottom = 6.dp).testTag("close-prompt"), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Save changes to ${prompt.label}?", style = MaterialTheme.typography.bodySmall)
+            Button(contentPadding = CompactButtonPadding, onClick = { state.confirmClose(save = true) }, modifier = Modifier.testTag("close-save")) { Text("Save") }
+            OutlinedButton(contentPadding = CompactButtonPadding, onClick = { state.confirmClose(save = false) }, modifier = Modifier.testTag("close-discard")) { Text("Discard") }
+            OutlinedButton(contentPadding = CompactButtonPadding, onClick = { state.cancelClose() }, modifier = Modifier.testTag("close-cancel")) { Text("Cancel") }
+        }
     }
 }
 
