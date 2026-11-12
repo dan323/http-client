@@ -23,7 +23,7 @@ access to secrets and also skip it. Documentation-only pull requests skip the wh
 SonarCloud has no mutation-score metric and does not accept third-party plugins, so the mutants that survived are
 imported as external issues. `pitest` (in `core` and `view-model`) is followed by `pitestSonarReport` (registered for every module with the PIT plugin in the
 root [build.gradle.kts](../build.gradle.kts)), which converts `<module>/build/reports/pitest/mutations.xml` into
-`<module>/build/reports/pitest/sonar-issues.json` (Sonar generic issue format): one `MAJOR` code smell per `SURVIVED` mutant
+`<module>/build/reports/pitest/sonar-issues.json` (Sonar generic issue format): one issue per `SURVIVED` mutant (clean code attribute *tested*, maintainability impact *medium*)
 (rule `pitest:survived-mutant`), on the mutated line. `NO_COVERAGE` mutants are not imported: uncovered code is already reported through JaCoCo. The root `sonar` block passes the files that exist as
 `sonar.externalIssuesReportPaths`.
 

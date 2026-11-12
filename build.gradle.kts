@@ -82,10 +82,14 @@ subprojects {
                     if (line !in 1..lineCounts.getOrPut(file) { file.readLines().size }) { skipped++; continue }
                     val path = file.relativeTo(repoRoot.asFile).invariantSeparatorsPath
                     val message = "Mutant survived: ${text("description")} in ${text("mutatedMethod")} (no test fails)"
-                    issues += """{"engineId":"pitest","ruleId":"survived-mutant","severity":"MAJOR","type":"CODE_SMELL",""" +
+                    issues += """{"ruleId":"survived-mutant","effortMinutes":10,""" +
                         """"primaryLocation":{"message":${json(message)},"filePath":${json(path)},"textRange":{"startLine":$line}}}"""
                 }
-                output.get().asFile.writeText("""{"issues":[${issues.joinToString(",")}]}""")
+                // Current generic issue format: the rule (with its clean code attribute and impact) is declared next to the issues.
+                val rule = """{"id":"survived-mutant","name":"Mutant survived the tests","engineId":"pitest",""" +
+                    """"description":"PIT changed this line and no test failed, so the tests do not check what the line does.",""" +
+                    """"cleanCodeAttribute":"TESTED","impacts":[{"softwareQuality":"MAINTAINABILITY","severity":"MEDIUM"}]}"""
+                output.get().asFile.writeText("""{"rules":[$rule],"issues":[${issues.joinToString(",")}]}""")
                 logger.lifecycle("PIT -> Sonar: ${issues.size} mutant issues in ${output.get().asFile} ($skipped skipped: no source file or line)")
             }
         }
