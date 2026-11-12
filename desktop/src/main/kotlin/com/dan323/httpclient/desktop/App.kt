@@ -202,14 +202,14 @@ private fun TabBar(state: AppState) {
                     .clickable { state.switchTo(i) }.padding(start = 10.dp).testTag("tab-$i"),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(tab.name + if (tab.dirty) " •" else "", fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, maxLines = 1)
+                Text(tab.label + if (tab.dirty) " •" else "", fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, maxLines = 1)
                 Text("×", Modifier.clickable { state.closeTab(i) }.padding(horizontal = 8.dp, vertical = 4.dp).testTag("tab-close-$i"))
             }
         }
     }
     state.closePrompt?.let { prompt ->
         Row(Modifier.padding(bottom = 6.dp).testTag("close-prompt"), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Save changes to ${prompt.name}?", style = MaterialTheme.typography.bodySmall)
+            Text("Save changes to ${prompt.label}?", style = MaterialTheme.typography.bodySmall)
             Button(contentPadding = CompactButtonPadding, onClick = { state.confirmClose(save = true) }, modifier = Modifier.testTag("close-save")) { Text("Save") }
             OutlinedButton(contentPadding = CompactButtonPadding, onClick = { state.confirmClose(save = false) }, modifier = Modifier.testTag("close-discard")) { Text("Discard") }
             OutlinedButton(contentPadding = CompactButtonPadding, onClick = { state.cancelClose() }, modifier = Modifier.testTag("close-cancel")) { Text("Cancel") }
