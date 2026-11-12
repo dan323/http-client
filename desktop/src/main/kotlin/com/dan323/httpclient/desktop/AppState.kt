@@ -31,13 +31,11 @@ class AppState(
     val text: String get() = active?.text ?: ""
     val dirty: Boolean get() = active?.dirty ?: false
     val environments: List<String> get() = active?.environments ?: emptyList()
-    /** The choice made while no file is open; it is not remembered and does not carry over to a file. */
-    private var environmentWithoutFile by mutableStateOf<String?>(null)
+    /** The environment chosen for the open file, remembered between sessions; with no file open there is none and setting it does nothing. */
     var environment: String?
-        get() = active?.chosenEnvironment ?: environmentWithoutFile.takeIf { active == null }
+        get() = active?.chosenEnvironment
         set(value) {
-            val doc = active
-            if (doc == null) { environmentWithoutFile = value; return }
+            val doc = active ?: return
             doc.chosenEnvironment = value
             settings?.update { it.withEnvironment(canonical(doc.file), value) }
         }
@@ -50,7 +48,7 @@ class AppState(
     var message by mutableStateOf<String?>(null)
         private set
 
-    /** True when the last run was stopped with [cancel]; cleared when the next run starts or another file is opened. */
+    /** True when the last run was stopped with [cancel]; cleared when the next run starts; opening a file starts a new document, which is not cancelled. */
     val cancelled: Boolean get() = active?.cancelled ?: false
 
     /** A short, self-clearing confirmation (e.g. [CHAIN_RESET_NOTICE]); the UI drops it after a few seconds with [clearNotice]. */
@@ -126,7 +124,7 @@ class AppState(
         }
     }
 
-    /** Request list for [text], parsed when the text changes rather than on every recomposition. */
+    /** The requests of the active document (parsed there, when its text changes). */
     val requests: List<RequestTemplate> get() = active?.requests ?: emptyList()
     val parseError: String? get() = active?.parseError
 
@@ -145,6 +143,8 @@ class AppState(
     private fun openLocked(path: Path) {
         val content = Files.readString(path)   // read first: a failure leaves the current file and text untouched
         val doc = OpenDocument(path, content)   // a fresh document: nothing of the previous file's choices or results carries over
+        // One slot for now: the previous document is replaced without looking at its unsaved edits (they were always dropped
+        // on opening another file). Tabs must not keep this: a document with edits has to be saved or discarded first.
         documents = listOf(doc)
         notice = null
         val key = canonical(path)
@@ -189,8 +189,7 @@ class AppState(
     fun edit(newText: String) {
         if (busy.get()) return
         val doc = active ?: return
-        doc.assignText(newText)
-        doc.dirty = true
+        doc.edit(newText)
     }
 
     /** Returns false (with [message] set) when the file could not be written; refused while a run is in progress. */
@@ -213,7 +212,7 @@ class AppState(
     /** Writes [t] to [doc]'s file; its dirty flag is cleared only if the buffer still equals what was written. False (with [message]) on failure. */
     private fun write(doc: OpenDocument, t: String): Boolean = try {
         Files.writeString(doc.file, t)
-        if (doc.text == t) doc.dirty = false
+        doc.saved(t)
         true
     } catch (e: Exception) {
         message = e.message ?: e::class.simpleName
@@ -232,10 +231,9 @@ class AppState(
             val doc = active ?: return
             val path = doc.file
             cancellation.reset()
-            doc.cancelled = false
             notice = null
             running = true
-            synchronized(lock) { doc.outcomes = emptyList() }   // never leave the previous run's results next to a new error
+            synchronized(lock) { doc.beginRun() }   // never leave the previous run's results next to a new error
             val t = doc.text   // one snapshot for the write and the run
             if (!write(doc, t)) return   // keep the save error visible instead of running stale text
             message = null
@@ -247,11 +245,11 @@ class AppState(
                 return
             }
             val tracked = cancellation.track {
-                runner.execute(path, t, if (all) null else index, doc.chosenEnvironment) { o -> synchronized(lock) { doc.outcomes = doc.outcomes + o } }
+                runner.execute(path, t, if (all) null else index, doc.chosenEnvironment) { o -> synchronized(lock) { doc.addOutcome(o) } }
             }
             recordRun(doc)
             // Outcomes that finished before the cancel stay; the cancelled request is not remembered (see RunController).
-            if (tracked is Tracked.Cancelled) doc.cancelled = true
+            if (tracked is Tracked.Cancelled) doc.markCancelled()
         } catch (e: Exception) {
             message = e.message ?: e::class.simpleName
         } finally {
@@ -305,9 +303,9 @@ class AppState(
 
     private fun refreshEnvironments(doc: OpenDocument) {
         try {
-            doc.environments = Workspace.environmentNames(doc.file)
+            doc.updateEnvironments(Workspace.environmentNames(doc.file))
         } catch (e: Exception) {
-            doc.environments = emptyList()   // never keep another file's (or a now-broken) list
+            doc.updateEnvironments(emptyList())   // never keep another file's (or a now-broken) list
             throw e
         }
         // A chosen name that vanished is kept: running reports "Unknown environment" instead of silently running without one.

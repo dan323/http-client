@@ -15,7 +15,10 @@ import java.nio.file.Path
 internal class OpenDocument(val file: Path, content: String) {
     var text by mutableStateOf(content)
         private set
+
+    /** True when [text] has edits that are not in the file; set by [edit], cleared by [saved]. */
     var dirty by mutableStateOf(false)
+        private set
 
     /** Request list for [text], parsed when the text changes rather than on every recomposition. */
     var requests by mutableStateOf(Workspace.parse(content))
@@ -26,13 +29,41 @@ internal class OpenDocument(val file: Path, content: String) {
 
     /** Environment names found for this file; the choice belongs to them and is forgotten when the file is opened again. */
     var environments by mutableStateOf<List<String>>(emptyList())
+        private set
     var chosenEnvironment by mutableStateOf<String?>(null)
+
+    /** Results of the last run. Written only by [AppState], under its lock, while a run is in progress. */
     var outcomes by mutableStateOf<List<RunOutcome>>(emptyList())
+        private set
 
     /** True when the last run was stopped; cleared when the next run starts. */
     var cancelled by mutableStateOf(false)
+        private set
 
-    fun assignText(value: String) {
+    /** Replaces the text with the user's edit; the document is then [dirty]. */
+    fun edit(value: String) {
+        parse(value)
+        dirty = true
+    }
+
+    /** [written] is now in the file; the document is clean only if the buffer still equals it. */
+    fun saved(written: String) {
+        if (text == written) dirty = false
+    }
+
+    fun updateEnvironments(names: List<String>) { environments = names }
+
+    /** Clears the results and the cancelled flag for a new run. */
+    fun beginRun() {
+        cancelled = false
+        outcomes = emptyList()
+    }
+
+    fun addOutcome(outcome: RunOutcome) { outcomes = outcomes + outcome }
+
+    fun markCancelled() { cancelled = true }
+
+    private fun parse(value: String) {
         text = value
         requests = Workspace.parse(value)
         parseError = Workspace.parseError(value)

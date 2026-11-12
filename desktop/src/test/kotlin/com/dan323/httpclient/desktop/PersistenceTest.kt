@@ -205,8 +205,8 @@ class PersistenceTest {
         state().use { it.restoreLastFile(); assertNull(it.file) }
     }
 
-    @Test fun `changing the environment of no file is not remembered`() {
-        state().use { s -> s.environment = "x"; assertEquals("x", s.environment) }
+    @Test fun `changing the environment of no file does nothing and is not remembered`() {
+        state().use { s -> s.environment = "x"; assertNull(s.environment) }
         assertNull(persistence().use { it.current.environments.values.firstOrNull() })
     }
 
