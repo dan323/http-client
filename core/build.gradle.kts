@@ -9,7 +9,7 @@ dependencies {
 }
 
 // Mutation testing, run on demand (`./gradlew :core:pitest`, report in core/build/reports/pitest); see
-// "Build quality reports" in the README. Only the hexagon is mutated for now.
+// "Build quality reports" in the README. `view-model` is mutated too (see its build file).
 pitest {
     junit5PluginVersion.set("1.2.1")
     targetClasses.set(listOf("com.dan323.httpclient.core.*"))

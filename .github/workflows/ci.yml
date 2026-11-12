@@ -4,9 +4,9 @@ on:
   push:
     branches: [master]
   pull_request: {}
-  # PIT is slower than the tests, so it only runs weekly and on demand (Actions > CI > Run workflow).
+  # PIT is slower than the tests, so it only runs once a day and on demand (Actions > CI > Run workflow).
   schedule:
-    - cron: "0 4 * * 1"
+    - cron: "0 4 * * *"
   workflow_dispatch: {}
 
 concurrency:
@@ -134,24 +134,33 @@ jobs:
           name: quality-reports
           path: quality-reports/build/reports
 
-  # Mutation testing on the hexagon (core). Not on every push: see the schedule trigger above.
+  # Mutation testing on core and view-model. Not on every push: see the schedule trigger above.
   mutation:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0 # for the SonarCloud analysis below
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
-        if: needs.changes.outputs.code == 'true'
         with:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
-        if: needs.changes.outputs.code == 'true'
-      - name: PIT (core)
-        run: ./gradlew :core:pitest --console=plain
+      - name: PIT (core, view-model)
+        run: ./gradlew :core:pitest :view-model:pitest --console=plain --continue
+      # Full analysis (coverage + surviving mutants as external issues, see docs/ci-sonar.md). It has to include the
+      # coverage report: an analysis without it would reset the coverage shown in SonarCloud.
+      - name: SonarCloud analysis with mutants
+        if: ${{ !cancelled() && env.SONAR_TOKEN != '' }}
+        run: xvfb-run -a ./gradlew :quality-reports:qualityReports sonar --console=plain
       - name: Upload PIT report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: pitest-core
-          path: core/build/reports/pitest
+          name: pitest
+          path: |
+            core/build/reports/pitest
+            view-model/build/reports/pitest
