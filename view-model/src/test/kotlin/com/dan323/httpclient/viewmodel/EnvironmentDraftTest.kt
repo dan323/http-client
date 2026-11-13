@@ -7,6 +7,7 @@ import com.dan323.httpclient.core.domain.EnvironmentEdit.RenameEnvironment
 import com.dan323.httpclient.core.domain.EnvironmentEdit.SetVariable
 import com.dan323.httpclient.core.domain.EnvironmentNames
 import com.dan323.httpclient.core.domain.HiddenContent
+import com.dan323.httpclient.core.domain.applying
 import com.dan323.httpclient.core.port.out.EnvironmentFileContent
 import com.dan323.httpclient.core.port.out.EnvironmentScope.PRIVATE
 import com.dan323.httpclient.core.port.out.EnvironmentScope.SHARED
@@ -112,11 +113,11 @@ class EnvironmentDraftTest {
         assertEquals(listOf(RemoveVariable("dev", "token")), privateRemoved.edits(PRIVATE))
     }
 
-    @Test fun `a new environment is added to the shared file when empty and to the files that hold its variables otherwise`() {
+    @Test fun `a new environment is always added to the shared file, and to the private file only for its private variables`() {
         assertEquals(listOf(AddEnvironment("new")), both.addEnvironment("new").edits(SHARED))
         assertEquals(emptyList(), both.addEnvironment("new").edits(PRIVATE))
         val withSecret = both.addEnvironment("new").addVariable(3).updateVariable(3, 0) { it.copy(name = "t", value = "v") }
-        assertEquals(emptyList(), withSecret.edits(SHARED))
+        assertEquals(listOf(AddEnvironment("new")), withSecret.edits(SHARED))
         assertEquals(listOf(AddEnvironment("new"), SetVariable("new", "t", "v")), withSecret.edits(PRIVATE))
         val shared = withSecret.updateVariable(3, 0) { it.copy(private = false) }
         assertEquals(listOf(AddEnvironment("new"), SetVariable("new", "t", "v")), shared.edits(SHARED))
@@ -172,8 +173,6 @@ class EnvironmentDraftTest {
         assertEquals(1, problems.size)
         assertEquals(null, problems[0].environment)
         assertTrue("nested" in problems[0].message && "object or an array" in problems[0].message)
-        val swap = both.renameEnvironment(0, "prod").renameEnvironment(1, "dev")
-        assertTrue(swap.check().isNotEmpty())
     }
 
     @Test fun `an environment that is not an object is locked, takes no new variable, and can still be removed`() {
@@ -189,5 +188,51 @@ class EnvironmentDraftTest {
         val d = draft(content(EnvironmentNames.SHARED to mapOf("a" to "1")))
         assertEquals(EnvironmentNames.SHARED, d.environments[0].name)
         assertTrue(d.renameEnvironment(0, "x").check().isNotEmpty())
+    }
+
+    @Test fun `a swap of two environment names goes through a temporary name and applies`() {
+        val d = both.renameEnvironment(0, "prod").renameEnvironment(1, "dev")
+        assertEquals(emptyList(), d.check())
+        val applied = d.baseline.shared.environments.applying(d.edits(SHARED))
+        assertEquals(mapOf("host" to "a", "token" to "public"), applied["prod"])
+        assertEquals(mapOf("host" to "b"), applied["dev"])
+        assertEquals(listOf("prod", "dev"), applied.keys.toList().sorted().reversed())
+    }
+
+    @Test fun `a chain of renames is ordered so each target is free`() {
+        val d = draft(content("a" to mapOf("x" to "1"), "b" to mapOf("x" to "2")))
+            .renameEnvironment(0, "b").renameEnvironment(1, "c")
+        assertEquals(listOf(RenameEnvironment("b", "c"), RenameEnvironment("a", "b")), d.edits(SHARED))
+        assertEquals(emptyList(), d.check())
+    }
+
+    @Test fun `a rename onto a removed environment is applied after the removal`() {
+        val d = draft(content("a" to emptyMap(), "b" to emptyMap())).removeEnvironment(1).renameEnvironment(0, "b")
+        assertEquals(listOf(RemoveEnvironment("b"), RenameEnvironment("a", "b")), d.edits(SHARED))
+        assertEquals(emptyList(), d.check())
+    }
+
+    @Test fun `names already in a file are not checked, only the ones an edit writes`() {
+        val odd = draft(content(" dev" to mapOf("my var" to "1"), "ok" to mapOf("other" to "2")))
+        assertEquals(emptyList(), odd.check())
+        assertEquals(emptyList(), odd.updateVariable(1, 0) { it.copy(value = "3") }.check())
+        val problems = odd.updateVariable(0, 0) { it.copy(value = "9") }.check()
+        assertEquals(1, problems.size)
+        assertNull(problems[0].environment)
+        assertTrue(odd.renameEnvironment(1, " x").check().any { it.environment == 1 })
+    }
+
+    @Test fun `a locked environment takes no change to its variables`() {
+        val d = draft(content("dev" to emptyMap(), hidden = HiddenContent(notObjects = setOf("dev"))))
+        val withRow = EnvironmentDraft(listOf(d.environments[0].copy(variables = listOf(EditorVariable("a", "1")))), d.baseline)
+        assertSame(withRow, withRow.updateVariable(0, 0) { it.copy(value = "2") })
+        assertSame(withRow, withRow.removeVariable(0, 0))
+    }
+
+    @Test fun `the file that gains a variable is written first`() {
+        assertEquals(listOf(PRIVATE, SHARED), both.updateVariable(0, 0) { it.copy(private = true) }.writeOrder())
+        assertEquals(listOf(SHARED, PRIVATE), both.updateVariable(0, 2) { it.copy(private = false) }.writeOrder())
+        assertEquals(listOf(SHARED), both.updateVariable(0, 0) { it.copy(value = "z") }.writeOrder())
+        assertEquals(emptyList(), both.writeOrder())
     }
 }

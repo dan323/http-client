@@ -70,12 +70,12 @@ class EnvironmentDraft internal constructor(
 
     fun updateVariable(i: Int, j: Int, change: (EditorVariable) -> EditorVariable): EnvironmentDraft =
         changeEnvironment(i) { env ->
-            val v = env.variables.getOrNull(j) ?: return@changeEnvironment env
+            val v = env.variables.getOrNull(j)?.takeIf { !env.locked } ?: return@changeEnvironment env
             env.copy(variables = env.variables.toMutableList().also { it[j] = change(v) })
         }
 
     fun removeVariable(i: Int, j: Int): EnvironmentDraft =
-        changeEnvironment(i) { env -> env.copy(variables = env.variables.filterIndexed { index, _ -> index != j }) }
+        changeEnvironment(i) { env -> if (env.locked) env else env.copy(variables = env.variables.filterIndexed { index, _ -> index != j }) }
 
     /** The version of the file of [scope] this draft was loaded from (null when it did not exist). */
     fun version(scope: EnvironmentScope): String? = baseline.content(scope).version
@@ -86,32 +86,76 @@ class EnvironmentDraft internal constructor(
         return env.variables.any { it.name == name && it.private } && wasInBoth(env, name)
     }
 
+    private fun inFiles(env: EditorEnvironment, name: String): Boolean {
+        val original = env.original ?: return false
+        return name in baseline.shared.environments[original].orEmpty() || name in baseline.private.environments[original].orEmpty()
+    }
+
     /** Whether [name] was in both files of [env] when they were loaded: only then is its shared copy left alone while it is private (a shared variable made private moves). */
     private fun wasInBoth(env: EditorEnvironment, name: String): Boolean {
         val original = env.original ?: return false
         return name in baseline.shared.environments[original].orEmpty() && name in baseline.private.environments[original].orEmpty()
     }
 
+    private val editsByScope: Map<EnvironmentScope, List<EnvironmentEdit>> by lazy { EnvironmentScope.entries.associateWith(::computeEdits) }
+
     /** The edits that bring the file of [scope] from what was loaded to this draft; empty when nothing changes there. */
-    fun edits(scope: EnvironmentScope): List<EnvironmentEdit> {
+    fun edits(scope: EnvironmentScope): List<EnvironmentEdit> = editsByScope.getValue(scope)
+
+    /**
+     * The scopes with edits, in the order to write them: the file that gains a variable before the file that loses it, so a
+     * failure between the two writes leaves the value in both files instead of in neither.
+     */
+    fun writeOrder(): List<EnvironmentScope> {
+        val scopes = EnvironmentScope.entries.filter { edits(it).isNotEmpty() }
+        fun sets(scope: EnvironmentScope) = edits(scope).filterIsInstance<EnvironmentEdit.SetVariable>().map { it.environment to it.name }.toSet()
+        fun removes(scope: EnvironmentScope) = edits(scope).filterIsInstance<EnvironmentEdit.RemoveVariable>().map { it.environment to it.name }.toSet()
+        val privateGains = sets(EnvironmentScope.PRIVATE).any { it in removes(EnvironmentScope.SHARED) }
+        return if (privateGains) scopes.sortedBy { if (it == EnvironmentScope.PRIVATE) 0 else 1 } else scopes
+    }
+
+    private fun computeEdits(scope: EnvironmentScope): List<EnvironmentEdit> {
         val file = baseline.content(scope).environments
         val kept = environments.mapNotNull { it.original }.toSet()
         val edits = mutableListOf<EnvironmentEdit>()
         for (name in file.keys) if (name !in kept) edits += EnvironmentEdit.RemoveEnvironment(name)
-        for (env in environments) {
-            val old = env.original?.takeIf { it in file }
-            if (old != null && old != env.name) edits += EnvironmentEdit.RenameEnvironment(old, env.name)
-        }
+        edits += renames(file.keys.filter { it in kept }.toSet(), environments.mapNotNull { env ->
+            env.original?.takeIf { it in file && it != env.name }?.let { it to env.name }
+        })
         for (env in environments) {
             val old = env.original?.let { file[it] }
             val desired = if (env.locked) old.orEmpty() else desired(env, scope)
-            if (old == null && (desired.isNotEmpty() || (env.original == null && scope == EnvironmentScope.SHARED && env.variables.isEmpty()))) {
+            // A new environment is always listed in the shared file (a name is not secret); the private file gets it only for its variables.
+            if (old == null && (desired.isNotEmpty() || (env.original == null && scope == EnvironmentScope.SHARED))) {
                 edits += EnvironmentEdit.AddEnvironment(env.name)
             }
             for (name in old.orEmpty().keys) if (name !in desired) edits += EnvironmentEdit.RemoveVariable(env.name, name)
             for ((name, value) in desired) if (old?.get(name) != value) edits += EnvironmentEdit.SetVariable(env.name, name, value)
         }
         return edits
+    }
+
+    /** The renames [wanted] (from, to) in an order each can be applied in, given the environments [existing]; a cycle (a swap) goes through a temporary name. */
+    private fun renames(existing: Set<String>, wanted: List<Pair<String, String>>): List<EnvironmentEdit> {
+        val names = existing.toMutableSet()
+        val pending = wanted.toMutableList()
+        val out = mutableListOf<EnvironmentEdit>()
+        while (pending.isNotEmpty()) {
+            val ready = pending.firstOrNull { (_, to) -> to !in names }
+            if (ready != null) {
+                pending.remove(ready)
+                out += EnvironmentEdit.RenameEnvironment(ready.first, ready.second)
+                names.remove(ready.first); names.add(ready.second)
+            } else {
+                val (from, to) = pending.removeAt(0)
+                var temp = "$from (renaming)"
+                while (temp in names || pending.any { it.second == temp }) temp += "_"
+                out += EnvironmentEdit.RenameEnvironment(from, temp)
+                names.remove(from); names.add(temp)
+                pending += temp to to
+            }
+        }
+        return out
     }
 
     /** What the file of [scope] should hold for [env]: its variables of that file, and for a private variable the untouched shared copy in the shared file. */
@@ -129,7 +173,7 @@ class EnvironmentDraft internal constructor(
     }
 
     /** Whether saving would change a file. */
-    val isDirty: Boolean get() = EnvironmentScope.entries.any { edits(it).isNotEmpty() }
+    val isDirty: Boolean get() = editsByScope.values.any { it.isNotEmpty() }
 
     /**
      * Why this draft cannot be saved: invalid or repeated names, and anything the files would refuse (judged by the same
@@ -139,11 +183,12 @@ class EnvironmentDraft internal constructor(
         val problems = mutableListOf<DraftProblem>()
         val seen = mutableSetOf<String>()
         environments.forEachIndexed { i, env ->
-            EnvironmentNames.environmentProblem(env.name)?.let { problems += DraftProblem(i, null, it) }
+            // A name already in a file is not checked unless an edit writes it (as `applying` does), so an odd hand-written name does not block unrelated saves.
+            if (env.name != env.original) EnvironmentNames.environmentProblem(env.name)?.let { problems += DraftProblem(i, null, it) }
             if (!seen.add(env.name)) problems += DraftProblem(i, null, "There is already an environment named ${env.name}.")
             val names = mutableSetOf<String>()
             env.variables.forEachIndexed { j, v ->
-                EnvironmentNames.variableProblem(v.name)?.let { problems += DraftProblem(i, j, it) }
+                if (!inFiles(env, v.name)) EnvironmentNames.variableProblem(v.name)?.let { problems += DraftProblem(i, j, it) }
                 if (!names.add(v.name) && v.name.isNotEmpty()) problems += DraftProblem(i, j, "There is already a variable named ${v.name} in ${env.name}.")
             }
         }

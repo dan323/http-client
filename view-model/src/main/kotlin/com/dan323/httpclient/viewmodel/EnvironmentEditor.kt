@@ -14,8 +14,11 @@ sealed interface SaveOutcome {
     /** The draft has [problems]; nothing was written. */
     data class Invalid(val problems: List<DraftProblem>) : SaveOutcome
 
-    /** The file of [scope] changed since it was loaded; nothing was written. Reload to see the new state (the draft is dropped). */
-    data class Changed(val scope: EnvironmentScope) : SaveOutcome
+    /**
+     * The file of [scope] changed since it was loaded. Usually nothing was written ([written] is empty) and a reload shows
+     * the new state (the draft is dropped); when a file was already written the editor must be reloaded before saving again.
+     */
+    data class Changed(val scope: EnvironmentScope, val written: List<EnvironmentScope> = emptyList()) : SaveOutcome
 
     /** A file could not be read or written. [written] are the scopes already saved; when it is not empty the editor must be reloaded before saving again. */
     data class Failed(val message: String, val written: List<EnvironmentScope> = emptyList()) : SaveOutcome
@@ -69,11 +72,12 @@ class EnvironmentEditor(private val store: EnvironmentFileStore) {
         if (needsReload) return SaveOutcome.Failed("The files changed while saving; reload before saving again.")
         val problems = draft.check()
         if (problems.isNotEmpty()) return SaveOutcome.Invalid(problems)
-        val scopes = EnvironmentScope.entries.filter { draft.edits(it).isNotEmpty() }
+        val scopes = draft.writeOrder()
         if (scopes.isEmpty()) return SaveOutcome.NothingToSave
         val written = mutableListOf<EnvironmentScope>()
         try {
-            for (scope in scopes) {
+            // Both files are checked, also one that is not written: what a file gets depends on what the other held.
+            for (scope in EnvironmentScope.entries) {
                 if (store.read(scope).version != draft.version(scope)) return SaveOutcome.Changed(scope)
             }
             for (scope in scopes) {
@@ -81,7 +85,7 @@ class EnvironmentEditor(private val store: EnvironmentFileStore) {
                 written += scope
             }
         } catch (e: EnvironmentFileChangedException) {
-            return failed(SaveOutcome.Changed(scopes[written.size]), written)
+            return failed(SaveOutcome.Changed(scopes[written.size], written.toList()), written)
         } catch (e: EnvironmentFileException) {
             return failed(SaveOutcome.Failed(e.message ?: "An environment file cannot be saved.", written.toList()), written)
         } catch (e: EnvironmentEditException) {

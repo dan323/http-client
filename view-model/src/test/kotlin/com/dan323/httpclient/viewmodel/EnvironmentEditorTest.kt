@@ -143,7 +143,7 @@ class EnvironmentEditorTest {
         val s = store().also { it.raceOnWrite = PRIVATE }
         val e = loaded(s)
         e.edit { it.updateVariable(0, 0) { v -> v.copy(value = "b") }.updateVariable(0, 1) { v -> v.copy(value = "x") } }
-        assertEquals(SaveOutcome.Changed(PRIVATE), e.save())
+        assertEquals(SaveOutcome.Changed(PRIVATE, listOf(SHARED)), e.save())
         assertTrue(e.needsReload)
     }
 
@@ -155,5 +155,24 @@ class EnvironmentEditorTest {
         assertTrue(out is SaveOutcome.Failed && out.written == listOf(SHARED) && "unreadable" in out.message)
         assertNotNull(e.loadError)
         assertTrue(e.draft.environments.isEmpty())
+    }
+
+    @Test fun `a shared variable made private is written to the private file first, so a failure keeps the value`() {
+        val s = store().also { it.writeFails = PRIVATE }
+        val e = loaded(s)
+        e.edit { it.updateVariable(0, 0) { v -> v.copy(private = true) } }
+        val out = e.save()
+        assertTrue(out is SaveOutcome.Failed && out.written.isEmpty())
+        assertEquals("a", s.files.getValue(SHARED)!!.getValue("dev").getValue("host"))
+        assertEquals(false, e.needsReload)
+    }
+
+    @Test fun `a change in the file that is not written is also reported`() {
+        val s = store()
+        val e = loaded(s)
+        e.edit { it.updateVariable(0, 1) { v -> v.copy(value = "x") } }
+        s.versions[SHARED] = 9
+        assertEquals(SaveOutcome.Changed(SHARED), e.save())
+        assertTrue(s.writes.isEmpty())
     }
 }
