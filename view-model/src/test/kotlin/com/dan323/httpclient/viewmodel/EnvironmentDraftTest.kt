@@ -235,4 +235,28 @@ class EnvironmentDraftTest {
         assertEquals(listOf(SHARED), both.updateVariable(0, 0) { it.copy(value = "z") }.writeOrder())
         assertEquals(emptyList(), both.writeOrder())
     }
+
+    @Test fun `a rename onto a name that stays taken terminates, and check reports the repeat`() {
+        val d = draft(content("a" to emptyMap(), "b" to emptyMap())).renameEnvironment(0, "b")
+        assertEquals(listOf(RenameEnvironment("a", "b")), d.edits(SHARED))
+        assertTrue(d.isDirty)
+        assertEquals(listOf(SHARED), d.writeOrder())
+        assertTrue(d.check().any { "already an environment named b" in it.message })
+        val two = draft(content("a" to emptyMap(), "b" to emptyMap(), "c" to emptyMap())).renameEnvironment(0, "x").renameEnvironment(1, "x")
+        assertTrue(two.isDirty)
+        assertTrue(two.check().isNotEmpty())
+        val mixed = draft(content("a" to emptyMap(), "b" to emptyMap(), "c" to emptyMap()))
+            .renameEnvironment(0, "b").renameEnvironment(1, "a").renameEnvironment(2, "a")
+        assertTrue(mixed.isDirty)
+        assertTrue(mixed.check().isNotEmpty())
+    }
+
+    @Test fun `moves in both directions in one save are refused`() {
+        val d = draft(content("dev" to mapOf("host" to "a")), content("dev" to mapOf("key" to "k")))
+            .updateVariable(0, 0) { it.copy(private = true) }.updateVariable(0, 1) { it.copy(private = false) }
+        val problems = d.check()
+        assertEquals(1, problems.size)
+        assertTrue("one save" in problems[0].message)
+        assertEquals(emptyList(), d.updateVariable(0, 1) { it.copy(private = true) }.check())
+    }
 }

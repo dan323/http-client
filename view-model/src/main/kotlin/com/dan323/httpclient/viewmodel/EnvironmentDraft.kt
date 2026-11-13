@@ -108,10 +108,13 @@ class EnvironmentDraft internal constructor(
      */
     fun writeOrder(): List<EnvironmentScope> {
         val scopes = EnvironmentScope.entries.filter { edits(it).isNotEmpty() }
-        fun sets(scope: EnvironmentScope) = edits(scope).filterIsInstance<EnvironmentEdit.SetVariable>().map { it.environment to it.name }.toSet()
-        fun removes(scope: EnvironmentScope) = edits(scope).filterIsInstance<EnvironmentEdit.RemoveVariable>().map { it.environment to it.name }.toSet()
-        val privateGains = sets(EnvironmentScope.PRIVATE).any { it in removes(EnvironmentScope.SHARED) }
-        return if (privateGains) scopes.sortedBy { if (it == EnvironmentScope.PRIVATE) 0 else 1 } else scopes
+        return if (moves(EnvironmentScope.PRIVATE, EnvironmentScope.SHARED)) scopes.sortedBy { if (it == EnvironmentScope.PRIVATE) 0 else 1 } else scopes
+    }
+
+    /** Whether some variable is set in [to] and removed from [from] (it moves from one file to the other). */
+    private fun moves(to: EnvironmentScope, from: EnvironmentScope): Boolean {
+        val removed = edits(from).filterIsInstance<EnvironmentEdit.RemoveVariable>().map { it.environment to it.name }.toSet()
+        return edits(to).filterIsInstance<EnvironmentEdit.SetVariable>().any { (it.environment to it.name) in removed }
     }
 
     private fun computeEdits(scope: EnvironmentScope): List<EnvironmentEdit> {
@@ -140,8 +143,14 @@ class EnvironmentDraft internal constructor(
         val names = existing.toMutableSet()
         val pending = wanted.toMutableList()
         val out = mutableListOf<EnvironmentEdit>()
+        var steps = 2 * wanted.size + 2
         while (pending.isNotEmpty()) {
             val ready = pending.firstOrNull { (_, to) -> to !in names }
+            // An invalid draft (a target that stays taken, as a repeated name does) cannot be ordered: its renames go out as they are, and `check` reports the repeat.
+            if (ready == null && (--steps < 0 || pending.none { (_, to) -> pending.any { it.first == to } })) {
+                pending.mapTo(out) { EnvironmentEdit.RenameEnvironment(it.first, it.second) }
+                break
+            }
             if (ready != null) {
                 pending.remove(ready)
                 out += EnvironmentEdit.RenameEnvironment(ready.first, ready.second)
@@ -193,6 +202,9 @@ class EnvironmentDraft internal constructor(
             }
         }
         if (problems.isNotEmpty()) return problems
+        if (moves(EnvironmentScope.PRIVATE, EnvironmentScope.SHARED) && moves(EnvironmentScope.SHARED, EnvironmentScope.PRIVATE)) {
+            return listOf(DraftProblem(null, null, "Variables cannot move to the private file and to the shared file in one save; save one move first."))
+        }
         for (scope in EnvironmentScope.entries) {
             val content = baseline.content(scope)
             try {
