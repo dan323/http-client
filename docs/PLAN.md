@@ -46,7 +46,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 | ID | Task | Serves | Size | Needs |
 |---|---|---|---|---|
 | T16 | **Desktop editor intelligence:** variable completion, diagnostics from T13, find/replace | F14 | L | – (T13 done: `VariableAnalysis`) |
-| T20 | **Environment editor:** write support on the environment port and a UI to edit variables. In steps: (1) `EnvironmentFileStore` in `core` and `JsonEnvironmentFileStore` in `adapters` (done); (2) the editor model in `view-model`; (3) the desktop editor panel | F17 | M | – |
+| T20 | **Environment editor:** write support on the environment port and a UI to edit variables. In steps: (1) `EnvironmentFileStore` in `core` and `JsonEnvironmentFileStore` in `adapters` (done); (2) the editor model in `view-model` (done: `EnvironmentDraft`, `EnvironmentEditor`); (3) the desktop editor panel | F17 | M | – |
 | T21 | **Plugin GUI verification:** checked by hand on Ultimate 2026.3 (IU-263.7307.200) with the 0.5.0-rc1 zip, see `intellij-plugin/README.md`; still open: a Community install and the 2026.1 baseline (the `Ctrl+Alt+R` run shortcut is still to be tried in an IDE) | F20, F19, F18 | S | – |
 | T22 | **Plugin intelligence:** completion, go-to-request, inspections from T13 | F18, F14 | L | T21 (T13 done: `VariableAnalysis`) |
 | T23 | **Plugin response panel:** remember the environment across restarts, run all | F19 | M | T21 |
