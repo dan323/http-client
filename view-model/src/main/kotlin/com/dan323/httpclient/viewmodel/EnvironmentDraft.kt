@@ -83,21 +83,23 @@ class EnvironmentDraft internal constructor(
     /** The version of the file of [scope] this draft was loaded from (null when it did not exist). */
     fun version(scope: EnvironmentScope): String? = baseline.content(scope).version
 
-    /** Whether the private variable [name] of environment [i] also has a value in the shared file, which stays as it is while the variable is private. */
+    /** Whether the private variable [name] of environment [i] also has a value in the shared file, which stays (under the row's new name, if renamed) while the variable is private. */
     fun hasSharedCopy(i: Int, name: String): Boolean {
         val env = environments.getOrNull(i) ?: return false
-        return env.variables.any { it.name == name && it.private } && wasInBoth(env, name)
+        return env.variables.any { it.name == name && sharedCopy(env, it) != null }
+    }
+
+    /** The value in the shared file of the private row [v] that was in both files when loaded (kept while it stays private), else null. */
+    private fun sharedCopy(env: EditorEnvironment, v: EditorVariable): String? {
+        val original = env.original ?: return null
+        val was = v.originalName ?: return null
+        if (!v.private || was !in baseline.private.environments[original].orEmpty()) return null
+        return baseline.shared.environments[original]?.get(was)
     }
 
     private fun inFiles(env: EditorEnvironment, name: String): Boolean {
         val original = env.original ?: return false
         return name in baseline.shared.environments[original].orEmpty() || name in baseline.private.environments[original].orEmpty()
-    }
-
-    /** Whether [name] was in both files of [env] when they were loaded: only then is its shared copy left alone while it is private (a shared variable made private moves). */
-    private fun wasInBoth(env: EditorEnvironment, name: String): Boolean {
-        val original = env.original ?: return false
-        return name in baseline.shared.environments[original].orEmpty() && name in baseline.private.environments[original].orEmpty()
     }
 
     private val editsByScope: Map<EnvironmentScope, List<EnvironmentEdit>> by lazy { EnvironmentScope.entries.associateWith(::computeEdits) }
@@ -184,13 +186,12 @@ class EnvironmentDraft internal constructor(
 
     /** What the file of [scope] should hold for [env]: its variables of that file, and for a private variable the untouched shared copy in the shared file. */
     private fun desired(env: EditorEnvironment, scope: EnvironmentScope): Map<String, String> {
-        val shared = env.original?.let { baseline.shared.environments[it] }.orEmpty()
         val out = LinkedHashMap<String, String>()
         for (v in env.variables) {
             when {
                 scope == EnvironmentScope.PRIVATE && v.private -> out[v.name] = v.value
                 scope == EnvironmentScope.SHARED && !v.private -> out[v.name] = v.value
-                scope == EnvironmentScope.SHARED && wasInBoth(env, v.name) -> out[v.name] = shared.getValue(v.name)
+                scope == EnvironmentScope.SHARED -> sharedCopy(env, v)?.let { out[v.name] = it }
             }
         }
         return out

@@ -271,4 +271,13 @@ class EnvironmentDraftTest {
         val sameFile = files.updateVariable(0, 0) { it.copy(name = "url") }
         assertEquals(listOf(SHARED), sameFile.writeOrder())
     }
+
+    @Test fun `renaming a variable that is in both files renames both copies and keeps both values`() {
+        val d = both.updateVariable(0, 1) { it.copy(name = "url") }
+        assertEquals(listOf(RemoveVariable("dev", "token"), SetVariable("dev", "url", "public")), d.edits(SHARED))
+        assertEquals(listOf(RemoveVariable("dev", "token"), SetVariable("dev", "url", "secret")), d.edits(PRIVATE))
+        assertTrue(d.hasSharedCopy(0, "url"))
+        assertFalse(d.hasSharedCopy(0, "token"))
+        assertEquals(emptyList(), d.check())
+    }
 }
