@@ -11,8 +11,11 @@ import com.dan323.httpclient.core.port.out.EnvironmentScope
 /** What a private value shows instead of its text until the user asks to see it. */
 const val MASKED_VALUE = "••••••••"
 
-/** One row of the editor table. A private variable lives in the private file (secrets, never committed), the others in the shared one. */
-data class EditorVariable(val name: String, val value: String, val private: Boolean = true) {
+/**
+ * One row of the editor table. A private variable lives in the private file (secrets, never committed), the others in the shared one.
+ * [originalName] is the name the row had when the files were loaded (null for a new row), which tells a moved row from a removed one when it is also renamed.
+ */
+data class EditorVariable(val name: String, val value: String, val private: Boolean = true, val originalName: String? = null) {
     /** The text to show: a private value is masked (an empty one is not) unless [reveal]. */
     fun shown(reveal: Boolean): String = if (private && !reveal && value.isNotEmpty()) MASKED_VALUE else value
 }
@@ -108,13 +111,25 @@ class EnvironmentDraft internal constructor(
      */
     fun writeOrder(): List<EnvironmentScope> {
         val scopes = EnvironmentScope.entries.filter { edits(it).isNotEmpty() }
-        return if (moves(EnvironmentScope.PRIVATE, EnvironmentScope.SHARED)) scopes.sortedBy { if (it == EnvironmentScope.PRIVATE) 0 else 1 } else scopes
+        return if (movesToPrivate()) scopes.sortedBy { if (it == EnvironmentScope.PRIVATE) 0 else 1 } else scopes
     }
 
-    /** Whether some variable is set in [to] and removed from [from] (it moves from one file to the other). */
-    private fun moves(to: EnvironmentScope, from: EnvironmentScope): Boolean {
-        val removed = edits(from).filterIsInstance<EnvironmentEdit.RemoveVariable>().map { it.environment to it.name }.toSet()
-        return edits(to).filterIsInstance<EnvironmentEdit.SetVariable>().any { (it.environment to it.name) in removed }
+    /** Whether some row that was only in the shared file is now private (it moves, also when renamed). */
+    private fun movesToPrivate(): Boolean = environments.any { env ->
+        val original = env.original
+        original != null && env.variables.any { v ->
+            val was = v.originalName
+            v.private && was != null && was in baseline.shared.environments[original].orEmpty() && was !in baseline.private.environments[original].orEmpty()
+        }
+    }
+
+    /** Whether some row that was in the private file is now shared (it moves, also when renamed). */
+    private fun movesToShared(): Boolean = environments.any { env ->
+        val original = env.original
+        original != null && env.variables.any { v ->
+            val was = v.originalName
+            !v.private && was != null && was in baseline.private.environments[original].orEmpty()
+        }
     }
 
     private fun computeEdits(scope: EnvironmentScope): List<EnvironmentEdit> {
@@ -202,7 +217,7 @@ class EnvironmentDraft internal constructor(
             }
         }
         if (problems.isNotEmpty()) return problems
-        if (moves(EnvironmentScope.PRIVATE, EnvironmentScope.SHARED) && moves(EnvironmentScope.SHARED, EnvironmentScope.PRIVATE)) {
+        if (movesToPrivate() && movesToShared()) {
             return listOf(DraftProblem(null, null, "Variables cannot move to the private file and to the shared file in one save; save one move first."))
         }
         for (scope in EnvironmentScope.entries) {
@@ -228,8 +243,8 @@ class EnvironmentDraft internal constructor(
             val envs = names.map { name ->
                 val s = shared.environments[name].orEmpty()
                 val p = private.environments[name].orEmpty()
-                val rows = s.map { (k, v) -> EditorVariable(k, p[k] ?: v, k in p) } +
-                    p.filterKeys { it !in s }.map { (k, v) -> EditorVariable(k, v, true) }
+                val rows = s.map { (k, v) -> EditorVariable(k, p[k] ?: v, k in p, k) } +
+                    p.filterKeys { it !in s }.map { (k, v) -> EditorVariable(k, v, true, k) }
                 EditorEnvironment(name, rows, name, name in shared.hidden.notObjects || name in private.hidden.notObjects)
             }
             return EnvironmentDraft(envs, Baseline(shared, private))

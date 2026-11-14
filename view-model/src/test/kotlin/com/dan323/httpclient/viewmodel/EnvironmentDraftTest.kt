@@ -34,7 +34,7 @@ class EnvironmentDraftTest {
     @Test fun `environments come in file order, shared first, and a variable in both files shows once as private with the private value`() {
         assertEquals(listOf("dev", "prod", "qa"), both.environments.map { it.name })
         assertEquals(
-            listOf(EditorVariable("host", "a", false), EditorVariable("token", "secret", true), EditorVariable("key", "k", true)),
+            listOf(EditorVariable("host", "a", false, "host"), EditorVariable("token", "secret", true, "token"), EditorVariable("key", "k", true, "key")),
             both.environments[0].variables,
         )
         assertTrue(both.hasSharedCopy(0, "token"))
@@ -258,5 +258,17 @@ class EnvironmentDraftTest {
         assertEquals(1, problems.size)
         assertTrue("one save" in problems[0].message)
         assertEquals(emptyList(), d.updateVariable(0, 1) { it.copy(private = true) }.check())
+    }
+
+    @Test fun `a renamed row still counts as moving, in the write order and in the opposing check`() {
+        val files = draft(content("dev" to mapOf("host" to "a")), content("dev" to mapOf("key" to "k")))
+        val renamedToPrivate = files.updateVariable(0, 0) { it.copy(name = "url", private = true) }
+        assertEquals(listOf(PRIVATE, SHARED), renamedToPrivate.writeOrder())
+        val both = renamedToPrivate.updateVariable(0, 1) { it.copy(private = false) }
+        assertTrue(both.check().any { "one save" in it.message })
+        val renamedToShared = files.updateVariable(0, 1) { it.copy(name = "other", private = false) }
+        assertEquals(listOf(SHARED, PRIVATE), renamedToShared.writeOrder())
+        val sameFile = files.updateVariable(0, 0) { it.copy(name = "url") }
+        assertEquals(listOf(SHARED), sameFile.writeOrder())
     }
 }

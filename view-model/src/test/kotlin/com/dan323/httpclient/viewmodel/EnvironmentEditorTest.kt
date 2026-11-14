@@ -175,4 +175,13 @@ class EnvironmentEditorTest {
         assertEquals(SaveOutcome.Changed(SHARED), e.save())
         assertTrue(s.writes.isEmpty())
     }
+
+    @Test fun `a shared variable made private and renamed keeps its value when the private write fails`() {
+        val s = store().also { it.writeFails = PRIVATE }
+        val e = loaded(s)
+        e.edit { it.updateVariable(0, 0) { v -> v.copy(name = "url", private = true) } }
+        val out = e.save()
+        assertTrue(out is SaveOutcome.Failed && out.written.isEmpty())
+        assertEquals("a", s.files.getValue(SHARED)!!.getValue("dev").getValue("host"))
+    }
 }
