@@ -92,7 +92,7 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             contentPadding = CompactButtonPadding,
             onClick = { val show = state.envEditor == null; scope.launch(Dispatchers.IO) { state.showEnvironmentEditor(show) } },
             modifier = Modifier.testTag("env-edit-toggle"),
-        ) { Text(if (state.envEditor == null) "Edit environments" else "Close environment editor", maxLines = 1) }
+        ) { Text(when { state.envEditor == null -> "Edit environments"; state.envEditor?.dirty == true -> "Discard and close editor"; else -> "Close environment editor" }, maxLines = 1) }
         HorizontalDivider()
         state.parseError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         LazyColumn(Modifier.weight(1f)) {

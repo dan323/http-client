@@ -130,4 +130,17 @@ class EnvironmentEditorUiTest {
             onNodeWithText("Reload").assertExists()
         } finally { root.toFile().deleteRecursively() }
     }
+
+    @Test fun theToggleSaysDiscardWhenTheDraftHasChanges() = runComposeUiTest {
+        val root = Files.createTempDirectory("httpc-envui")
+        try {
+            val state = fixture(root)
+            setContent { AppRoot(state) }
+            onNodeWithTag("env-edit-toggle").performClick()
+            waitUntil(timeoutMillis = 10_000) { state.envEditor != null }
+            onNodeWithText("Close environment editor").assertExists()
+            onNodeWithTag("env-add").performClick()
+            onNodeWithText("Discard and close editor").assertExists()
+        } finally { root.toFile().deleteRecursively() }
+    }
 }
