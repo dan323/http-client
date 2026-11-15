@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
@@ -21,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -98,10 +100,13 @@ private fun EnvironmentBlock(editor: EnvironmentEditorState, i: Int, env: Editor
                     value = v.name, onValueChange = { n -> editor.change { it.updateVariable(i, j) { row -> row.copy(name = n) } } },
                     placeholder = { Text("name") }, singleLine = true, modifier = Modifier.weight(1f).testTag("env-var-name-$i-$j"),
                 )
+                // A private value may be a secret: while it is masked the field is a password field, so the keyboard does not cache or suggest it.
+                val masked = v.private && !editor.reveal
                 OutlinedTextField(
                     value = v.value, onValueChange = { t -> editor.change { it.updateVariable(i, j) { row -> row.copy(value = t) } } },
                     placeholder = { Text("value") }, singleLine = true,
-                    visualTransformation = if (v.private && !editor.reveal) PasswordVisualTransformation() else VisualTransformation.None,
+                    visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
+                    keyboardOptions = if (masked) KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false) else KeyboardOptions.Default,
                     modifier = Modifier.weight(1.5f).testTag("env-var-value-$i-$j"),
                 )
                 Checkbox(checked = v.private, onCheckedChange = { p -> editor.change { it.updateVariable(i, j) { row -> row.copy(private = p) } } }, modifier = Modifier.testTag("env-var-private-$i-$j"))
