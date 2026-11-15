@@ -11,6 +11,8 @@ import com.dan323.httpclient.core.port.out.HttpExecutor
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class RequestSessionTest {
     private val sent = mutableListOf<HttpRequest>()
@@ -51,6 +53,23 @@ class RequestSessionTest {
         assertFailsWith<UndefinedVariableException> {
             session.run(RequestTemplate(null, "GET", "http://h/{{login.response.body.$.nope}}"), emptyMap())
         }
+    }
+
+    @Test fun aFailedRerunForgetsThePreviousResponse() {
+        var fail = false
+        val flaky = HttpExecutor { req ->
+            if (fail && req.url.endsWith("/login")) error("boom")
+            HttpResponse(200, emptyList(), """{"token":"tok"}""".toByteArray(), 1)
+        }
+        val s = RequestSession(RequestRunner(flaky) { error("no files") }, flaky) { _, _ -> "tok" }
+        val use = RequestTemplate(null, "DELETE", "http://h/{{login.response.body.$.token}}")
+        s.run(login, emptyMap())
+        fail = true
+        assertFailsWith<IllegalStateException> { s.run(login, emptyMap()) }
+        assertFalse(s.hasResponse("login"))
+        assertFailsWith<UndefinedVariableException> { s.run(use, emptyMap()) }
+        val outcomes = s.runAll(listOf(login, use), emptyMap())
+        assertTrue(outcomes.all { it is com.dan323.httpclient.core.application.RunOutcome.Failure })
     }
 }
 

@@ -26,6 +26,10 @@
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt R"/>
         </action>
+        <action id="httpclient.RunAllRequests" class="com.dan323.httpclient.intellij.RunAllRequestsAction"
+                text="Run All HTTP Requests" description="Run every request of the file in order">
+            <add-to-group group-id="EditorPopupMenu" anchor="after" relative-to-action="httpclient.RunRequest"/>
+        </action>
         <action id="httpclient.CancelRequest" class="com.dan323.httpclient.intellij.CancelRequestAction"
                 text="Cancel HTTP Request" description="Stop the HTTP request that is running"
                 icon="AllIcons.Actions.Suspend"/>

@@ -13,7 +13,11 @@ import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileDeleteEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent
+import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.State
+import com.intellij.openapi.components.Storage
+import com.intellij.openapi.components.StoragePathMacros
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import java.nio.file.Path
@@ -23,16 +27,25 @@ import java.nio.file.Path
  * IDE-bound lifecycle. The [SessionFactory] owns the HTTP executor, shared by all sessions, and is closed with the project.
  */
 @Service(Service.Level.PROJECT)
-class HttpClientService(@Suppress("unused") private val project: Project) : Disposable {
+@State(name = "HttpClientEnvironment", storages = [Storage(StoragePathMacros.WORKSPACE_FILE)])
+class HttpClientService(@Suppress("unused") private val project: Project) : Disposable, PersistentStateComponent<HttpClientService.Saved> {
+    /** What survives an IDE restart (workspace file, so it is not shared through version control): the chosen environment name, null for none. */
+    class Saved { var environment: String? = null }
+
     private val locator = UpwardEnvironmentLocator()
     private val factory = SessionFactory(history = FileHistoryStore())
-    private val state = ClientState(locator) { file -> factory.createConfigured(file) }
+    private val clientState = ClientState(locator) { file -> factory.createConfigured(file) }
 
     var environmentChoice: EnvironmentChoice
-        get() = state.environmentChoice
-        set(value) { state.environmentChoice = value }
-    val lastReport: Report get() = state.lastReport
-    val isRunning: Boolean get() = state.isRunning
+        get() = clientState.environmentChoice
+        set(value) { clientState.environmentChoice = value }
+    val lastReport: Report get() = clientState.lastReport
+    val isRunning: Boolean get() = clientState.isRunning
+
+    override fun getState() = Saved().also { it.environment = (clientState.environmentChoice as? EnvironmentChoice.Named)?.name }
+
+    // A name that no longer exists is kept and reported at the next run (never replaced), like any other choice.
+    override fun loadState(saved: Saved) { clientState.environmentChoice = EnvironmentChoice.of(saved.environment) }
 
     init {
         // Drop what is remembered about a file when it is deleted or moved/renamed (closing an editor keeps it: a
@@ -40,7 +53,7 @@ class HttpClientService(@Suppress("unused") private val project: Project) : Disp
         ApplicationManager.getApplication().messageBus.connect(this).subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
             override fun before(events: List<VFileEvent>) {
                 events.filter { it is VFileDeleteEvent || it is VFileMoveEvent }
-                    .forEach { e -> e.file?.let { f -> if (f.extension == "http") state.forget(Path.of(f.path)) } }
+                    .forEach { e -> e.file?.let { f -> if (f.extension == "http") clientState.forget(Path.of(f.path)) } }
             }
         })
     }
@@ -48,22 +61,25 @@ class HttpClientService(@Suppress("unused") private val project: Project) : Disp
     override fun dispose() = factory.close()
 
     /** Called whenever the environment choice is set; unregistered when [parent] is disposed. */
-    fun onEnvironmentChoice(parent: Disposable, listener: () -> Unit) = state.onEnvironmentChoice(listener).let { remove -> Disposer.register(parent, Disposable { remove() }) }
+    fun onEnvironmentChoice(parent: Disposable, listener: () -> Unit) = clientState.onEnvironmentChoice(listener).let { remove -> Disposer.register(parent, Disposable { remove() }) }
 
     /** Called with every new report; unregistered when [parent] is disposed. */
-    fun onReport(parent: Disposable, listener: (Report) -> Unit) = state.onReport(listener).let { remove -> Disposer.register(parent, Disposable { remove() }) }
+    fun onReport(parent: Disposable, listener: (Report) -> Unit) = clientState.onReport(listener).let { remove -> Disposer.register(parent, Disposable { remove() }) }
 
     /** Called with `true` when a request starts and `false` when it ends; unregistered when [parent] is disposed. */
-    fun onRunning(parent: Disposable, listener: (Boolean) -> Unit) = state.onRunning(listener).let { remove -> Disposer.register(parent, Disposable { remove() }) }
+    fun onRunning(parent: Disposable, listener: (Boolean) -> Unit) = clientState.onRunning(listener).let { remove -> Disposer.register(parent, Disposable { remove() }) }
 
-    fun resetChain() = state.resetChain()
+    fun resetChain() = clientState.resetChain()
 
     /** Stops the running request, if any (see [ClientState.cancel]). */
-    fun cancel() = state.cancel()
+    fun cancel() = clientState.cancel()
 
     /** Environments for [file]: the nearest enclosing `http-client.env.json` (same rule as the CLI and desktop). */
     fun environments(file: Path): List<Environment> = locator.environments(file)
 
     /** See [ClientState.run]. Returns false when another request is still running. Blocking. */
-    fun run(file: Path, text: String, caretLine: Int): Boolean = state.run(file, text, caretLine)
+    fun run(file: Path, text: String, caretLine: Int): Boolean = clientState.run(file, text, caretLine)
+
+    /** See [ClientState.runAll]. Returns false when another request is still running. Blocking. */
+    fun runAll(file: Path, text: String): Boolean = clientState.runAll(file, text)
 }

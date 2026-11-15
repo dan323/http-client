@@ -69,6 +69,23 @@ class ClientStateTest {
         assertEquals("http://h/login", sent.last())
     }
 
+    @Test fun runAllSendsEveryRequestInOrderAndReportsEachOne() {
+        val s = state()
+        s.environmentChoice = dev
+        assertTrue(s.runAll(file, text))
+        assertEquals(listOf("http://h/login", "http://h/me"), sent.toList())
+        assertEquals(2, s.lastReport.sections.size)
+        assertEquals("dev", s.lastReport.environment)
+    }
+
+    @Test fun runAllOnAFileWithoutRequestsSaysSoAndReleasesTheGuard() {
+        val s = state()
+        assertTrue(s.runAll(file, "# nothing here\n"))
+        assertEquals("The file has no requests.", s.lastReport.message)
+        assertFalse(s.isRunning)
+        assertTrue(s.run(file, text, 5))
+    }
+
     @Test fun sessionIsReusedAndResetChainSendsAgain() {
         val s = state()
         s.environmentChoice = dev

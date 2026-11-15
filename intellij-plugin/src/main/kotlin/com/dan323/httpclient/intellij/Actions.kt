@@ -20,8 +20,8 @@ import java.nio.file.Path
 
 private fun AnActionEvent.isHttpFile() = getData(CommonDataKeys.VIRTUAL_FILE)?.extension == "http"
 
-/** Saves open files, shows the response window and runs the request at [line] off the UI thread. Call on the EDT. */
-fun runRequest(project: Project, vfile: VirtualFile, line: Int) {
+/** Saves open files, shows the response window and runs the request at [line] (every request when null) off the UI thread. Call on the EDT. */
+fun runRequest(project: Project, vfile: VirtualFile, line: Int?) {
     // The run uses the same text for the gutter icon and the action: the document as just saved (never PSI text).
     val documents = FileDocumentManager.getInstance()
     val document = documents.getDocument(vfile)
@@ -30,7 +30,8 @@ fun runRequest(project: Project, vfile: VirtualFile, line: Int) {
     val toolWindows = ToolWindowManager.getInstance(project)
     toolWindows.getToolWindow("HTTP Response")?.show()
     ApplicationManager.getApplication().executeOnPooledThread {
-        val started = project.getService(HttpClientService::class.java).run(Path.of(vfile.path), text, line)
+        val service = project.getService(HttpClientService::class.java)
+        val started = if (line == null) service.runAll(Path.of(vfile.path), text) else service.run(Path.of(vfile.path), text, line)
         if (!started) ApplicationManager.getApplication().invokeLater({
             toolWindows.notifyByBalloon("HTTP Response", MessageType.INFO, "A request is already running; wait for it to finish.")
         }, project.disposed)
@@ -49,6 +50,21 @@ class RunRequestAction : AnAction(), DumbAware {
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
         val vfile = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
         runRequest(project, vfile, editor.document.getLineNumber(editor.caretModel.offset))
+    }
+}
+
+/** Runs every request of the file in order (the editor's whole file, not the caret request). */
+class RunAllRequestsAction : AnAction(), DumbAware {
+    override fun getActionUpdateThread() = ActionUpdateThread.BGT
+
+    override fun update(e: AnActionEvent) {
+        e.presentation.isEnabledAndVisible = e.project != null && e.isHttpFile()
+    }
+
+    override fun actionPerformed(e: AnActionEvent) {
+        val project = e.project ?: return
+        val vfile = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
+        runRequest(project, vfile, null)
     }
 }
 
