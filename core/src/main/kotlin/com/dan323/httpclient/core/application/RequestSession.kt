@@ -73,6 +73,8 @@ class RequestSession(
      */
     fun run(template: RequestTemplate, variables: Map<String, String>): HttpResponse = locked {
         substituted.clear()
+        // A rerun that fails must not leave the previous response for later requests to use (a DELETE on a stale id).
+        template.name?.let { responses.remove(it) }
         val request = runner.resolve(template, variables, ::reference, ::record)
         val response = send(request)
         template.name?.let { responses[it] = response }
