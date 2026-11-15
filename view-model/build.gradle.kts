@@ -18,14 +18,14 @@ dependencies {
 pitest {
     pitestVersion.set(libs.versions.pitest.engine.get())
     junit5PluginVersion.set("1.2.1")
-    // The Kotlin plugin's filters are on once it is on the classpath; its mutators (elvis, safe call, stdlib swaps) are opt-in.
-    mutators.set(listOf("DEFAULTS", "KOTLIN"))
-    // The Kotlin plugin's filters are on once it is on the classpath; its mutators (elvis, safe call, stdlib swaps) are opt-in.
+    // The Kotlin plugin's filters are on once it is on the classpath; its mutators are named in the root build file with the classic default set.
+    @Suppress("UNCHECKED_CAST")
+    mutators.set(rootProject.extra["pitestMutators"] as List<String>)
     targetClasses.set(listOf("com.dan323.httpclient.viewmodel.*"))
     outputFormats.set(listOf("HTML", "XML"))
     timestampedReports.set(false)
     threads.set(Runtime.getRuntime().availableProcessors())
     avoidCallsTo.set(listOf("kotlin.jvm.internal", "kotlin.io"))
-    // Fails the build below this mutation score (percent). Measured 85.4 % with the Kotlin mutators on (704/824 killed); the floor is rounded down, raise it, never lower it.
+    // Fails the build below this mutation score (percent). Measured 88 % with the Kotlin mutators (725/824 killed); the floor is rounded down, raise it, never lower it.
     mutationThreshold.set(85)
 }
