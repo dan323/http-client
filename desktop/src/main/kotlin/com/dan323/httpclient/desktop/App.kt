@@ -87,6 +87,12 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
         if (state.file == null) Text("No file open", fontWeight = FontWeight.Bold)   // with a file open its tab shows the name
         RecentFilesMenu(state)
         EnvironmentPicker(state)
+        OutlinedButton(
+            enabled = state.file != null,
+            contentPadding = CompactButtonPadding,
+            onClick = { val show = state.envEditor == null; scope.launch(Dispatchers.IO) { state.showEnvironmentEditor(show) } },
+            modifier = Modifier.testTag("env-edit-toggle"),
+        ) { Text(when { state.envEditor == null -> "Edit environments"; state.envEditor?.dirty == true -> "Discard and close editor"; else -> "Close environment editor" }, maxLines = 1) }
         HorizontalDivider()
         state.parseError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         LazyColumn(Modifier.weight(1f)) {
@@ -163,6 +169,11 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
 
     // Right: responses.
     Column(Modifier.weight(1.2f).fillMaxHeight().padding(12.dp)) {
+        val envEditor = state.envEditor
+        if (envEditor != null) {
+            EnvironmentPanel(state, envEditor, Modifier.fillMaxSize())
+            return@Column
+        }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(if (state.historyOpen) "History" else "Response", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).padding(vertical = 8.dp))
             if (state.canRecordHistory) {

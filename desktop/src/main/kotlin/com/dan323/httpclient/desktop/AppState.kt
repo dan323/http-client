@@ -5,7 +5,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.dan323.httpclient.core.application.RunOutcome
 import com.dan323.httpclient.core.application.RunReport
+import com.dan323.httpclient.adapters.UpwardEnvironmentLocator
+import com.dan323.httpclient.core.port.out.EnvironmentFileStoreLocator
 import com.dan323.httpclient.core.port.out.HistoryStore
+import com.dan323.httpclient.viewmodel.EnvironmentEditor
+import com.dan323.httpclient.viewmodel.SaveOutcome
 import com.dan323.httpclient.core.domain.RequestTemplate
 import com.dan323.httpclient.viewmodel.RunCancellation
 import com.dan323.httpclient.viewmodel.RunControls
@@ -19,6 +23,7 @@ class AppState(
     private val runner: DesktopRunner = DesktopRunner(),
     private val settings: SettingsPersistence? = null,
     private val history: HistoryStore? = null,
+    private val environmentStores: EnvironmentFileStoreLocator = UpwardEnvironmentLocator(),
 ) : AutoCloseable {
     /** The open files, in tab order. The editor, the request list and Send work on [active]; the properties below forward to it. */
     internal var documents by mutableStateOf<List<OpenDocument>>(emptyList())
@@ -106,6 +111,7 @@ class AppState(
             val d = documents.getOrNull(index) ?: return
             activeIndex = index
             if (historyOpen) historyView?.loadInBackground(d.file.toAbsolutePath())
+            closeEnvironmentEditor()   // it edits the files of the folder of the file that was on screen
             d
         }
         followActiveFile()
@@ -168,6 +174,7 @@ class AppState(
             documents = documents - doc
             activeIndex = if (index < activeIndex) activeIndex - 1 else activeIndex.coerceAtMost((documents.size - 1).coerceAtLeast(0))
             if (wasActive && historyOpen) historyView?.loadInBackground(active?.file?.toAbsolutePath())
+            if (wasActive) closeEnvironmentEditor()
             if (wasActive) active else null
         }
         if (shown != null) { followActiveFile(); rememberFile(shown) } else rememberTabs()
@@ -225,9 +232,54 @@ class AppState(
     /** Recording needs a history store; without one the option is not offered. */
     val canRecordHistory: Boolean get() = history != null
 
+    /** The environment editor of the open file's folder while its panel is shown (it replaces the response pane); null otherwise. Closed when another file comes on screen. */
+    var envEditor by mutableStateOf<EnvironmentEditorState?>(null)
+        private set
+
+    /** Changes whenever the editor is closed or another file comes on screen, so a load that started before cannot publish its editor afterwards. */
+    private var envEditorGeneration = 0
+
+    /** Drops the editor and its unsaved changes, and invalidates a load that is still running. */
+    private fun closeEnvironmentEditor() {
+        synchronized(envEditorLock) { envEditorGeneration++; envEditor = null }
+    }
+
+    private val envEditorLock = Any()
+
+    /**
+     * Shows the environment editor, reading the files; or closes it, dropping unsaved changes. Showing it closes the History panel.
+     * Blocking (disk). A folder or file that cannot be read is reported in [message]. The editor appears only if no file switch,
+     * close or History action happened while the files were read.
+     */
+    fun showEnvironmentEditor(show: Boolean) {
+        val folderFile = file?.toAbsolutePath()
+        if (!show || folderFile == null) { closeEnvironmentEditor(); return }
+        val generation = synchronized(envEditorLock) { ++envEditorGeneration }
+        val editor = try {
+            EnvironmentEditorState(EnvironmentEditor(environmentStores.storeFor(folderFile))).also { it.load() }
+        } catch (e: Exception) {
+            message = e.message ?: e::class.simpleName   // e.g. an environment file that is a link that cannot be followed
+            return
+        }
+        synchronized(envEditorLock) {
+            if (generation != envEditorGeneration) return   // the user moved on while the files were read
+            historyOpen = false
+            envEditor = editor
+        }
+    }
+
+    /** Saves the environment editor's draft; on success the environment list of the file it was opened for is read again. Blocking (disk). */
+    fun saveEnvironments() {
+        val editor = envEditor ?: return
+        val doc = active ?: return   // the file the editor belongs to: navigation closes the editor, so this is still it
+        val outcome = editor.save() ?: return   // null: a load or save already runs
+        if (outcome is SaveOutcome.Saved || outcome is SaveOutcome.Failed || outcome is SaveOutcome.Changed) refreshQuietly(doc)
+    }
+
     /** Shows or hides the History panel; showing it reads the runs of the open file. Blocking (disk). */
     fun showHistory(show: Boolean) {
         historyOpen = show && history != null
+        if (historyOpen) closeEnvironmentEditor()   // both replace the response pane
         if (historyOpen) historyView?.load(file?.toAbsolutePath())
     }
 
@@ -249,6 +301,7 @@ class AppState(
             val abs = file?.toAbsolutePath() ?: return@exclusive
             if (!historyOpen) view.load(abs)   // an open panel already follows the file
             historyOpen = true
+            closeEnvironmentEditor()
             view.openLinked(request)
         }
     }
@@ -305,6 +358,7 @@ class AppState(
         followActiveFile()
         if (remember) rememberFile(doc)
         if (historyOpen) historyView?.loadInBackground(path.toAbsolutePath())   // not on the caller's thread: it may be the UI thread
+        closeEnvironmentEditor()
         refreshEnvironments(doc)
         // Restore the remembered environment only if it still exists; never an error for a vanished name.
         settings?.current?.environments?.get(key)?.takeIf { it in doc.environments }?.let { doc.chosenEnvironment = it }

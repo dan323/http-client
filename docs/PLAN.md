@@ -25,7 +25,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F13 | Desktop: history browser and response comparison | desktop | done |
 | F14 | Editor intelligence: variable completion, undefined-variable and bad-reference diagnostics, find | desktop, plugin | open |
 | F15 | Desktop response extras: search in body, save to file, image/HTML preview | desktop | done (T17): search, save and image preview; HTML and SVG previews are not planned (no web view in Compose Desktop) |
-| F17 | Edit environments in the UI | desktop | open |
+| F17 | Edit environments in the UI | desktop | done (T20): editor panel in the desktop app |
 | F18 | Plugin: completion, navigation, inspections | plugin | open |
 | F19 | Plugin: richer response panel, remember environment, run all | plugin | partial: shared view-model, run guard, reset chain done; remember environment across restarts and run all open |
 | F20 | Verification and release: plugin tried in a real IDE, CI on macOS/Windows/Linux, installers | all | partial: tests on all three OS, plugin build and best-effort installer packaging (T24) in CI; plugin checked by hand on Ultimate 2026.3 (T21); Community install, 2026.1 baseline and macOS/Linux installer QA open |
@@ -37,7 +37,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 
 Done tasks are listed in the CHANGELOG, not here: T1 (file variables, settings), T2 (executor options), T3 (cookie jar),
 T4 (`ResponseExtractor`), T5 (assertions), T6 (dynamic variables v2), T7 (Basic auth shortcut), T9 (`RunReport`, JSON and JUnit export),
-T8 (multipart bodies), T12 (`view-model`), T15 (desktop tabs, restored tabs and folder view), T17 (desktop search, save and image preview), T18 (desktop history and compare). Done as well: the review fixes R1-R13 (see [known-limitations.md](known-limitations.md) for what was left), including the
+T8 (multipart bodies), T12 (`view-model`), T15 (desktop tabs, restored tabs and folder view), T17 (desktop search, save and image preview), T18 (desktop history and compare), T20 (environment editor: file store, editor model and desktop panel). Done as well: the review fixes R1-R13 (see [known-limitations.md](known-limitations.md) for what was left), including the
 composition root, environment resolution, file confinement, the CI matrix part of T24 and build quality reports.
 
 Each remaining task is listed once even when it serves several features. Size: S ≈ 1 day, M ≈ 2 days, L ≈ 3 days
@@ -46,7 +46,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 | ID | Task | Serves | Size | Needs |
 |---|---|---|---|---|
 | T16 | **Desktop editor intelligence:** variable completion, diagnostics from T13, find/replace | F14 | L | – (T13 done: `VariableAnalysis`) |
-| T20 | **Environment editor:** write support on the environment port and a UI to edit variables. In steps: (1) `EnvironmentFileStore` in `core` and `JsonEnvironmentFileStore` in `adapters` (done); (2) the editor model in `view-model` (done: `EnvironmentDraft`, `EnvironmentEditor`); (3) the desktop editor panel | F17 | M | – |
 | T21 | **Plugin GUI verification:** checked by hand on Ultimate 2026.3 (IU-263.7307.200) with the 0.5.0-rc1 zip, see `intellij-plugin/README.md`; still open: a Community install and the 2026.1 baseline (the `Ctrl+Alt+R` run shortcut is still to be tried in an IDE) | F20, F19, F18 | S | – |
 | T22 | **Plugin intelligence:** completion, go-to-request, inspections from T13 | F18, F14 | L | T21 (T13 done: `VariableAnalysis`) |
 | T23 | **Plugin response panel:** remember the environment across restarts, run all | F19 | M | T21 |
@@ -65,13 +64,12 @@ Each remaining task is listed once even when it serves several features. Size: S
 | F9 | T27 |
 | F11 | T14 |
 | F14 | T13, T16, T22 |
-| F17 | T20 |
 | F18 | T13, T21, T22 |
 | F19 | T21, T23 |
 | F20 | T25 (T21, T24 done) |
 | F21 | T28, T29, T30, T31 |
 
-Shared work, written once: T13 (F14, F18), T14 (F11, F12, F17), T21 (F18, F19, F20).
+Shared work, written once: T13 (F14, F18), T14 (F11, F12), T21 (F18, F19, F20).
 
 ## 3. Order
 
@@ -84,7 +82,7 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 | 2    | T13 (variable analysis), T14 (desktop persistence)                                                                         | disjoint areas                                               |
 | 3    | T23 (plugin panel)                                                                                  | (T8 done)                                                    |
 | 4    | T22 (plugin intelligence), T16 (desktop editor)                                                                        | need T13 / T14                                               |
-| 5    | T20 (environment editor), T27 (plugin part: open linked response) | up to three at a time                                        |
+| 5    | T27 (plugin part: open linked response)                           | T20 is done                                                  |
 | 6    | T25 (QA and release notes)                                                                                                 | needs everything                                             |
 | 7    | T28 (guide check), T29 (screenshots), T30 (guide module), T31 (links) | any time after wave 5 for T29-T31; T28 can go first       |
 
