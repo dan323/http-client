@@ -32,6 +32,14 @@ allprojects {
     repositories { mavenCentral() }
 }
 
+// The PIT mutators every module uses, by name: PIT's classic default set (its `DEFAULTS` group in 1.30 is a different one, with
+// REMOVE_CONDITIONALS instead of NEGATE_CONDITIONALS) plus the PIT Kotlin plugin's mutators. Read as `rootProject.extra["pitestMutators"]`.
+extra["pitestMutators"] = listOf(
+    "INVERT_NEGS", "EMPTY_RETURNS", "FALSE_RETURNS", "TRUE_RETURNS", "NULL_RETURNS", "PRIMITIVE_RETURNS",
+    "MATH", "VOID_METHOD_CALLS", "NEGATE_CONDITIONALS", "CONDITIONALS_BOUNDARY", "INCREMENTS",
+    "KOTLIN_ELVIS_ALWAYS_DEFAULT", "KOTLIN_ELVIS_NEVER_DEFAULT", "KOTLIN_SAFECALL_NEVER_NULL", "KOTLIN_STDLIB_SWAP",
+)
+
 subprojects {
     plugins.withId("org.jetbrains.kotlin.jvm") {
         extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension> { jvmToolchain(21) }

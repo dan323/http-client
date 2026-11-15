@@ -6,18 +6,24 @@ plugins {
 
 dependencies {
     testImplementation(kotlin("test"))
+    // A PIT plugin: it is on the classpath of the mutation run only, not of the module.
+    pitest(libs.pitest.kotlin)
 }
 
 // Mutation testing, run on demand (`./gradlew :core:pitest`, report in core/build/reports/pitest); see
 // "Build quality reports" in the README. `view-model` is mutated too (see its build file).
 pitest {
+    pitestVersion.set(libs.versions.pitest.engine.get())
     junit5PluginVersion.set("1.2.1")
+    // The Kotlin plugin's filters are on once it is on the classpath; its mutators are named in the root build file with the classic default set.
+    @Suppress("UNCHECKED_CAST")
+    mutators.set(rootProject.extra["pitestMutators"] as List<String>)
     targetClasses.set(listOf("com.dan323.httpclient.core.*"))
     outputFormats.set(listOf("HTML", "XML"))
     timestampedReports.set(false)
     threads.set(Runtime.getRuntime().availableProcessors())
     // Kotlin generates a lot of non-logic bytecode (null checks, when/default stubs); mutating it only adds noise.
     avoidCallsTo.set(listOf("kotlin.jvm.internal", "kotlin.io"))
-    // Fails the build below this mutation score (percent). Measured 83 % on the first run (820/988 killed); the floor is rounded down, raise it, never lower it.
+    // Fails the build below this mutation score (percent). Measured 83.7 % (1436/1716 killed) with the Kotlin mutators; the floor is rounded down, raise it, never lower it.
     mutationThreshold.set(80)
 }
