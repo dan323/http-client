@@ -27,7 +27,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F15 | Desktop response extras: search in body, save to file, image/HTML preview | desktop | done (T17): search, save and image preview; HTML and SVG previews are not planned (no web view in Compose Desktop) |
 | F17 | Edit environments in the UI | desktop | done (T20): editor panel in the desktop app |
 | F18 | Plugin: completion, navigation, inspections | plugin | open |
-| F19 | Plugin: richer response panel, remember environment, run all | plugin | partial: shared view-model, run guard, reset chain done; remember environment across restarts and run all open |
+| F19 | Plugin: richer response panel, remember environment, run all | plugin | partial: shared view-model, run guard, reset chain done; remember environment across restarts and run all done in code (T23, unverified by hand); the response panel is still plain text |
 | F20 | Verification and release: plugin tried in a real IDE, CI on macOS/Windows/Linux, installers | all | partial: tests on all three OS, plugin build and best-effort installer packaging (T24) in CI; plugin checked by hand on Ultimate 2026.3 (T21); Community install, 2026.1 baseline and macOS/Linux installer QA open |
 | F21 | User guide on GitHub Pages: step-by-step pages per interface (written, published by `pages.yml`), generated screenshots, links from the interfaces | docs, all UIs | partial: text guides done; screenshots, build check and links open ([user-guide-plan.md](user-guide-plan.md)) |
 
@@ -48,7 +48,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 | T16 | **Desktop editor intelligence:** variable completion, diagnostics from T13, find/replace | F14 | L | – (T13 done: `VariableAnalysis`) |
 | T21 | **Plugin GUI verification:** checked by hand on Ultimate 2026.3 (IU-263.7307.200) with the 0.5.0-rc1 zip, see `intellij-plugin/README.md`; still open: a Community install and the 2026.1 baseline (the `Ctrl+Alt+R` run shortcut is still to be tried in an IDE) | F20, F19, F18 | S | – |
 | T22 | **Plugin intelligence:** completion, go-to-request, inspections from T13 | F18, F14 | L | T21 (T13 done: `VariableAnalysis`) |
-| T23 | **Plugin response panel:** remember the environment across restarts, run all | F19 | M | T21 |
+| T23 | **Plugin response panel:** remember the environment across restarts, run all: done in code, to be tried in an IDE (with T21's open checks) | F19 | M | T21 |
 | T24 | **Packaging in CI** (rest of F20): done in `.github/workflows/release.yml` on tags `v*` (DMG/MSI/DEB best effort, plugin zip, CLI zip/tar); first real run on tag v0.5.0-rc1: all jobs passed | F20 | S | – |
 | T27 | **Open the linked response** of a request (`<>` link, `ResponseLinks.latest`) in the plugin (the desktop part is done: **Linked response** button) | F9 | S | T21 |
 | T25 | **Final cross-platform QA and release notes:** Windows MSI and plugin checked by hand on 0.5.0-rc1; CLI zip checked on 0.5.0-rc1 (`--list`, smoke test with a JUnit report); still open: macOS DMG, Linux DEB and the native file dialogs; desktop UI polish (button text, dropdown position, request list highlighting, env file editing) planned after 0.5.0 | F20 | M | all |

@@ -10,10 +10,10 @@ It depends only on `com.intellij.modules.platform`, so it is meant to work in Co
   `###` separators, `< file` bodies).
 - Green run icon in the gutter on each request line.
 - **Run HTTP Request** (editor context menu, or `Ctrl+Alt+R`; see [known limitations](../docs/known-limitations.md)) runs the request at the caret,
-  plus any requests it chains on (`{{login.response.body.$.token}}`).
+  plus any requests it chains on (`{{login.response.body.$.token}}`). **Run All HTTP Requests** (editor context menu, or Find Action) sends every request of the file in order and reports each one; a failing request does not stop the rest, and a file without requests says so.
 - **Select HTTP Environment** (the picker in the header of every `.http` editor, or the editor context menu) picks variables from the nearest
   `http-client.env.json`, searching upward from the file. The default is "(none)" (variables from the file only); a name that
-  no longer exists is an error. The choice is kept per project until the IDE restarts.
+  no longer exists is an error. The choice is kept per project and survives an IDE restart (stored in the project's workspace file, so it is not shared through version control); a saved name that no longer exists is reported when you run, never replaced.
 - Responses of earlier requests (a login) are remembered per file and environment; any edit to the file, or deleting or moving it,
   drops them, and **Reset chain** in the tool window forgets them all. One request runs at a time.
 - **HTTP Response** tool window (with the **Reset chain** and **Cancel** buttons, which have icons and tooltips; before the first run it explains how to run a request, naming the shortcut as bound in your keymap) with status, timing, assertion results (`# @assert`: a summary and a PASS/FAIL line each; unverified by hand in an IDE), headers and the body (JSON pretty-printed).
@@ -69,7 +69,7 @@ Verified by hand (T21) with the release zip of `0.5.0-rc1` installed from disk i
 methods, URLs, variables), the gutter run icon, *Run HTTP Request* in the context menu, the "HTTP Response" tool
 window with a pretty-printed JSON body, the environment picker (including "(none)" and the undefined-variable
 error), chaining, session reuse and its reset on edit and **Reset chain**, error display, the "request already
-running" balloon, and the reset of the environment choice on restart. Requests also run, so the IDE's
+running" balloon, and the reset of the environment choice on restart (that reset no longer happens: since T23 the choice is remembered; the new behaviour and Run All are unverified by hand). Requests also run, so the IDE's
 `kotlinx-serialization` is compatible with what `adapters` was compiled against.
 
 Known problems: the default shortcut `Ctrl+Alt+R` has not been tried in a running IDE yet

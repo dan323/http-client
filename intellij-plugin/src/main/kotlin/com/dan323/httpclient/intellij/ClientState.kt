@@ -128,7 +128,15 @@ class ClientState(locator: EnvironmentLocator, maxSessions: Int = 16, newSession
      * runs share a non-thread-safe session and one report. When [text] differs from the text last run for [file],
      * its remembered responses are dropped first (the requests they came from may have changed).
      */
-    fun run(file: Path, text: String, caretLine: Int): Boolean {
+    fun run(file: Path, text: String, caretLine: Int): Boolean = runTarget(file, text, RunTarget.AtLine(caretLine))
+
+    /**
+     * Runs every request of [file] in file order, with the same guard, text check and report as [run]. A request that
+     * fails does not stop the ones after it. Blocking. Returns false, doing nothing, when another run is in progress.
+     */
+    fun runAll(file: Path, text: String): Boolean = runTarget(file, text, RunTarget.All)
+
+    private fun runTarget(file: Path, text: String, target: RunTarget): Boolean {
         if (!begin()) return false
         try {
             val abs = file.toAbsolutePath()
@@ -142,7 +150,7 @@ class ClientState(locator: EnvironmentLocator, maxSessions: Int = 16, newSession
             var envName: String? = null
             val report = { Report(environment = envName ?: "none", sections = sections.toList()) }
             val tracked = cancellation.track {
-                controller.run(file, text, RunTarget.AtLine(caretLine), environmentChoice,
+                controller.run(file, text, target, environmentChoice,
                     onEnvironment = { envName = it },
                     onReused = { reused ->
                         reused.forEach { sections += Section(reusedDisplay(it)) }
@@ -156,7 +164,10 @@ class ClientState(locator: EnvironmentLocator, maxSessions: Int = 16, newSession
             when (tracked) {
                 // A cancelled run is an outcome, not an error: what finished stays, with a Cancelled line above it.
                 Tracked.Cancelled -> publish(report().copy(message = cancelledLabel(sections.count { it.display !is OutcomeDisplay.Reused })))
-                is Tracked.Done -> (tracked.value as? RunResult.Rejected)?.let { publish(Report(message = it.message)) }
+                is Tracked.Done -> when (val result = tracked.value) {
+                    is RunResult.Rejected -> publish(Report(message = result.message))
+                    is RunResult.Completed -> if (sections.isEmpty()) publish(report().copy(message = "The file has no requests."))
+                }
             }
             return true
         } finally {
