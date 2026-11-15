@@ -36,29 +36,53 @@ class EnvironmentEditorState(private val editor: EnvironmentEditor) {
     /** Whether saving would change a file. */
     val dirty: Boolean get() = draft.isDirty
 
-    /** Reads both files again, dropping the draft. */
+    /** True while [load] or [save] runs. Edits are refused then (and the panel disables its fields), so a keystroke cannot be lost between the read of the draft and its replacement. */
+    var busy by mutableStateOf(false)
+        private set
+
+    private val lock = Any()
+
+    /** Marks a load or save as running; false when one already runs. */
+    private fun begin(): Boolean = synchronized(lock) { if (busy) false else { busy = true; true } }
+
+    private fun end() = synchronized(lock) { busy = false }
+
+    /** Reads both files again, dropping the draft and the last save's message. Does nothing while another load or save runs. */
     fun load() {
-        loadError = editor.load()
-        draft = editor.draft
-        problems = emptyList()
+        if (!begin()) return
+        try {
+            loadError = editor.load()
+            draft = editor.draft
+            problems = emptyList()
+            status = null
+        } finally { end() }
     }
 
-    /** Replaces the draft with [change] of it and forgets the last save's message. */
+    /** Replaces the draft with [change] of it and forgets the last save's message. Refused (nothing changes) while a load or save runs. */
     fun change(change: (EnvironmentDraft) -> EnvironmentDraft) {
-        editor.edit(change)
-        draft = editor.draft
-        status = null
-        problems = emptyList()
+        synchronized(lock) {
+            if (busy) return
+            editor.edit(change)
+            draft = editor.draft
+            status = null
+            problems = emptyList()
+        }
     }
 
-    /** Saves the draft; the files are read again when the outcome says the draft no longer matches them. Returns the outcome. */
-    fun save(): SaveOutcome {
-        val outcome = editor.save()
-        status = saveMessage(outcome)
-        problems = (outcome as? SaveOutcome.Invalid)?.let { problemLines(editor.draft, it.problems) } ?: emptyList()
-        if (needsReload(outcome)) editor.load()
-        loadError = editor.loadError   // a save that wrote reloads by itself and may fail doing so
-        draft = editor.draft
-        return outcome
+    /**
+     * Saves the draft; the files are read again when the outcome says the draft no longer matches them. Returns the
+     * outcome, or null when a load or save is already running (nothing was done).
+     */
+    fun save(): SaveOutcome? {
+        if (!begin()) return null
+        try {
+            val outcome = editor.save()
+            status = saveMessage(outcome)
+            problems = (outcome as? SaveOutcome.Invalid)?.let { problemLines(editor.draft, it.problems) } ?: emptyList()
+            if (needsReload(outcome)) editor.load()
+            loadError = editor.loadError   // a save that wrote reloads by itself and may fail doing so
+            draft = editor.draft
+            return outcome
+        } finally { end() }
     }
 }

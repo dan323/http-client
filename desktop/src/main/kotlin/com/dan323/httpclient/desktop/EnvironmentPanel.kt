@@ -43,18 +43,23 @@ fun EnvironmentPanel(state: AppState, editor: EnvironmentEditorState, modifier: 
             Text("Environments", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Checkbox(checked = editor.reveal, onCheckedChange = { editor.reveal = it }, modifier = Modifier.testTag("env-reveal"))
             Text("Show private values", style = MaterialTheme.typography.bodySmall)
+        }
+        // A second row: the labels of Reload and Close change with unsaved edits and would overflow next to the title.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
-                enabled = editor.loadError == null && editor.dirty,
+                enabled = editor.loadError == null && editor.dirty && !editor.busy,
                 contentPadding = CompactButtonPadding,
                 onClick = { scope.launch(Dispatchers.IO) { state.saveEnvironments() } },
                 modifier = Modifier.testTag("env-save"),
             ) { Text("Save") }
             OutlinedButton(
+                enabled = !editor.busy,
                 contentPadding = CompactButtonPadding,
                 onClick = { scope.launch(Dispatchers.IO) { editor.load() } },
                 modifier = Modifier.testTag("env-reload"),
-            ) { Text("Reload") }
+            ) { Text(if (editor.dirty) "Discard changes and reload" else "Reload") }
             OutlinedButton(
+                enabled = !editor.busy,
                 contentPadding = CompactButtonPadding,
                 onClick = { state.showEnvironmentEditor(false) },
                 modifier = Modifier.testTag("env-close"),
@@ -72,7 +77,7 @@ fun EnvironmentPanel(state: AppState, editor: EnvironmentEditorState, modifier: 
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             itemsIndexed(draft.environments) { i, env -> EnvironmentBlock(editor, i, env) }
         }
-        OutlinedButton(onClick = { editor.change { it.addEnvironment() } }, modifier = Modifier.testTag("env-add")) { Text("Add environment") }
+        OutlinedButton(enabled = !editor.busy, onClick = { editor.change { it.addEnvironment() } }, modifier = Modifier.testTag("env-add")) { Text("Add environment") }
     }
 }
 
@@ -83,10 +88,10 @@ private fun EnvironmentBlock(editor: EnvironmentEditorState, i: Int, env: Editor
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = env.name, onValueChange = { n -> editor.change { it.renameEnvironment(i, n) } },
-                label = { Text("Environment") }, singleLine = true, modifier = Modifier.weight(1f).testTag("env-name-$i"),
+                label = { Text("Environment") }, singleLine = true, enabled = !editor.busy, modifier = Modifier.weight(1f).testTag("env-name-$i"),
             )
-            if (!env.locked) OutlinedButton(contentPadding = CompactButtonPadding, onClick = { editor.change { it.addVariable(i) } }, modifier = Modifier.testTag("env-add-var-$i")) { Text("Add variable") }
-            OutlinedButton(contentPadding = CompactButtonPadding, onClick = { editor.change { it.removeEnvironment(i) } }, modifier = Modifier.testTag("env-remove-$i")) { Text("Remove") }
+            if (!env.locked) OutlinedButton(enabled = !editor.busy, contentPadding = CompactButtonPadding, onClick = { editor.change { it.addVariable(i) } }, modifier = Modifier.testTag("env-add-var-$i")) { Text("Add variable") }
+            OutlinedButton(enabled = !editor.busy, contentPadding = CompactButtonPadding, onClick = { editor.change { it.removeEnvironment(i) } }, modifier = Modifier.testTag("env-remove-$i")) { Text("Remove") }
         }
         if (env.locked) {
             Text(
@@ -98,20 +103,20 @@ private fun EnvironmentBlock(editor: EnvironmentEditorState, i: Int, env: Editor
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = v.name, onValueChange = { n -> editor.change { it.updateVariable(i, j) { row -> row.copy(name = n) } } },
-                    placeholder = { Text("name") }, singleLine = true, modifier = Modifier.weight(1f).testTag("env-var-name-$i-$j"),
+                    placeholder = { Text("name") }, singleLine = true, enabled = !editor.busy, modifier = Modifier.weight(1f).testTag("env-var-name-$i-$j"),
                 )
                 // A private value may be a secret: while it is masked the field is a password field, so the keyboard does not cache or suggest it.
                 val masked = v.private && !editor.reveal
                 OutlinedTextField(
                     value = v.value, onValueChange = { t -> editor.change { it.updateVariable(i, j) { row -> row.copy(value = t) } } },
-                    placeholder = { Text("value") }, singleLine = true,
+                    placeholder = { Text("value") }, singleLine = true, enabled = !editor.busy,
                     visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
                     keyboardOptions = if (masked) KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false) else KeyboardOptions.Default,
                     modifier = Modifier.weight(1.5f).testTag("env-var-value-$i-$j"),
                 )
-                Checkbox(checked = v.private, onCheckedChange = { p -> editor.change { it.updateVariable(i, j) { row -> row.copy(private = p) } } }, modifier = Modifier.testTag("env-var-private-$i-$j"))
+                Checkbox(enabled = !editor.busy, checked = v.private, onCheckedChange = { p -> editor.change { it.updateVariable(i, j) { row -> row.copy(private = p) } } }, modifier = Modifier.testTag("env-var-private-$i-$j"))
                 Text("Private", style = MaterialTheme.typography.bodySmall)
-                OutlinedButton(contentPadding = CompactButtonPadding, onClick = { editor.change { it.removeVariable(i, j) } }, modifier = Modifier.testTag("env-var-remove-$i-$j")) { Text("×") }
+                OutlinedButton(enabled = !editor.busy, contentPadding = CompactButtonPadding, onClick = { editor.change { it.removeVariable(i, j) } }, modifier = Modifier.testTag("env-var-remove-$i-$j")) { Text("×") }
             }
         }
     }

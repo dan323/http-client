@@ -109,4 +109,25 @@ class EnvironmentEditorUiTest {
             onNodeWithTag("env-save").assertIsNotEnabled()
         } finally { root.toFile().deleteRecursively() }
     }
+
+    @Test fun reloadDropsUnsavedChangesAndTheOldStatus() = runComposeUiTest {
+        val root = Files.createTempDirectory("httpc-envui")
+        try {
+            val state = fixture(root)
+            setContent { AppRoot(state) }
+            onNodeWithTag("env-edit-toggle").performClick()
+            waitUntil(timeoutMillis = 10_000) { state.envEditor != null }
+            onNodeWithTag("env-add").performClick()
+            onNodeWithTag("env-name-1").performTextInput("prod")
+            onNodeWithTag("env-save").performClick()
+            waitUntil(timeoutMillis = 10_000) { state.envEditor?.status?.startsWith("Saved") == true }
+            onNodeWithTag("env-add").performClick()
+            onNodeWithText("Discard changes and reload").assertExists()
+            onNodeWithTag("env-reload").performClick()
+            waitUntil(timeoutMillis = 10_000) { state.envEditor?.dirty == false }
+            assertNull(state.envEditor?.status)
+            assertEquals(listOf("dev", "prod"), state.envEditor?.draft?.environments?.map { it.name })
+            onNodeWithText("Reload").assertExists()
+        } finally { root.toFile().deleteRecursively() }
+    }
 }

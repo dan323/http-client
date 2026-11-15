@@ -249,7 +249,7 @@ class AppState(
     /** Saves the environment editor's draft; on success the environment list of the open file is read again. Blocking (disk). */
     fun saveEnvironments() {
         val editor = envEditor ?: return
-        val outcome = editor.save()
+        val outcome = editor.save() ?: return   // null: a load or save already runs
         if (outcome is SaveOutcome.Saved || outcome is SaveOutcome.Failed || outcome is SaveOutcome.Changed) active?.let(::refreshQuietly)
     }
 
