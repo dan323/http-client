@@ -15,14 +15,14 @@ dependencies {
 pitest {
     pitestVersion.set(libs.versions.pitest.engine.get())
     junit5PluginVersion.set("1.2.1")
-    // The Kotlin plugin's filters are on once it is on the classpath. Its mutators (`KOTLIN`) are not enabled here: they take the score
-    // to 74 %, and about half of the survivors are equivalent (trimStart/trimEnd and indexOf/lastIndexOf swaps, exception messages that are never null).
+    // The Kotlin plugin's filters are on once it is on the classpath. Its mutators (`KOTLIN`) are not enabled here: with them core scores 78 %
+    // (floor 80) even after tests for the inputs that should kill each mutant; the survivors that remain look unreachable.
     targetClasses.set(listOf("com.dan323.httpclient.core.*"))
     outputFormats.set(listOf("HTML", "XML"))
     timestampedReports.set(false)
     threads.set(Runtime.getRuntime().availableProcessors())
     // Kotlin generates a lot of non-logic bytecode (null checks, when/default stubs); mutating it only adds noise.
     avoidCallsTo.set(listOf("kotlin.jvm.internal", "kotlin.io"))
-    // Fails the build below this mutation score (percent). Measured 83 % on the first run (820/988 killed); the floor is rounded down, raise it, never lower it.
-    mutationThreshold.set(80)
+    // Fails the build below this mutation score (percent). Measured 84.6 % (1285/1519 killed); the floor is rounded down, raise it, never lower it.
+    mutationThreshold.set(84)
 }

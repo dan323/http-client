@@ -26,6 +26,6 @@ pitest {
     timestampedReports.set(false)
     threads.set(Runtime.getRuntime().availableProcessors())
     avoidCallsTo.set(listOf("kotlin.jvm.internal", "kotlin.io"))
-    // Fails the build below this mutation score (percent). Measured 85.1 % with the Kotlin mutators on (701/824 killed); the floor is rounded down, raise it, never lower it.
+    // Fails the build below this mutation score (percent). Measured 85.4 % with the Kotlin mutators on (704/824 killed); the floor is rounded down, raise it, never lower it.
     mutationThreshold.set(85)
 }
