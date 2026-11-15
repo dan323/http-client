@@ -6,12 +6,17 @@ plugins {
 
 dependencies {
     testImplementation(kotlin("test"))
+    // A PIT plugin: it is on the classpath of the mutation run only, not of the module.
+    pitest(libs.pitest.kotlin)
 }
 
 // Mutation testing, run on demand (`./gradlew :core:pitest`, report in core/build/reports/pitest); see
 // "Build quality reports" in the README. `view-model` is mutated too (see its build file).
 pitest {
+    pitestVersion.set(libs.versions.pitest.engine.get())
     junit5PluginVersion.set("1.2.1")
+    // The Kotlin plugin's filters are on once it is on the classpath. Its mutators (`KOTLIN`) are not enabled here: they take the score
+    // to 74 %, and about half of the survivors are equivalent (trimStart/trimEnd and indexOf/lastIndexOf swaps, exception messages that are never null).
     targetClasses.set(listOf("com.dan323.httpclient.core.*"))
     outputFormats.set(listOf("HTML", "XML"))
     timestampedReports.set(false)
