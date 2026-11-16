@@ -177,7 +177,8 @@ class AppState(
             if (wasActive) closeEnvironmentEditor()
             if (wasActive) active else null
         }
-        if (shown != null) { followActiveFile(); rememberFile(shown) } else rememberTabs()
+        // The tab that comes on screen may have missed a change of the shared environment file made through another tab.
+        if (shown != null) { followActiveFile(); refreshQuietly(shown); rememberFile(shown) } else rememberTabs()
     }
 
     val file: Path? get() = active?.file

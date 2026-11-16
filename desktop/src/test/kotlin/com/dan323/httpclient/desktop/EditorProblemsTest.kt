@@ -61,6 +61,22 @@ class EditorProblemsTest {
         } finally { root.toFile().deleteRecursively() }
     }
 
+    @Test fun closingATabRefreshesTheEnvironmentsOfTheTabThatComesOnScreen() {
+        val root = Files.createTempDirectory("httpc-problems")
+        try {
+            val state = fixture(root)                       // t.http
+            val other = root.resolve("u.http").also { Files.writeString(it, "GET {{base}}/u\n") }
+            state.environment = "dev"
+            state.open(other)
+            state.environment = "dev"
+            assertEquals(emptyList(), state.problems)
+            // the shared file changes (say, through the environment editor of the second tab): `base` is gone
+            Files.writeString(root.resolve("http-client.env.json"), """{"dev":{"other":"1"}}""")
+            state.closeTab(1)
+            assertEquals(1, state.problems.size, "the revealed tab must see the new variable names")
+        } finally { root.toFile().deleteRecursively() }
+    }
+
     @Test fun noOpenFileHasNoProblems() = assertEquals(emptyList(), AppState().problems)
 
     @Test fun problemsAreUnderlinedByTheirSeverity() {
