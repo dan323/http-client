@@ -32,7 +32,7 @@ object Workspace {
 
     /** Variable names (never values) of each environment of [file], for the editor's checks and completion. */
     fun environmentVariableNames(file: Path): Map<String, Set<String>> =
-        UpwardEnvironmentLocator().environments(file).associate { it.name to it.variables.keys }
+        UpwardEnvironmentLocator().environments(file).associate { it.name to it.variables.keys.toSet() }   // a copy: `keys` is a view that would keep the values (secrets) reachable
 }
 
 /**
