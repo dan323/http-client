@@ -26,36 +26,56 @@ fun completionContext(text: String, caret: Int): CompletionContext? {
     return CompletionContext(start, typed)
 }
 
-/** One suggestion: what is [label]led in the list and the [name] it inserts. */
-data class CompletionItem(val label: String, val name: String, val kind: VariableKind)
+/**
+ * One suggestion: the [name] as listed. For the dynamic variables with placeholders it is a template such as
+ * `$random.integer(from, to)` or `$env.NAME`; [applyCompletion] inserts only what is real (see there).
+ */
+data class CompletionItem(val name: String, val kind: VariableKind)
 
 /** At most this many suggestions are offered. */
 const val MAX_SUGGESTIONS = 12
 
 /**
  * The names of [known] that match [prefix]: those that start with it first (case ignored), then those that merely
- * contain it. Nothing is offered for a prefix that is already an exact, complete name.
+ * contain it. A name equal to [prefix] is not offered (it is already complete); names are case-sensitive at run time,
+ * so a name that differs only in case still is, as the correction.
  */
 fun completions(known: List<KnownVariable>, prefix: String): List<CompletionItem> {
     val p = prefix.lowercase()
     val starts = known.filter { it.name.lowercase().startsWith(p) }
     val contains = if (p.isEmpty()) emptyList() else known.filter { !it.name.lowercase().startsWith(p) && p in it.name.lowercase() }
-    return (starts + contains).filter { it.name != prefix }.take(MAX_SUGGESTIONS).map { CompletionItem(it.name, it.name, it.kind) }
+    return (starts + contains).filter { it.name != prefix }.take(MAX_SUGGESTIONS).map { CompletionItem(it.name, it.kind) }
 }
 
 /** The text after accepting [item] for [context] with the caret at [caret], and where the caret goes. */
 data class Completed(val text: String, val caret: Int)
 
+private const val NAME_END = " \t\r\n{}"
+
 /**
- * Replaces what is typed with the name. Variables and dynamic variables close the reference with `}}` (unless it is
- * already closed right after the caret); a request prefix such as `login.response.` stays open for the part that follows.
+ * Replaces the name being typed, including the rest of it after the caret (`{{ba|se}}` becomes `{{basket}}`, not
+ * `{{basket}}se}}`). Variables and dynamic variables close the reference with `}}` (unless it is already closed right
+ * after the name); a request prefix such as `login.response.` stays open for the part that follows. Templates with
+ * placeholders insert only what is real: `$random.integer(from, to)` gives `$random.integer()` with the caret between
+ * the parentheses, and `$env.NAME` / `$processEnv NAME` stay open after the `.` / the space for the name to be typed.
  */
 fun applyCompletion(text: String, context: CompletionContext, caret: Int, item: CompletionItem): Completed {
+    var tailEnd = caret
+    while (tailEnd < text.length && text[tailEnd] !in NAME_END) tailEnd++
     val before = text.substring(0, context.start)
-    val after = text.substring(caret)
-    val closes = item.kind != VariableKind.REQUEST_RESPONSE
-    val insert = item.name + if (closes && !after.trimStart(' ', '\t').startsWith("}}")) "}}" else ""
-    return Completed(before + insert + after, context.start + insert.length)
+    val after = text.substring(tailEnd)
+    val name = item.name
+    val open = name.indexOf('(')
+    val (body, caretInBody, closes) = when {
+        item.kind == VariableKind.REQUEST_RESPONSE -> Triple(name, name.length, false)
+        open >= 0 -> Triple(name.substring(0, open) + "()", open + 1, true)
+        name.endsWith("NAME") -> name.removeSuffix("NAME").let { Triple(it, it.length, false) }
+        else -> Triple(name, name.length, true)
+    }
+    val closing = if (closes && !after.trimStart(' ', '\t').startsWith("}}")) "}}" else ""
+    // After the closing braces, except for a call whose arguments are still to be typed.
+    val caretAt = if (open >= 0) caretInBody else body.length + closing.length
+    return Completed(before + body + closing + after, context.start + caretAt)
 }
 
 /** The short word shown beside a suggestion. */

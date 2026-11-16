@@ -45,7 +45,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -181,11 +189,15 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
         var dismissed by remember(state.file) { mutableStateOf<Pair<String, Int>?>(null) }   // Esc hides the list until the text or caret moves
         val items = if (context == null || dismissed == shown.text to caret) emptyList() else completions(state.knownVariablesAt(caret), context.prefix)
         var picked by remember(items) { mutableStateOf(0) }
+        // Enter only accepts once the user has moved through the list: otherwise it is a line break (`{{base` + Enter must not become `basket`).
+        var navigated by remember(items) { mutableStateOf(false) }
+        val editorFocus = remember { FocusRequester() }
         val chosen = picked.coerceIn(0, (items.size - 1).coerceAtLeast(0))
         fun accept(item: CompletionItem) {
             val done = applyCompletion(shown.text, context ?: return, caret, item)
             field = TextFieldValue(done.text, TextRange(done.caret))
             state.edit(done.text)
+            editorFocus.requestFocus()   // a click on a suggestion must not take the keyboard away from the editor
         }
         OutlinedTextField(
             value = shown,
@@ -198,13 +210,15 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             textStyle = mono,
             visualTransformation = remember(dark, problems) { HttpVisualTransformation(if (dark) HighlightPalette.Dark else HighlightPalette.Light, problems) },
             placeholder = { Text("Open or create a .http file") },
-            modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp).testTag("editor").onPreviewKeyEvent { e ->
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp).testTag("editor").focusRequester(editorFocus).onPreviewKeyEvent { e ->
+                val plain = !e.isShiftPressed && !e.isCtrlPressed && !e.isAltPressed && !e.isMetaPressed
                 if (items.isEmpty() || e.type != KeyEventType.KeyDown) false
-                else when (e.key) {
-                    Key.DirectionDown -> { picked = (chosen + 1) % items.size; true }
-                    Key.DirectionUp -> { picked = (chosen - 1 + items.size) % items.size; true }
-                    Key.Enter, Key.Tab -> { accept(items[chosen]); true }
-                    Key.Escape -> { dismissed = shown.text to caret; true }
+                else when {
+                    e.key == Key.DirectionDown -> { picked = (chosen + 1) % items.size; navigated = true; true }
+                    e.key == Key.DirectionUp -> { picked = (chosen - 1 + items.size) % items.size; navigated = true; true }
+                    e.key == Key.Tab && plain -> { accept(items[chosen]); true }
+                    (e.key == Key.Enter || e.key == Key.NumPadEnter) && plain && navigated -> { accept(items[chosen]); true }
+                    e.key == Key.Escape -> { dismissed = shown.text to caret; true }
                     else -> false
                 }
             },
@@ -264,10 +278,11 @@ private fun Suggestions(items: List<CompletionItem>, chosen: Int, onPick: (Compl
         items.forEachIndexed { i, item ->
             Row(
                 Modifier.fillMaxWidth().background(if (i == chosen) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
-                    .clickable { onPick(item) }.padding(horizontal = 8.dp, vertical = 2.dp).testTag("suggestion-$i"),
+                    .pointerInput(item) { detectTapGestures { onPick(item) } }   // not `clickable`: that would take the focus from the editor
+                    .padding(horizontal = 8.dp, vertical = 2.dp).testTag("suggestion-$i"),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(item.label, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f))
+                Text(item.name, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f))
                 Text(kindLabel(item.kind), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
             }
         }

@@ -59,7 +59,7 @@ class VariableCompletionTest {
 
     private fun apply(text: String, caret: Int, name: String, kind: VariableKind): Completed {
         val c = completionContext(text, caret)!!
-        return applyCompletion(text, c, caret, CompletionItem(name, name, kind))
+        return applyCompletion(text, c, caret, CompletionItem(name, kind))
     }
 
     @Test fun aVariableClosesTheReferenceAndPutsTheCaretAfterIt() {
@@ -78,6 +78,25 @@ class VariableCompletionTest {
 
     @Test fun aDynamicVariableClosesAndTextAfterTheCaretIsKept() {
         assertEquals(Completed("GET {{\$uuid}} tail", 13), apply("GET {{\$u tail", 8, "\$uuid", VariableKind.DYNAMIC))
+    }
+
+    @Test fun theRestOfTheNameAfterTheCaretIsReplaced() {
+        assertEquals(Completed("GET {{base}}", 10), apply("GET {{base}}", 8, "base", VariableKind.FILE))                  // {{ba|se}}
+        assertEquals(Completed("GET {{basket}}/x", 12), apply("GET {{base}}/x", 8, "basket", VariableKind.ENVIRONMENT))   // {{ba|se}}/x
+        assertEquals(Completed("GET {{basket}} tail", 14), apply("GET {{ba tail", 8, "basket", VariableKind.ENVIRONMENT)) // a space ends the name
+        assertEquals(Completed("GET {{login.response.}}", 21), apply("GET {{lo}}", 8, "login.response.", VariableKind.REQUEST_RESPONSE))
+    }
+
+    @Test fun templatesWithPlaceholdersInsertOnlyWhatIsReal() {
+        assertEquals(Completed("GET {{\$random.integer()}}", 22), apply("GET {{\$random.i", 15, "\$random.integer(from, to)", VariableKind.DYNAMIC))
+        assertEquals(Completed("GET {{\$random.alphabetic()}}", 25), apply("GET {{\$ra", 9, "\$random.alphabetic(n)", VariableKind.DYNAMIC))
+        assertEquals(Completed("GET {{\$env.", 11), apply("GET {{\$e", 8, "\$env.NAME", VariableKind.DYNAMIC))
+        assertEquals(Completed("GET {{\$processEnv ", 18), apply("GET {{\$p", 8, "\$processEnv NAME", VariableKind.DYNAMIC))
+    }
+
+    @Test fun aNameThatDiffersOnlyInCaseIsStillOfferedAsTheCorrection() {
+        assertEquals(listOf("base"), completions(listOf(KnownVariable("base", VariableKind.FILE)), "Bas").map { it.name })
+        assertEquals(listOf("base"), completions(listOf(KnownVariable("base", VariableKind.FILE)), "BASE").map { it.name })
     }
 
     @Test fun everyKindHasItsOwnLabel() {
