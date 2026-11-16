@@ -185,6 +185,8 @@ class AppState(
     val text: String get() = active?.text ?: ""
     val dirty: Boolean get() = active?.dirty ?: false
     val environments: List<String> get() = active?.environments ?: emptyList()
+    /** The names usable in `{{ }}` at [offset] of the open file (see [com.dan323.httpclient.core.application.VariableAnalysis.knownVariablesAt]). */
+    fun knownVariablesAt(offset: Int): List<com.dan323.httpclient.core.application.KnownVariable> = active?.analysis?.knownVariablesAt(offset) ?: emptyList()
     /** Problems with the `{{variables}}` of the open file, for the editor underlines and the problems list. */
     val problems: List<com.dan323.httpclient.core.application.Diagnostic> get() = active?.analysis?.diagnostics ?: emptyList()
     /** The environment chosen for the open file, remembered between sessions; with no file open there is none and setting it does nothing. */

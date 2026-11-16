@@ -45,6 +45,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -53,6 +60,11 @@ import androidx.compose.ui.unit.sp
 import com.dan323.httpclient.core.application.Diagnostic
 import com.dan323.httpclient.core.application.RunOutcome
 import com.dan323.httpclient.core.application.Severity
+import com.dan323.httpclient.viewmodel.CompletionItem
+import com.dan323.httpclient.viewmodel.applyCompletion
+import com.dan323.httpclient.viewmodel.completionContext
+import com.dan323.httpclient.viewmodel.completions
+import com.dan323.httpclient.viewmodel.kindLabel
 import com.dan323.httpclient.viewmodel.problemLabel
 import com.dan323.httpclient.viewmodel.problemSummary
 import com.dan323.httpclient.viewmodel.RunControls
@@ -161,16 +173,43 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             state.message?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
         }
         val problems = state.problems
+        // The field keeps its own caret; the text itself belongs to [state] (an edit it refuses, or a reload, wins).
+        var field by remember(state.file) { mutableStateOf(TextFieldValue(state.text)) }
+        val shown = if (field.text == state.text) field else TextFieldValue(state.text, TextRange(field.selection.end.coerceAtMost(state.text.length)))
+        val caret = shown.selection.end
+        val context = completionContext(shown.text, caret).takeIf { shown.selection.collapsed && state.file != null && !state.running }
+        var dismissed by remember(state.file) { mutableStateOf<Pair<String, Int>?>(null) }   // Esc hides the list until the text or caret moves
+        val items = if (context == null || dismissed == shown.text to caret) emptyList() else completions(state.knownVariablesAt(caret), context.prefix)
+        var picked by remember(items) { mutableStateOf(0) }
+        val chosen = picked.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+        fun accept(item: CompletionItem) {
+            val done = applyCompletion(shown.text, context ?: return, caret, item)
+            field = TextFieldValue(done.text, TextRange(done.caret))
+            state.edit(done.text)
+        }
         OutlinedTextField(
-            value = state.text,
-            onValueChange = state::edit,
+            value = shown,
+            onValueChange = { value ->
+                field = value
+                if (value.text != state.text) state.edit(value.text)
+            },
             enabled = state.file != null,
             readOnly = state.running,
             textStyle = mono,
             visualTransformation = remember(dark, problems) { HttpVisualTransformation(if (dark) HighlightPalette.Dark else HighlightPalette.Light, problems) },
             placeholder = { Text("Open or create a .http file") },
-            modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp),
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp).testTag("editor").onPreviewKeyEvent { e ->
+                if (items.isEmpty() || e.type != KeyEventType.KeyDown) false
+                else when (e.key) {
+                    Key.DirectionDown -> { picked = (chosen + 1) % items.size; true }
+                    Key.DirectionUp -> { picked = (chosen - 1 + items.size) % items.size; true }
+                    Key.Enter, Key.Tab -> { accept(items[chosen]); true }
+                    Key.Escape -> { dismissed = shown.text to caret; true }
+                    else -> false
+                }
+            },
         )
+        Suggestions(items, chosen, onPick = ::accept)
         ProblemsList(problems)
     }
 
@@ -214,6 +253,24 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             )
         }
         ResponsePane(state.outcomes, Modifier.fillMaxSize())
+    }
+}
+
+/** The names that fit what is typed inside `{{ }}`: click one, or use the arrow keys with Enter or Tab; Esc hides the list. */
+@Composable
+private fun Suggestions(items: List<CompletionItem>, chosen: Int, onPick: (CompletionItem) -> Unit) {
+    if (items.isEmpty()) return
+    Column(Modifier.fillMaxWidth().padding(top = 6.dp).heightIn(max = 160.dp).verticalScroll(rememberScrollState()).testTag("suggestions")) {
+        items.forEachIndexed { i, item ->
+            Row(
+                Modifier.fillMaxWidth().background(if (i == chosen) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                    .clickable { onPick(item) }.padding(horizontal = 8.dp, vertical = 2.dp).testTag("suggestion-$i"),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(item.label, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f))
+                Text(kindLabel(item.kind), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+            }
+        }
     }
 }
 
