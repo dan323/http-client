@@ -23,7 +23,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F11 | Desktop: remember last file, environment, window, recent files | desktop | done (T14): last file, environment, window, recent files |
 | F12 | Desktop: several files at once, folder view | desktop | done (T15): tabs, restored at start, folder view |
 | F13 | Desktop: history browser and response comparison | desktop | done |
-| F14 | Editor intelligence: variable completion, undefined-variable and bad-reference diagnostics, find | desktop, plugin | open |
+| F14 | Editor intelligence: variable completion, undefined-variable and bad-reference diagnostics, find | desktop, plugin | partial: desktop diagnostics done (T16 step 1); desktop completion and find/replace (T16) and all of the plugin (T22) open |
 | F15 | Desktop response extras: search in body, save to file, image/HTML preview | desktop | done (T17): search, save and image preview; HTML and SVG previews are not planned (no web view in Compose Desktop) |
 | F17 | Edit environments in the UI | desktop | done (T20): editor panel in the desktop app |
 | F18 | Plugin: completion, navigation, inspections | plugin | open |
@@ -45,7 +45,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 
 | ID | Task | Serves | Size | Needs |
 |---|---|---|---|---|
-| T16 | **Desktop editor intelligence:** variable completion, diagnostics from T13, find/replace | F14 | L | – (T13 done: `VariableAnalysis`) |
+| T16 | **Desktop editor intelligence:** variable completion, diagnostics from T13, find/replace (diagnostics done; completion and find/replace open) | F14 | L | – (T13 done: `VariableAnalysis`) |
 | T21 | **Plugin GUI verification:** checked by hand on Ultimate 2026.3 (IU-263.7307.200) with the 0.5.0-rc1 zip, see `intellij-plugin/README.md`; still open: a Community install and the 2026.1 baseline (the `Ctrl+Alt+R` run shortcut is still to be tried in an IDE) | F20, F19, F18 | S | – |
 | T22 | **Plugin intelligence:** completion, go-to-request, inspections from T13 | F18, F14 | L | T21 (T13 done: `VariableAnalysis`) |
 | T23 | **Plugin response panel:** remember the environment across restarts, run all: done in code, to be tried in an IDE (with T21's open checks) | F19 | M | T21 |

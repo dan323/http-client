@@ -184,6 +184,8 @@ class AppState(
     val text: String get() = active?.text ?: ""
     val dirty: Boolean get() = active?.dirty ?: false
     val environments: List<String> get() = active?.environments ?: emptyList()
+    /** Problems with the `{{variables}}` of the open file, for the editor underlines and the problems list. */
+    val problems: List<com.dan323.httpclient.core.application.Diagnostic> get() = active?.analysis?.diagnostics ?: emptyList()
     /** The environment chosen for the open file, remembered between sessions; with no file open there is none and setting it does nothing. */
     var environment: String?
         get() = active?.chosenEnvironment
@@ -537,7 +539,8 @@ class AppState(
 
     private fun refreshEnvironments(doc: OpenDocument) {
         try {
-            doc.updateEnvironments(Workspace.environmentNames(doc.file))
+            val variables = Workspace.environmentVariableNames(doc.file)
+            doc.updateEnvironments(variables.keys.toList(), variables)
         } catch (e: Exception) {
             doc.updateEnvironments(emptyList())   // never keep another file's (or a now-broken) list
             throw e

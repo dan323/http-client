@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -49,7 +50,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.dan323.httpclient.core.application.Diagnostic
 import com.dan323.httpclient.core.application.RunOutcome
+import com.dan323.httpclient.core.application.Severity
+import com.dan323.httpclient.viewmodel.problemLabel
+import com.dan323.httpclient.viewmodel.problemSummary
 import com.dan323.httpclient.viewmodel.RunControls
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -155,16 +160,18 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             OutlinedButton(enabled = state.file != null && state.dirty && !state.running, onClick = { state.save() }) { Text("Save") }
             state.message?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
         }
+        val problems = state.problems
         OutlinedTextField(
             value = state.text,
             onValueChange = state::edit,
             enabled = state.file != null,
             readOnly = state.running,
             textStyle = mono,
-            visualTransformation = remember(dark) { HttpVisualTransformation(if (dark) HighlightPalette.Dark else HighlightPalette.Light) },
+            visualTransformation = remember(dark, problems) { HttpVisualTransformation(if (dark) HighlightPalette.Dark else HighlightPalette.Light, problems) },
             placeholder = { Text("Open or create a .http file") },
-            modifier = Modifier.fillMaxSize().padding(top = 8.dp),
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp),
         )
+        ProblemsList(problems)
     }
 
     // Right: responses.
@@ -207,6 +214,23 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             )
         }
         ResponsePane(state.outcomes, Modifier.fillMaxSize())
+    }
+}
+
+/** The problems found in the open file, one line each (`Line 3: ...`), with a count; nothing when the file is fine. */
+@Composable
+private fun ProblemsList(problems: List<Diagnostic>) {
+    val summary = problemSummary(problems) ?: return
+    Column(Modifier.fillMaxWidth().padding(top = 6.dp).testTag("problems")) {
+        Text(summary, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+        Column(Modifier.heightIn(max = 96.dp).verticalScroll(rememberScrollState())) {
+            problems.forEach {
+                Text(
+                    problemLabel(it), style = MaterialTheme.typography.bodySmall,
+                    color = if (it.severity == Severity.ERROR) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                )
+            }
+        }
     }
 }
 

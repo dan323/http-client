@@ -29,6 +29,10 @@ object Workspace {
     /** Environment names from the nearest enclosing `http-client.env.json` (same rule as the CLI and the plugin). */
     fun environmentNames(file: Path): List<String> =
         UpwardEnvironmentLocator().environments(file).map { it.name }
+
+    /** Variable names (never values) of each environment of [file], for the editor's checks and completion. */
+    fun environmentVariableNames(file: Path): Map<String, Set<String>> =
+        UpwardEnvironmentLocator().environments(file).associate { it.name to it.variables.keys }
 }
 
 /**
