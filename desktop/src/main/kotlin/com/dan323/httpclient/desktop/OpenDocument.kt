@@ -1,9 +1,11 @@
 package com.dan323.httpclient.desktop
 
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.dan323.httpclient.core.application.RunOutcome
+import com.dan323.httpclient.core.application.VariableAnalysis
 import com.dan323.httpclient.core.domain.RequestTemplate
 import java.nio.file.Path
 
@@ -32,6 +34,18 @@ internal class OpenDocument(val file: Path, content: String) {
         private set
     var chosenEnvironment by mutableStateOf<String?>(null)
 
+    /** Variable names (no values) of each environment, so the editor can tell which `{{names}}` are defined. */
+    private var environmentVariables by mutableStateOf<Map<String, Set<String>>>(emptyMap())
+
+    /**
+     * Checks of the `{{variables}}` in [text] against the chosen environment's variable names, like a run would resolve
+     * them: with no environment chosen, or one that no longer exists, only the file's own variables are defined.
+     * Recomputed only when the text, the choice or the environment file changes.
+     */
+    val analysis: VariableAnalysis by derivedStateOf {
+        VariableAnalysis.analyze(text, chosenEnvironment?.let { environmentVariables[it] }.orEmpty())
+    }
+
     /** Results of the last run. Written only by [AppState], under its lock, while a run is in progress. */
     var outcomes by mutableStateOf<List<RunOutcome>>(emptyList())
         private set
@@ -51,7 +65,10 @@ internal class OpenDocument(val file: Path, content: String) {
         if (text == written) dirty = false
     }
 
-    fun updateEnvironments(names: List<String>) { environments = names }
+    fun updateEnvironments(names: List<String>, variables: Map<String, Set<String>> = emptyMap()) {
+        environments = names
+        environmentVariables = variables
+    }
 
     /** Clears the results and the cancelled flag for a new run. */
     fun beginRun() {

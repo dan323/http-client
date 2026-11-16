@@ -75,7 +75,7 @@ class AppUiTest {
             onNodeWithText("Send all").performClick()
             waitUntil(timeoutMillis = 10_000) { state.outcomes.isNotEmpty() && !state.running }
             waitForIdle()
-            onAllNodes(hasText("Undefined variable: base", substring = true)).assertCountEquals(2) // one per request
+            onAllNodes(hasText("Error: Undefined variable: base", substring = true)).assertCountEquals(2) // one per request (the problems list under the editor says "Line N: ...")
         } finally { server.stop() }
     }
 

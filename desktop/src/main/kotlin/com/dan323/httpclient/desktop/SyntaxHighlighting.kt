@@ -5,6 +5,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import com.dan323.httpclient.core.application.Diagnostic
+import com.dan323.httpclient.core.application.Severity
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
@@ -17,6 +20,7 @@ import com.dan323.httpclient.core.application.HttpTokenKind
 class HighlightPalette(
     val method: Color, val url: Color, val headerName: Color, val variable: Color,
     val comment: Color, val separator: Color, val fileRef: Color,
+    val error: Color = Color(0xFFC62828), val warning: Color = Color(0xFFB26A00),
 ) {
     fun styleOf(kind: HttpTokenKind): SpanStyle? = when (kind) {
         HttpTokenKind.METHOD -> SpanStyle(color = method, fontWeight = FontWeight.Bold)
@@ -41,14 +45,20 @@ class HighlightPalette(
     }
 }
 
-fun highlight(text: String, palette: HighlightPalette): AnnotatedString = buildAnnotatedString {
+/** Colors the tokens of [text] and underlines each of [problems] (red for errors, amber for warnings). */
+fun highlight(text: String, palette: HighlightPalette, problems: List<Diagnostic> = emptyList()): AnnotatedString = buildAnnotatedString {
     append(text)
     for (t in HttpLineLexer.tokenize(text)) palette.styleOf(t.kind)?.let { addStyle(it, t.start, t.end) }
+    for (d in problems) {
+        val start = d.range.offset.coerceIn(0, text.length)
+        val end = d.range.end.coerceIn(start, text.length)
+        if (end > start) addStyle(SpanStyle(textDecoration = TextDecoration.Underline, color = if (d.severity == Severity.ERROR) palette.error else palette.warning), start, end)
+    }
 }
 
 /** Colors the text as it is typed; the text itself is unchanged so offsets map one to one. */
-class HttpVisualTransformation(private val palette: HighlightPalette) : VisualTransformation {
-    override fun filter(text: AnnotatedString) = TransformedText(highlight(text.text, palette), OffsetMapping.Identity)
+class HttpVisualTransformation(private val palette: HighlightPalette, private val problems: List<Diagnostic> = emptyList()) : VisualTransformation {
+    override fun filter(text: AnnotatedString) = TransformedText(highlight(text.text, palette, problems), OffsetMapping.Identity)
 }
 
 /** `METHOD url` for the request list, with the method coloured like in the editor. */
