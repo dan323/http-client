@@ -74,6 +74,7 @@ import com.dan323.httpclient.viewmodel.completionContext
 import com.dan323.httpclient.viewmodel.completions
 import com.dan323.httpclient.viewmodel.kindLabel
 import com.dan323.httpclient.viewmodel.findMatches
+import com.dan323.httpclient.viewmodel.matchAfterReplacement
 import com.dan323.httpclient.viewmodel.nextMatchIndex
 import com.dan323.httpclient.viewmodel.previousMatchIndex
 import com.dan323.httpclient.viewmodel.replaceAll
@@ -184,7 +185,7 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
         if (state.tabs.isNotEmpty()) TabBar(state)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(enabled = state.file != null && state.dirty && !state.running, onClick = { state.save() }) { Text("Save") }
-            OutlinedButton(enabled = state.file != null, onClick = { state.find.open = !state.find.open }, modifier = Modifier.testTag("find-toggle")) { Text("Find") }
+            OutlinedButton(enabled = state.file != null, onClick = { if (state.find.open) state.find.open = false else state.find.show() }, modifier = Modifier.testTag("find-toggle")) { Text("Find") }
             state.message?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
         }
         val problems = state.problems
@@ -223,11 +224,11 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             if (m == null) { step(true); return }   // nothing selected yet: go to the next match first
             if (state.running || state.file == null) return
             val done = replaceMatch(shown.text, m, find.replacement)
-            state.edit(done.text)
+            if (done.text != shown.text) state.edit(done.text)
             field = TextFieldValue(done.text, TextRange(done.caret))
-            find.status = null
+            find.clearStatus()
             val after = findMatches(done.text, find.query, find.matchCase)
-            val next = after.getOrNull(nextMatchIndex(after, done.caret))
+            val next = matchAfterReplacement(after, m.first, done.caret)?.let { after[it] }
             if (next != null) field = TextFieldValue(done.text, TextRange(next.first, next.last + 1))
         }
         fun replaceEverything() {
@@ -237,12 +238,12 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
                 state.edit(done.text)
                 field = TextFieldValue(done.text, TextRange(selection.end.coerceAtMost(done.text.length)))
             }
-            find.status = replacedLabel(done.count)
+            find.report(replacedLabel(done.count), if (done.count > 0) done.text else shown.text)
         }
         fun closeFind() { find.open = false; editorFocus.requestFocus() }
         if (find.open) {
             FindBar(
-                find, matches.size, matches.indexOf(currentMatch).coerceAtLeast(0), canEdit = !state.running && state.file != null,
+                find, matches.size, find.statusFor(shown.text), matches.indexOf(currentMatch).takeIf { it >= 0 }, canEdit = !state.running && state.file != null,
                 onStep = ::step, onReplace = ::replaceOne, onReplaceAll = ::replaceEverything, onClose = ::closeFind,
             )
         }
@@ -259,7 +260,7 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             placeholder = { Text("Open or create a .http file") },
             modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp).testTag("editor").focusRequester(editorFocus).onPreviewKeyEvent { e ->
                 val plain = !e.isShiftPressed && !e.isCtrlPressed && !e.isAltPressed && !e.isMetaPressed
-                if (e.type == KeyEventType.KeyDown && e.key == Key.F && (e.isCtrlPressed || e.isMetaPressed) && state.file != null) { find.open = true; true }
+                if (e.type == KeyEventType.KeyDown && e.key == Key.F && (e.isCtrlPressed || e.isMetaPressed) && state.file != null) { find.show(); true }
                 else if (items.isEmpty() || e.type != KeyEventType.KeyDown) false
                 else when {
                     e.key == Key.DirectionDown -> { picked = (chosen + 1) % items.size; navigated = true; true }

@@ -25,7 +25,35 @@ class ReplaceTest {
         val first = replaceMatch("a a", 0..0, "aa")
         val matches = findMatches(first.text, "a")
         assertEquals(listOf(0..0, 1..1, 3..3), matches)
-        assertEquals(2, nextMatchIndex(matches, first.caret))
+        assertEquals(2, matchAfterReplacement(matches, 0, first.caret))
+    }
+
+    @Test fun afterReplacingTheLastMatchTheSearchWrapsOnlyToMatchesBeforeIt() {
+        // "a" -> "aa": the only matches are inside the inserted text, so there is nothing to go to
+        val only = replaceMatch("a", 0..0, "aa")
+        assertEquals(null, matchAfterReplacement(findMatches(only.text, "a"), 0, only.caret))
+        // "xa xa" replacing the second one: the first one is before it, so the search wraps to it
+        val last = replaceMatch("xa xa", 4..4, "aa")
+        assertEquals(listOf(1..1, 4..4, 5..5), findMatches(last.text, "a"))
+        assertEquals(0, matchAfterReplacement(findMatches(last.text, "a"), 4, last.caret))
+        assertEquals(null, matchAfterReplacement(emptyList(), 0, 0))
+        assertEquals(1, matchAfterReplacement(listOf(0..0, 5..5), 2, 3))                         // one after the caret
+    }
+
+    @Test fun aStaleRangeChangesNothing() {
+        assertEquals(Replacement("abc", 3), replaceMatch("abc", 7..9, "X"))
+        assertEquals(Replacement("abc", 0), replaceMatch("abc", -2..0, "X"))
+        assertEquals(Replacement("abc", 1), replaceMatch("abc", 1..0, "X"))
+    }
+
+    @Test fun theFindLabelSaysHowManyUntilOneIsSelected() {
+        assertEquals("", findLabel("", null, 3))
+        assertEquals("No matches", findLabel("a", null, 0))
+        assertEquals("1 match", findLabel("a", null, 1))
+        assertEquals("3 matches", findLabel("a", null, 3))
+        assertEquals("2 of 3", findLabel("a", 1, 3))
+        assertEquals("$MAX_SEARCH_MATCHES+ matches", findLabel("a", null, MAX_SEARCH_MATCHES))
+        assertEquals("1 of $MAX_SEARCH_MATCHES+", findLabel("a", 0, MAX_SEARCH_MATCHES))
     }
 
     @Test fun replaceAllCountsAndIgnoresCaseUnlessAsked() {

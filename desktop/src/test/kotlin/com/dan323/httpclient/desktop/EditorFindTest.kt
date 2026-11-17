@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onNodeWithTag
@@ -81,7 +82,7 @@ class EditorFindTest {
             onNodeWithTag("find-toggle").performClick()
             onNodeWithTag("find-query").performTextInput("x/a")          // matches a and A: case is ignored
             waitForIdle()
-            onNodeWithTag("find-count").assertTextEquals("1 of 2")
+            onNodeWithTag("find-count").assertTextEquals("2 matches")   // none selected yet
             onNodeWithTag("find-next").performClick(); waitForIdle()
             onNodeWithTag("find-count").assertTextEquals("1 of 2")      // the first match is selected
             onNodeWithTag("find-next").performClick(); waitForIdle()
@@ -91,7 +92,57 @@ class EditorFindTest {
             onNodeWithTag("find-prev").performClick(); waitForIdle()
             onNodeWithTag("find-count").assertTextEquals("2 of 2")      // wrapped back
             onNodeWithTag("find-case").performClick(); waitForIdle()
-            onNodeWithTag("find-count").assertTextEquals("1 of 1")       // match case: only x/a
+            onNodeWithTag("find-count").assertTextEquals("1 match")       // match case: only x/a; the selected x/A is no longer a match
+        } finally { root.toFile().deleteRecursively() }
+    }
+
+    @Test fun replacingTheLastMatchByTextThatContainsItDoesNotSelectItsOwnOutput() = runComposeUiTest {
+        val root = Files.createTempDirectory("httpc-find")
+        try {
+            val state = fixture(root, "a")
+            setContent { AppRoot(state) }
+            onNodeWithTag("find-toggle").performClick()
+            onNodeWithTag("find-query").performTextInput("a")
+            onNodeWithTag("find-replace").performTextInput("aa")
+            waitForIdle()
+            onNodeWithTag("find-replace-one").performClick(); waitForIdle()     // selects the match
+            onNodeWithTag("find-replace-one").performClick(); waitForIdle()     // replaces it
+            assertEquals("aa", state.text)
+            onNodeWithTag("find-count").assertTextEquals("2 matches")           // nothing selected: the inserted text is not offered
+            onNodeWithTag("find-replace-one").performClick(); waitForIdle()     // so this only selects, it does not grow the text
+            assertEquals("aa", state.text)
+        } finally { root.toFile().deleteRecursively() }
+    }
+
+    @Test fun ctrlFWhileTheBarIsOpenMovesTheKeyboardBackToTheSearchBox() = runComposeUiTest {
+        val root = Files.createTempDirectory("httpc-find")
+        try {
+            val state = fixture(root)
+            setContent { AppRoot(state) }
+            onNodeWithTag("find-toggle").performClick()
+            onNodeWithTag("find-query").assertIsFocused()
+            onNodeWithTag("editor").performClick()
+            onNodeWithTag("editor").assertIsFocused()
+            onNodeWithTag("editor").performKeyInput { keyDown(Key.CtrlLeft); pressKey(Key.F); keyUp(Key.CtrlLeft) }
+            waitForIdle()
+            onNodeWithTag("find-query").assertIsFocused()
+        } finally { root.toFile().deleteRecursively() }
+    }
+
+    @Test fun theReplaceAllResultIsHiddenOnceTheTextChanges() = runComposeUiTest {
+        val root = Files.createTempDirectory("httpc-find")
+        try {
+            val state = fixture(root)
+            setContent { AppRoot(state) }
+            onNodeWithTag("find-toggle").performClick()
+            onNodeWithTag("find-query").performTextInput("x/a")
+            onNodeWithTag("find-replace").performTextInput("x/q")
+            waitForIdle()
+            onNodeWithTag("find-replace-all").performClick(); waitForIdle()
+            onNodeWithTag("find-count").assertTextEquals("Replaced 2 matches")
+            state.edit(state.text + "# more\n")
+            waitForIdle()
+            onNodeWithTag("find-count").assertTextEquals("No matches")
         } finally { root.toFile().deleteRecursively() }
     }
 

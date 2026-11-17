@@ -41,16 +41,23 @@ data class Replacement(val text: String, val caret: Int)
 
 /** Replaces the characters of [match] in [text] with [replacement]. */
 fun replaceMatch(text: String, match: IntRange, replacement: String): Replacement {
-    val end = (match.last + 1).coerceIn(match.first, text.length)
+    // A range that no longer fits the text (it changed since the match was found) changes nothing.
+    if (match.first < 0 || match.first > text.length || match.last < match.first) return Replacement(text, match.first.coerceIn(0, text.length))
+    val end = (match.last + 1).coerceAtMost(text.length)
     return Replacement(text.substring(0, match.first) + replacement + text.substring(end), match.first + replacement.length)
 }
 
-/**
- * The index in [matches] of the first match that starts at or after [from], wrapping to 0 when there is none (and 0
- * when there are no matches). After a replacement, [from] is the caret: a match inside the inserted text is not
- * offered again, so replacing `a` by `aa` moves on instead of looping.
- */
+/** The index in [matches] of the first match that starts at or after [from], wrapping to 0 when there is none (and 0 when there are no matches). */
 fun nextMatchIndex(matches: List<IntRange>, from: Int): Int = matches.indexOfFirst { it.first >= from }.coerceAtLeast(0)
+
+/**
+ * The match to go to after a replacement that replaced the text at [replacedStart] and ended at [caret] (the end of the
+ * inserted text), in the [matches] of the new text: the first one at or after the caret, else, wrapping, the first one
+ * before the replaced text; null when there is none. A match inside the inserted text is never offered, so replacing
+ * `a` by `aa` moves on (or stops) instead of selecting its own output again.
+ */
+fun matchAfterReplacement(matches: List<IntRange>, replacedStart: Int, caret: Int): Int? =
+    matches.indexOfFirst { it.first >= caret }.takeIf { it >= 0 } ?: matches.indexOfFirst { it.first < replacedStart }.takeIf { it >= 0 }
 
 /** [text] after every match was replaced, and how many there were. */
 data class ReplacedAll(val text: String, val count: Int)
@@ -82,3 +89,16 @@ fun replacedLabel(count: Int): String = when (count) {
 /** The index of the last match that starts before [before], wrapping to the last match when there is none (0 when there are no matches). */
 fun previousMatchIndex(matches: List<IntRange>, before: Int): Int =
     matches.indexOfLast { it.first < before }.let { if (it >= 0) it else (matches.size - 1).coerceAtLeast(0) }
+
+/**
+ * The find bar's count: `No matches`, `3 matches` while no match is selected ([current] null), or `2 of 3` for the
+ * selected one; empty for an empty query. At the limit of [MAX_SEARCH_MATCHES] it reads `5000+`.
+ */
+fun findLabel(query: String, current: Int?, count: Int): String = when {
+    query.isEmpty() -> ""
+    count == 0 -> "No matches"
+    current != null -> matchLabel(query, current, count)
+    count >= MAX_SEARCH_MATCHES -> "$MAX_SEARCH_MATCHES+ matches"
+    count == 1 -> "1 match"
+    else -> "$count matches"
+}
