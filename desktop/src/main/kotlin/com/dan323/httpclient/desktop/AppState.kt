@@ -185,6 +185,9 @@ class AppState(
     val text: String get() = active?.text ?: ""
     val dirty: Boolean get() = active?.dirty ?: false
     val environments: List<String> get() = active?.environments ?: emptyList()
+    /** Names this document at this revision of its text: it differs for another tab and after any later change, even one back to the same text. */
+    val editStamp: Any get() = active?.let { it to it.revision } ?: Unit
+
     /** Find and replace in the editor: shared by all tabs (the text searched for stays when another tab comes on screen). */
     val find = FindState()
 

@@ -235,16 +235,16 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             if (state.running || state.file == null) return
             val done = replaceAll(shown.text, find.query, find.replacement, find.matchCase)
             if (done.count > 0 && !state.edit(done.text)) {
-                find.report("Not replaced: the file is busy.", shown.text)
+                find.report("Not replaced: the file is busy.", state.editStamp)
                 return
             }
             if (done.count > 0) field = TextFieldValue(done.text, TextRange(selection.end.coerceAtMost(done.text.length)))
-            find.report(replacedLabel(done.count), if (done.count > 0) done.text else shown.text)
+            find.report(replacedLabel(done.count), state.editStamp)
         }
         fun closeFind() { find.open = false; editorFocus.requestFocus() }
         if (find.open) {
             FindBar(
-                find, matches.size, find.statusFor(shown.text), matches.indexOf(currentMatch).takeIf { it >= 0 }, canEdit = !state.running && state.file != null,
+                find, matches.size, find.statusFor(state.editStamp), matches.indexOf(currentMatch).takeIf { it >= 0 }, canEdit = !state.running && state.file != null,
                 onStep = ::step, onReplace = ::replaceOne, onReplaceAll = ::replaceEverything, onClose = ::closeFind,
             )
         }

@@ -53,11 +53,12 @@ fun nextMatchIndex(matches: List<IntRange>, from: Int): Int = matches.indexOfFir
 /**
  * The match to go to after a replacement that replaced the text at [replacedStart] and ended at [caret] (the end of the
  * inserted text), in the [matches] of the new text: the first one at or after the caret, else, wrapping, the first one
- * before the replaced text; null when there is none. A match inside the inserted text is never offered, so replacing
- * `a` by `aa` moves on (or stops) instead of selecting its own output again.
+ * that ends before the replaced text; null when there is none. A match that overlaps the inserted text is never
+ * offered, so replacing `a` by `aa` moves on (or stops) instead of selecting its own output again, and replacing
+ * `ab` by `b` in `aab` does not select the `ab` that now ends with the inserted `b`.
  */
 fun matchAfterReplacement(matches: List<IntRange>, replacedStart: Int, caret: Int): Int? =
-    matches.indexOfFirst { it.first >= caret }.takeIf { it >= 0 } ?: matches.indexOfFirst { it.first < replacedStart }.takeIf { it >= 0 }
+    matches.indexOfFirst { it.first >= caret }.takeIf { it >= 0 } ?: matches.indexOfFirst { it.last < replacedStart }.takeIf { it >= 0 }
 
 /** [text] after every match was replaced, and how many there were. */
 data class ReplacedAll(val text: String, val count: Int)

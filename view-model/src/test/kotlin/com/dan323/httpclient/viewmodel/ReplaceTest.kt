@@ -40,6 +40,14 @@ class ReplaceTest {
         assertEquals(1, matchAfterReplacement(listOf(0..0, 5..5), 2, 3))                         // one after the caret
     }
 
+    @Test fun aWrappedMatchMustEndBeforeTheReplacedText() {
+        // "ab" in "aab", replaced by "b": the text is "ab" and the only match overlaps the inserted "b"
+        val done = replaceMatch("aab", 1..2, "b")
+        assertEquals("ab", done.text)
+        assertEquals(listOf(0..1), findMatches(done.text, "ab"))
+        assertEquals(null, matchAfterReplacement(findMatches(done.text, "ab"), 1, done.caret))
+    }
+
     @Test fun aStaleRangeChangesNothing() {
         assertEquals(Replacement("abc", 3), replaceMatch("abc", 7..9, "X"))
         assertEquals(Replacement("abc", 0), replaceMatch("abc", -2..0, "X"))

@@ -146,6 +146,29 @@ class EditorFindTest {
         } finally { root.toFile().deleteRecursively() }
     }
 
+    @Test fun theReplaceAllResultIsHiddenOnAnotherTabWithTheSameTextAndAfterAnEditBackToTheSameText() = runComposeUiTest {
+        val root = Files.createTempDirectory("httpc-find")
+        try {
+            val state = fixture(root)
+            val twin = root.resolve("u.http").also { Files.writeString(it, state.text) }
+            setContent { AppRoot(state) }
+            onNodeWithTag("find-toggle").performClick()
+            onNodeWithTag("find-query").performTextInput("x/a")
+            onNodeWithTag("find-replace").performTextInput("x/q")
+            waitForIdle()
+            onNodeWithTag("find-replace-all").performClick(); waitForIdle()
+            onNodeWithTag("find-count").assertTextEquals("Replaced 2 matches")
+            val replaced = state.text
+            state.edit(replaced + "#"); state.edit(replaced)               // changed and changed back: the same text again
+            waitForIdle()
+            onNodeWithTag("find-count").assertTextEquals("No matches")
+            state.open(twin)                                              // another tab; same text as the file had before the replacement
+            state.edit(replaced)
+            waitForIdle()
+            onNodeWithTag("find-count").assertTextEquals("No matches")
+        } finally { root.toFile().deleteRecursively() }
+    }
+
     @Test fun noMatchesAreReportedAndNothingCanBeReplaced() = runComposeUiTest {
         val root = Files.createTempDirectory("httpc-find")
         try {

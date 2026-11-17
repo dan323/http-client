@@ -40,7 +40,7 @@ class FindState {
     var matchCase by mutableStateOf(false)
 
     private var status by mutableStateOf<String?>(null)
-    private var statusText by mutableStateOf<String?>(null)
+    private var statusStamp by mutableStateOf<Any?>(null)
 
     /** Bumped to ask the bar for the keyboard again (Ctrl/Cmd+F while it is already open). */
     var focusTick by mutableStateOf(0)
@@ -49,13 +49,13 @@ class FindState {
     /** Opens the bar, or, when it is open, moves the keyboard to its search box. */
     fun show() { open = true; focusTick++ }
 
-    /** Remembers the result of a Replace all; it is shown only for the [text] that came out of it. */
-    fun report(label: String, text: String) { status = label; statusText = text }
+    /** Remembers the result of a Replace all together with the [stamp] ([AppState.editStamp]) of the text that came out of it. */
+    fun report(label: String, stamp: Any) { status = label; statusStamp = stamp }
 
-    fun clearStatus() { status = null; statusText = null }
+    fun clearStatus() { status = null; statusStamp = null }
 
-    /** The last Replace all's result while the editor still has the text it produced (another edit or tab hides it). */
-    fun statusFor(text: String): String? = status.takeIf { statusText == text }
+    /** The last Replace all's result while the editor is on the very document and revision it produced: another tab, or any later edit, hides it. */
+    fun statusFor(stamp: Any): String? = status.takeIf { statusStamp == stamp }
 
     /** The matches of [query] in [text]; none while the bar is closed. */
     fun matches(text: String): List<IntRange> = if (open) findMatches(text, query, matchCase) else emptyList()
