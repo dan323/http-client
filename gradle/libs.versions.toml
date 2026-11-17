@@ -4,7 +4,7 @@ kotlinx-serialization = "1.9.0"
 compose-multiplatform = "1.12.2"
 intellij-platform = "2.19.0"
 pitest-plugin = "1.19.0"
-pitest-kotlin = "0.1.0"
+pitest-kotlin = "0.3.0"
 # PIT itself; the Kotlin plugin needs 1.30.2 or later (the Gradle plugin defaults to an older one).
 pitest-engine = "1.30.2"
 
