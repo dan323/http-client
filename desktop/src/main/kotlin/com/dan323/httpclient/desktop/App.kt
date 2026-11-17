@@ -203,8 +203,8 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
         val chosen = picked.coerceIn(0, (items.size - 1).coerceAtLeast(0))
         fun accept(item: CompletionItem) {
             val done = applyCompletion(shown.text, context ?: return, caret, item)
+            if (!state.edit(done.text)) return   // refused (a request or a file switch is in progress): the text stays as it is
             field = TextFieldValue(done.text, TextRange(done.caret))
-            state.edit(done.text)
             editorFocus.requestFocus()   // a click on a suggestion must not take the keyboard away from the editor
         }
         val find = state.find
@@ -224,7 +224,7 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             if (m == null) { step(true); return }   // nothing selected yet: go to the next match first
             if (state.running || state.file == null) return
             val done = replaceMatch(shown.text, m, find.replacement)
-            if (done.text != shown.text) state.edit(done.text)
+            if (done.text != shown.text && !state.edit(done.text)) return   // refused: nothing changed
             field = TextFieldValue(done.text, TextRange(done.caret))
             find.clearStatus()
             val after = findMatches(done.text, find.query, find.matchCase)
@@ -234,10 +234,11 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
         fun replaceEverything() {
             if (state.running || state.file == null) return
             val done = replaceAll(shown.text, find.query, find.replacement, find.matchCase)
-            if (done.count > 0) {
-                state.edit(done.text)
-                field = TextFieldValue(done.text, TextRange(selection.end.coerceAtMost(done.text.length)))
+            if (done.count > 0 && !state.edit(done.text)) {
+                find.report("Not replaced: the file is busy.", shown.text)
+                return
             }
+            if (done.count > 0) field = TextFieldValue(done.text, TextRange(selection.end.coerceAtMost(done.text.length)))
             find.report(replacedLabel(done.count), if (done.count > 0) done.text else shown.text)
         }
         fun closeFind() { find.open = false; editorFocus.requestFocus() }

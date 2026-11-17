@@ -422,11 +422,16 @@ class AppState(
         settings?.update { it.withWindow(window) }
     }
 
-    /** Ignored while a run or file switch is in progress, so the buffer cannot diverge from what is being sent. */
-    fun edit(newText: String) {
-        if (busy.get()) return
-        val doc = active ?: return
+    /**
+     * Ignored while a run or file switch is in progress, so the buffer cannot diverge from what is being sent.
+     * Returns whether the edit was taken (false: busy, or no file open), so a caller that did more than type, such as
+     * Replace all, does not report a change that did not happen.
+     */
+    fun edit(newText: String): Boolean {
+        if (busy.get()) return false
+        val doc = active ?: return false
         doc.edit(newText)
+        return true
     }
 
     /** Saves the tab on screen. Returns false (with [message] set) when the file could not be written; refused while a run is in progress. */

@@ -311,6 +311,15 @@ class AppStateTest {
         }
     }
 
+    @Test fun editSaysWhetherItWasTaken() {
+        AppState().use { state ->
+            assertFalse(state.edit("x"))                      // no file open
+            state.open(slowFile("idle.http"))
+            assertTrue(state.edit("GET http://changed/\n"))
+            assertEquals("GET http://changed/\n", state.text)
+        }
+    }
+
     @Test fun editAndSaveAreRefusedWhileRunning() {
         AppState().use { state ->
             val file = slowFile("busy.http")
@@ -318,7 +327,7 @@ class AppStateTest {
             state.environment = "dev"
             val t = Thread { state.run(all = true) }.also { it.start() }
             assertTrue(entered.await(10, java.util.concurrent.TimeUnit.SECONDS))
-            state.edit("GET http://changed/\n")
+            assertFalse(state.edit("GET http://changed/\n"))     // says it was refused
             assertEquals("GET {{base}}/slow\n", state.text)
             assertFalse(state.dirty)
             assertFalse(state.save())
