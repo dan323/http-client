@@ -6,6 +6,7 @@ import com.dan323.httpclient.adapters.UpwardEnvironmentLocator
 import com.dan323.httpclient.core.application.EnvironmentChoice
 import com.dan323.httpclient.core.application.environments
 import com.dan323.httpclient.core.domain.Environment
+import com.dan323.httpclient.core.port.out.EnvironmentFileException
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.vfs.VirtualFileManager
@@ -76,6 +77,10 @@ class HttpClientService(@Suppress("unused") private val project: Project) : Disp
 
     /** Environments for [file]: the nearest enclosing `http-client.env.json` (same rule as the CLI and desktop). */
     fun environments(file: Path): List<Environment> = locator.environments(file)
+
+    /** The variable names (never the values) of each environment of [file]'s env file, for editor intelligence. Reads the file: not on the UI thread. */
+    fun environmentVariableNames(file: Path): Map<String, Set<String>> =
+        try { environments(file).associate { it.name to it.variables.keys.toSet() } } catch (e: EnvironmentFileException) { emptyMap() }   // a copy: `keys` is a view that would keep the values (secrets) reachable
 
     /** See [ClientState.run]. Returns false when another request is still running. Blocking. */
     fun run(file: Path, text: String, caretLine: Int): Boolean = clientState.run(file, text, caretLine)
