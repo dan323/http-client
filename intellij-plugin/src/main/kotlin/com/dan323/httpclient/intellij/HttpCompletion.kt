@@ -1,6 +1,7 @@
 package com.dan323.httpclient.intellij
 
 import com.dan323.httpclient.core.application.KnownVariable
+import com.dan323.httpclient.core.port.out.EnvironmentFileException
 import com.dan323.httpclient.viewmodel.CompletionContext
 import com.dan323.httpclient.viewmodel.CompletionItem
 import com.dan323.httpclient.viewmodel.analyzeFor
@@ -41,7 +42,8 @@ class HttpCompletionContributor : CompletionContributor(), DumbAware {
                 val text = parameters.editor.document.text
                 val ref = completionContext(text, parameters.offset) ?: return
                 val service = file.project.getService(HttpClientService::class.java)
-                val environments = if (path == null) emptyMap() else service.environmentVariableNames(Path.of(path))
+                // An unreadable env file offers no environment names (the annotator reports the problem).
+                val environments = if (path == null) emptyMap() else try { service.environmentVariableNames(Path.of(path)) } catch (e: EnvironmentFileException) { emptyMap() }
                 val known = analyzeFor(text, service.environmentChoice, environments).knownVariablesAt(parameters.offset)
                 // The view-model already filtered and ordered the names (starts-with, then contains): accept all of them, keep its order.
                 val everything = object : PrefixMatcher(ref.prefix) {
@@ -50,6 +52,8 @@ class HttpCompletionContributor : CompletionContributor(), DumbAware {
                 }
                 val sorted = result.withPrefixMatcher(everything)
                 completions(known, ref.prefix).forEachIndexed { i, item -> sorted.addElement(lookup(item, ref, i, known)) }
+                // Only the first suggestions are offered per prefix; typing on asks again, so a name past the limit shows up.
+                sorted.restartCompletionOnAnyPrefixChange()
             }
         })
     }

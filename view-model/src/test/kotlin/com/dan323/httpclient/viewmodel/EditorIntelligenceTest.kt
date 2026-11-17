@@ -41,6 +41,19 @@ class EditorIntelligenceTest {
         assertEquals(text.indexOf("login\n"), declaration("login.response"))
     }
 
+    @Test fun `a name defined again goes to the definition in force at the use`() {
+        val t = "@host = a\nGET {{host}}/1\n\n###\n@host = b\nGET {{host}}/2\n"
+        val analysis = analyzeFor(t, EnvironmentChoice.None, envs)
+        fun target(use: String) = declarationOf(analysis, t.indexOf(use) + 3)?.offset
+        assertEquals(t.indexOf("host = a"), target("{{host}}/1"))
+        assertEquals(t.indexOf("host = b"), target("{{host}}/2"))
+    }
+
+    @Test fun `a use above its only definition goes to it`() {
+        val t = "GET {{host}}/1\n\n###\n@host = b\nGET http://x\n"
+        assertEquals(t.indexOf("host = b"), declarationOf(analyzeFor(t, EnvironmentChoice.None, envs), t.indexOf("host}}") + 1)?.offset)
+    }
+
     @Test fun `a definition, an environment variable and a bare position have no target`() {
         assertNull(declaration("host = x"))
         assertNull(declaration("key}}"))

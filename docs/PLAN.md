@@ -61,7 +61,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 |---|---|
 | F9 | T27 |
 | F11 | T14 |
-| F14 | F18 | T21 |
+| F18 | T21 |
 | F19 | T21, T23 |
 | F20 | T25 (T21, T24 done) |
 | F21 | T28, T29, T30, T31 |

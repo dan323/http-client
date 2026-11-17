@@ -14,7 +14,7 @@ fun analyzeFor(text: String, choice: EnvironmentChoice, environments: Map<String
 
 /**
  * Where the name at [offset] is defined: the `@x = ...` line of a variable, or the `# @name x` of a request that a
- * `{{x.response...}}` refers to. Null when the caret is not on a name, or the definition is not in the file (an
+ * `{{x.response...}}` refers to; when the name is defined more than once, the definition in force at the use. Null when the caret is not on a name, or the definition is not in the file (an
  * environment variable, a dynamic variable, an undefined name). A definition is never its own target.
  */
 fun declarationOf(analysis: VariableAnalysis, offset: Int): SourceRange? {
@@ -24,7 +24,10 @@ fun declarationOf(analysis: VariableAnalysis, offset: Int): SourceRange? {
         OccurrenceKind.REQUEST_REFERENCE -> OccurrenceKind.REQUEST_DECLARATION
         else -> return null
     }
-    return analysis.findUsages(at.name).firstOrNull { it.kind == wanted }?.range
+    // A name can be defined again further down: the one in force is the last before the use, and for a use that
+    // comes first (a variable defined later, reported as a problem) the first definition there is.
+    val definitions = analysis.findUsages(at.name).filter { it.kind == wanted }
+    return (definitions.lastOrNull { it.range.offset < at.range.offset } ?: definitions.firstOrNull())?.range
 }
 
 /** Replace `start until end` of the old text by [replacement] to get the new text. */
