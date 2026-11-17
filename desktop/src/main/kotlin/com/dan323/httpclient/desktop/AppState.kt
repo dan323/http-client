@@ -110,6 +110,7 @@ class AppState(
         val doc = synchronized(tabsLock) {
             val d = documents.getOrNull(index) ?: return
             activeIndex = index
+            find.clearStatus()   // a Replace all result belongs to the tab it ran in, also when that tab comes back unchanged
             if (historyOpen) historyView?.loadInBackground(d.file.toAbsolutePath())
             closeEnvironmentEditor()   // it edits the files of the folder of the file that was on screen
             d
@@ -175,6 +176,7 @@ class AppState(
             activeIndex = if (index < activeIndex) activeIndex - 1 else activeIndex.coerceAtMost((documents.size - 1).coerceAtLeast(0))
             if (wasActive && historyOpen) historyView?.loadInBackground(active?.file?.toAbsolutePath())
             if (wasActive) closeEnvironmentEditor()
+            if (wasActive) find.clearStatus()
             if (wasActive) active else null
         }
         // The tab that comes on screen may have missed a change of the shared environment file made through another tab.
@@ -185,6 +187,12 @@ class AppState(
     val text: String get() = active?.text ?: ""
     val dirty: Boolean get() = active?.dirty ?: false
     val environments: List<String> get() = active?.environments ?: emptyList()
+    /** Names this document at this revision of its text: it differs for another tab and after any later change, even one back to the same text. */
+    val editStamp: Any get() = active?.let { it to it.revision } ?: Unit
+
+    /** Find and replace in the editor: shared by all tabs (the text searched for stays when another tab comes on screen). */
+    val find = FindState()
+
     /** The names usable in `{{ }}` at [offset] of the open file (see [com.dan323.httpclient.core.application.VariableAnalysis.knownVariablesAt]). */
     fun knownVariablesAt(offset: Int): List<com.dan323.httpclient.core.application.KnownVariable> = active?.analysis?.knownVariablesAt(offset) ?: emptyList()
     /** Problems with the `{{variables}}` of the open file, for the editor underlines and the problems list. */
@@ -419,11 +427,16 @@ class AppState(
         settings?.update { it.withWindow(window) }
     }
 
-    /** Ignored while a run or file switch is in progress, so the buffer cannot diverge from what is being sent. */
-    fun edit(newText: String) {
-        if (busy.get()) return
-        val doc = active ?: return
+    /**
+     * Ignored while a run or file switch is in progress, so the buffer cannot diverge from what is being sent.
+     * Returns whether the edit was taken (false: busy, or no file open), so a caller that did more than type, such as
+     * Replace all, does not report a change that did not happen.
+     */
+    fun edit(newText: String): Boolean {
+        if (busy.get()) return false
+        val doc = active ?: return false
         doc.edit(newText)
+        return true
     }
 
     /** Saves the tab on screen. Returns false (with [message] set) when the file could not be written; refused while a run is in progress. */

@@ -18,6 +18,10 @@ internal class OpenDocument(val file: Path, content: String) {
     var text by mutableStateOf(content)
         private set
 
+    /** Counts every change of [text] (typing, replacing, reloading), so something tied to "this text" can tell a later change, even back to the same text. */
+    var revision by mutableStateOf(0)
+        private set
+
     /** True when [text] has edits that are not in the file; set by [edit], cleared by [saved]. */
     var dirty by mutableStateOf(false)
         private set
@@ -81,6 +85,7 @@ internal class OpenDocument(val file: Path, content: String) {
     fun markCancelled() { cancelled = true }
 
     private fun parse(value: String) {
+        revision++
         text = value
         requests = Workspace.parse(value)
         parseError = Workspace.parseError(value)

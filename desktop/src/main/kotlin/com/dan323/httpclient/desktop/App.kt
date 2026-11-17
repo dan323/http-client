@@ -73,6 +73,13 @@ import com.dan323.httpclient.viewmodel.applyCompletion
 import com.dan323.httpclient.viewmodel.completionContext
 import com.dan323.httpclient.viewmodel.completions
 import com.dan323.httpclient.viewmodel.kindLabel
+import com.dan323.httpclient.viewmodel.findMatches
+import com.dan323.httpclient.viewmodel.matchAfterReplacement
+import com.dan323.httpclient.viewmodel.nextMatchIndex
+import com.dan323.httpclient.viewmodel.previousMatchIndex
+import com.dan323.httpclient.viewmodel.replaceAll
+import com.dan323.httpclient.viewmodel.replaceMatch
+import com.dan323.httpclient.viewmodel.replacedLabel
 import com.dan323.httpclient.viewmodel.problemLabel
 import com.dan323.httpclient.viewmodel.problemSummary
 import com.dan323.httpclient.viewmodel.RunControls
@@ -178,6 +185,7 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
         if (state.tabs.isNotEmpty()) TabBar(state)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(enabled = state.file != null && state.dirty && !state.running, onClick = { state.save() }) { Text("Save") }
+            OutlinedButton(enabled = state.file != null, onClick = { if (state.find.open) state.find.open = false else state.find.show() }, modifier = Modifier.testTag("find-toggle")) { Text("Find") }
             state.message?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
         }
         val problems = state.problems
@@ -195,9 +203,50 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
         val chosen = picked.coerceIn(0, (items.size - 1).coerceAtLeast(0))
         fun accept(item: CompletionItem) {
             val done = applyCompletion(shown.text, context ?: return, caret, item)
+            if (!state.edit(done.text)) return   // refused (a request or a file switch is in progress): the text stays as it is
             field = TextFieldValue(done.text, TextRange(done.caret))
-            state.edit(done.text)
             editorFocus.requestFocus()   // a click on a suggestion must not take the keyboard away from the editor
+        }
+        val find = state.find
+        val matches = find.matches(shown.text)
+        val selection = shown.selection
+        val currentMatch = matches.firstOrNull { it.first == selection.min && it.last + 1 == selection.max }
+        fun select(index: Int) {
+            val m = matches.getOrNull(index) ?: return
+            field = TextFieldValue(shown.text, TextRange(m.first, m.last + 1))   // the field scrolls to it
+        }
+        fun step(forward: Boolean) {
+            if (matches.isEmpty()) return
+            select(if (forward) nextMatchIndex(matches, selection.max) else previousMatchIndex(matches, selection.min))
+        }
+        fun replaceOne() {
+            val m = currentMatch
+            if (m == null) { step(true); return }   // nothing selected yet: go to the next match first
+            if (state.running || state.file == null) return
+            val done = replaceMatch(shown.text, m, find.replacement)
+            if (done.text != shown.text && !state.edit(done.text)) return   // refused: nothing changed
+            field = TextFieldValue(done.text, TextRange(done.caret))
+            find.clearStatus()
+            val after = findMatches(done.text, find.query, find.matchCase)
+            val next = matchAfterReplacement(after, m.first, done.caret)?.let { after[it] }
+            if (next != null) field = TextFieldValue(done.text, TextRange(next.first, next.last + 1))
+        }
+        fun replaceEverything() {
+            if (state.running || state.file == null) return
+            val done = replaceAll(shown.text, find.query, find.replacement, find.matchCase)
+            if (done.count > 0 && !state.edit(done.text)) {
+                find.report("Not replaced: the file is busy.", state.editStamp)
+                return
+            }
+            if (done.count > 0) field = TextFieldValue(done.text, TextRange(selection.end.coerceAtMost(done.text.length)))
+            find.report(replacedLabel(done.count), state.editStamp)
+        }
+        fun closeFind() { find.open = false; editorFocus.requestFocus() }
+        if (find.open) {
+            FindBar(
+                find, matches.size, find.statusFor(state.editStamp), matches.indexOf(currentMatch).takeIf { it >= 0 }, canEdit = !state.running && state.file != null,
+                onStep = ::step, onReplace = ::replaceOne, onReplaceAll = ::replaceEverything, onClose = ::closeFind,
+            )
         }
         OutlinedTextField(
             value = shown,
@@ -208,11 +257,12 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
             enabled = state.file != null,
             readOnly = state.running,
             textStyle = mono,
-            visualTransformation = remember(dark, problems) { HttpVisualTransformation(if (dark) HighlightPalette.Dark else HighlightPalette.Light, problems) },
+            visualTransformation = remember(dark, problems, matches, currentMatch) { HttpVisualTransformation(if (dark) HighlightPalette.Dark else HighlightPalette.Light, problems, matches, currentMatch) },
             placeholder = { Text("Open or create a .http file") },
             modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp).testTag("editor").focusRequester(editorFocus).onPreviewKeyEvent { e ->
                 val plain = !e.isShiftPressed && !e.isCtrlPressed && !e.isAltPressed && !e.isMetaPressed
-                if (items.isEmpty() || e.type != KeyEventType.KeyDown) false
+                if (e.type == KeyEventType.KeyDown && e.key == Key.F && (e.isCtrlPressed || e.isMetaPressed) && state.file != null) { find.show(); true }
+                else if (items.isEmpty() || e.type != KeyEventType.KeyDown) false
                 else when {
                     e.key == Key.DirectionDown -> { picked = (chosen + 1) % items.size; navigated = true; true }
                     e.key == Key.DirectionUp -> { picked = (chosen - 1 + items.size) % items.size; navigated = true; true }

@@ -21,6 +21,7 @@ class HighlightPalette(
     val method: Color, val url: Color, val headerName: Color, val variable: Color,
     val comment: Color, val separator: Color, val fileRef: Color,
     val error: Color = Color(0xFFC62828), val warning: Color = Color(0xFFB26A00),
+    val match: Color = Color(0x66FFD54F), val currentMatch: Color = Color(0xCCFF9800),
 ) {
     fun styleOf(kind: HttpTokenKind): SpanStyle? = when (kind) {
         HttpTokenKind.METHOD -> SpanStyle(color = method, fontWeight = FontWeight.Bold)
@@ -45,9 +46,20 @@ class HighlightPalette(
     }
 }
 
-/** Colors the tokens of [text] and underlines each of [problems] (red for errors, amber for warnings). */
-fun highlight(text: String, palette: HighlightPalette, problems: List<Diagnostic> = emptyList()): AnnotatedString = buildAnnotatedString {
+/**
+ * Colors the tokens of [text], underlines each of [problems] (red for errors, amber for warnings) and marks the find
+ * [matches] with a background, [current] (one of them) stronger.
+ */
+fun highlight(
+    text: String, palette: HighlightPalette, problems: List<Diagnostic> = emptyList(),
+    matches: List<IntRange> = emptyList(), current: IntRange? = null,
+): AnnotatedString = buildAnnotatedString {
     append(text)
+    for (m in matches) {
+        val start = m.first.coerceIn(0, text.length)
+        val end = (m.last + 1).coerceIn(start, text.length)
+        if (end > start) addStyle(SpanStyle(background = if (m == current) palette.currentMatch else palette.match), start, end)
+    }
     for (t in HttpLineLexer.tokenize(text)) palette.styleOf(t.kind)?.let { addStyle(it, t.start, t.end) }
     for (d in problems) {
         val start = d.range.offset.coerceIn(0, text.length)
@@ -57,8 +69,11 @@ fun highlight(text: String, palette: HighlightPalette, problems: List<Diagnostic
 }
 
 /** Colors the text as it is typed; the text itself is unchanged so offsets map one to one. */
-class HttpVisualTransformation(private val palette: HighlightPalette, private val problems: List<Diagnostic> = emptyList()) : VisualTransformation {
-    override fun filter(text: AnnotatedString) = TransformedText(highlight(text.text, palette, problems), OffsetMapping.Identity)
+class HttpVisualTransformation(
+    private val palette: HighlightPalette, private val problems: List<Diagnostic> = emptyList(),
+    private val matches: List<IntRange> = emptyList(), private val current: IntRange? = null,
+) : VisualTransformation {
+    override fun filter(text: AnnotatedString) = TransformedText(highlight(text.text, palette, problems, matches, current), OffsetMapping.Identity)
 }
 
 /** `METHOD url` for the request list, with the method coloured like in the editor. */
