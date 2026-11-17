@@ -185,6 +185,9 @@ class AppState(
     val text: String get() = active?.text ?: ""
     val dirty: Boolean get() = active?.dirty ?: false
     val environments: List<String> get() = active?.environments ?: emptyList()
+    /** Find and replace in the editor: shared by all tabs (the text searched for stays when another tab comes on screen). */
+    val find = FindState()
+
     /** The names usable in `{{ }}` at [offset] of the open file (see [com.dan323.httpclient.core.application.VariableAnalysis.knownVariablesAt]). */
     fun knownVariablesAt(offset: Int): List<com.dan323.httpclient.core.application.KnownVariable> = active?.analysis?.knownVariablesAt(offset) ?: emptyList()
     /** Problems with the `{{variables}}` of the open file, for the editor underlines and the problems list. */
