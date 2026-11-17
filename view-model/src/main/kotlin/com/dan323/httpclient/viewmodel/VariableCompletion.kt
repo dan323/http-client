@@ -37,14 +37,14 @@ const val MAX_SUGGESTIONS = 12
 
 /**
  * The names of [known] that match [prefix]: those that start with it first (case ignored), then those that merely
- * contain it. A name equal to [prefix] is not offered (it is already complete); names are case-sensitive at run time,
+ * contain it. A name equal to [prefix] is not offered (it is already complete); at most [limit] are returned (the desktop list is short; an IDE popup scrolls and filters as you type, so it asks for all). Names are case-sensitive at run time,
  * so a name that differs only in case still is, as the correction.
  */
-fun completions(known: List<KnownVariable>, prefix: String): List<CompletionItem> {
+fun completions(known: List<KnownVariable>, prefix: String, limit: Int = MAX_SUGGESTIONS): List<CompletionItem> {
     val p = prefix.lowercase()
     val starts = known.filter { it.name.lowercase().startsWith(p) }
     val contains = if (p.isEmpty()) emptyList() else known.filter { !it.name.lowercase().startsWith(p) && p in it.name.lowercase() }
-    return (starts + contains).filter { it.name != prefix }.take(MAX_SUGGESTIONS).map { CompletionItem(it.name, it.kind) }
+    return (starts + contains).filter { it.name != prefix }.take(limit).map { CompletionItem(it.name, it.kind) }
 }
 
 /** The text after accepting [item] for [context] with the caret at [caret], and where the caret goes. */

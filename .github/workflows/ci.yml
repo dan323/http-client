@@ -94,7 +94,7 @@ jobs:
         if: needs.changes.outputs.code == 'true'
       - name: Build plugin
         if: needs.changes.outputs.code == 'true'
-        run: ./gradlew :intellij-plugin:buildPlugin --console=plain
+        run: ./gradlew :intellij-plugin:buildPlugin :intellij-plugin:test --console=plain
       # The installers bundle a jlink-trimmed JRE; fail if the app needs a JDK module that runtime lacks (it would crash only when installed).
       - name: Check desktop runtime modules
         if: needs.changes.outputs.code == 'true'

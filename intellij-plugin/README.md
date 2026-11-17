@@ -30,7 +30,7 @@ The plugin is compiled against a locally installed IDE. Set `ideaPath` in the ro
 ```
 ./gradlew :intellij-plugin:buildPlugin    # zip in intellij-plugin/build/distributions/
 ./gradlew :intellij-plugin:runIde         # sandbox IDE with the plugin
-./gradlew :intellij-plugin:test           # lexer, environment-item and ClientState (run guard, session reuse) tests; needs an IDE
+./gradlew :intellij-plugin:test           # lexer, ClientState (run guard, session reuse) and completion (light editor fixture) tests; needs an IDE
 ```
 
 Install the zip via *Settings → Plugins → ⚙ → Install Plugin from Disk…*.

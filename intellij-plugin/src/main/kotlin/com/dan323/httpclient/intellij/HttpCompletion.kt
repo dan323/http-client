@@ -45,17 +45,16 @@ class HttpCompletionContributor : CompletionContributor(), DumbAware {
                 // An unreadable env file offers no environment names (the annotator reports the problem).
                 val environments = if (path == null) emptyMap() else try { service.environmentVariableNames(Path.of(path)) } catch (e: EnvironmentFileException) { emptyMap() }
                 val known = analyzeFor(text, service.environmentChoice, environments).knownVariablesAt(parameters.offset)
-                // The view-model already filtered and ordered the names (starts-with, then contains): accept all of them, keep its order.
-                val everything = object : PrefixMatcher(ref.prefix) {
-                    override fun prefixMatches(name: String) = true
-                    override fun cloneWithPrefix(prefix: String) = this
-                }
-                val sorted = result.withPrefixMatcher(everything)
-                completions(known, ref.prefix).forEachIndexed { i, item -> sorted.addElement(lookup(item, ref, i, known)) }
-                // Only the first suggestions are offered per prefix; typing on asks again, so a name past the limit shows up.
-                sorted.restartCompletionOnAnyPrefixChange()
+                // The IDE keeps narrowing the list as the user types, with the same rule as the view-model's (the name contains what is typed, case ignored), so all the names are handed over, not a short list.
+                val sorted = result.withPrefixMatcher(Containing(ref.prefix))
+                completions(known, ref.prefix, Int.MAX_VALUE).forEachIndexed { i, item -> sorted.addElement(lookup(item, ref, i, known)) }
             }
         })
+    }
+
+    private class Containing(prefix: String) : PrefixMatcher(prefix) {
+        override fun prefixMatches(name: String) = name.contains(prefix, ignoreCase = true)
+        override fun cloneWithPrefix(prefix: String): PrefixMatcher = Containing(prefix)
     }
 
     private fun lookup(item: CompletionItem, ref: CompletionContext, rank: Int, known: List<KnownVariable>): LookupElement =
