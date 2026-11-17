@@ -19,11 +19,15 @@ import com.dan323.httpclient.adapters.FileHistoryStore
 import com.dan323.httpclient.adapters.SessionFactory
 import com.dan323.httpclient.adapters.SystemEnvironmentVariables
 import com.dan323.httpclient.core.application.HttpFileParser
+import com.dan323.httpclient.core.application.DiagnosticCodes
 import com.dan323.httpclient.core.application.Severity
 import com.dan323.httpclient.core.application.VariableAnalysis
 import com.dan323.httpclient.core.application.RunOutcome
 import com.dan323.httpclient.core.application.withDependencies
 import com.dan323.httpclient.core.domain.RequestTemplate
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
 import java.nio.file.Files
 import java.io.PrintStream
 import java.nio.file.InvalidPathException
@@ -48,7 +52,7 @@ private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NA
                    lines that do not parse; one `FILE:LINE:COLUMN: error|warning: message [code]` per line
                    on stdout; exit 1 when there is an error, 0 otherwise (warnings do not fail); only
                    --env and --var may be added (names count as defined, values are never read)
-  --list           list the requests in the file and exit (cannot be combined with --report-*)
+  --list           list the requests in the file and exit (cannot be combined with --report-* or --check)
   --report-json F  write a JSON run report (results, assertions, timings, totals) to F
   --report-junit F write a JUnit XML run report to F
   --quiet          print no per-request output on stdout (failed assertions and errors still go to stderr)
@@ -354,10 +358,18 @@ private fun check(opts: Options, out: PrintStream, err: PrintStream): Int {
     } catch (e: EnvironmentFileException) {
         return fail(err, e.message ?: "Invalid environment file")
     }
-    val problems = VariableAnalysis.analyze(Files.readString(opts.file), names).diagnostics
+    val text = try {
+        Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(Files.readAllBytes(opts.file))).toString()
+    } catch (_: CharacterCodingException) {
+        return fail(err, "${opts.file} is not valid UTF-8")
+    }
+    val problems = VariableAnalysis.analyze(text, names).diagnostics.sortedBy { it.range.offset }
     problems.forEach {
         val kind = if (it.severity == Severity.ERROR) "error" else "warning"
-        out.println("${opts.file}:${it.range.line + 1}:${it.range.column + 1}: $kind: ${it.message} [${it.code}]")
+        // The parser's message names its line already; the position prefix says it once.
+        val message = if (it.code == DiagnosticCodes.PARSE_ERROR) it.message.replaceFirst(Regex("^Line \\d+: "), "") else it.message
+        out.println("${opts.file}:${it.range.line + 1}:${it.range.column + 1}: $kind: $message [${it.code}]")
     }
     val errors = problems.count { it.severity == Severity.ERROR }
     val warnings = problems.size - errors

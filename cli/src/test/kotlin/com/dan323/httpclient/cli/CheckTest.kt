@@ -76,6 +76,38 @@ class CheckTest {
         assertContains(r.out, "[parse-error]")
     }
 
+    @Test fun `warnings alone pass`() {
+        val f = file("# @name a\nGET http://x\n\n###\n# @name a\nGET http://y\n")
+        val r = cli(f, "--check")
+        assertEquals(0, r.code, r.out)
+        assertContains(r.out, "$f:5:")
+        assertContains(r.out, "warning: ")
+        assertContains(r.out, "[duplicate-request-name]")
+        assertContains(r.err, "0 errors, 1 warning")
+    }
+
+    @Test fun `problems come sorted by line and a parse error names its line once`() {
+        val f = file("GET http://x/{{a}}\n\n###\nGET http://y/{{b}}\nbad header line\n")
+        val lines = cli(f, "--check").out.trim().lines()
+        assertEquals(listOf(1, 4, 5), lines.map { it.removePrefix("$f:").substringBefore(':').toInt() })
+        val parse = lines.single { "[parse-error]" in it }
+        assertFalse("Line 5" in parse, parse)
+    }
+
+    @Test fun `a malformed environment file fails and names the file`() {
+        Files.writeString(dir.resolve("http-client.env.json"), "[]")
+        val r = cli(file("GET http://x\n"), "--check", "--env", "dev")
+        assertEquals(1, r.code)
+        assertContains(r.err, "http-client.env.json")
+    }
+
+    @Test fun `a file that is not UTF-8 says so`() {
+        val f = dir.resolve("bad.http").also { Files.write(it, byteArrayOf('G'.code.toByte(), 0xFF.toByte())) }.toString()
+        val r = cli(f, "--check")
+        assertEquals(1, r.code)
+        assertContains(r.err, "not valid UTF-8")
+    }
+
     @Test fun `a missing file fails`() {
         assertEquals(1, cli(dir.resolve("missing.http").toString(), "--check").code)
     }

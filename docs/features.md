@@ -295,7 +295,7 @@ httpc <file.http> --check [--env NAME] [--var NAME=VALUE]
 | `--request X` | run the request named `X`, or the Nth (1-based), plus the named requests it reads responses from (transitively), in file order |
 | `--allow-env N` | let `{{$env.N}}` read these OS environment variables (repeatable) |
 | `--allow-file-root DIR` | also let `< path` bodies be read from `DIR` (repeatable) |
-| `--list`      | list requests and exit (cannot be combined with `--report-*`, `--quiet`, `--var`, `--timeout`, `--fail-on-http-error`, `--output`) |
+| `--list`      | list requests and exit (cannot be combined with `--report-*`, `--quiet`, `--var`, `--timeout`, `--fail-on-http-error`, `--output`, `--check`) |
 | `--check`     | look for problems without sending anything (see below); only `--env` and `--var` may be added |
 | `--report-json FILE` / `--report-junit FILE` | write a run report (see Run reports) |
 | `--quiet`     | no per-request output on stdout (see below) |
