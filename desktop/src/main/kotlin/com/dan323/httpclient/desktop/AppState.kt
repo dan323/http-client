@@ -110,6 +110,7 @@ class AppState(
         val doc = synchronized(tabsLock) {
             val d = documents.getOrNull(index) ?: return
             activeIndex = index
+            find.clearStatus()   // a Replace all result belongs to the tab it ran in, also when that tab comes back unchanged
             if (historyOpen) historyView?.loadInBackground(d.file.toAbsolutePath())
             closeEnvironmentEditor()   // it edits the files of the folder of the file that was on screen
             d
@@ -175,6 +176,7 @@ class AppState(
             activeIndex = if (index < activeIndex) activeIndex - 1 else activeIndex.coerceAtMost((documents.size - 1).coerceAtLeast(0))
             if (wasActive && historyOpen) historyView?.loadInBackground(active?.file?.toAbsolutePath())
             if (wasActive) closeEnvironmentEditor()
+            if (wasActive) find.clearStatus()
             if (wasActive) active else null
         }
         // The tab that comes on screen may have missed a change of the shared environment file made through another tab.

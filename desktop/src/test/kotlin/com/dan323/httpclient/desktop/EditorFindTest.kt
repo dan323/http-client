@@ -169,6 +169,26 @@ class EditorFindTest {
         } finally { root.toFile().deleteRecursively() }
     }
 
+    @Test fun theReplaceAllResultDoesNotComeBackWhenTheTabIsSwitchedAwayAndBackWithoutAnEdit() = runComposeUiTest {
+        val root = Files.createTempDirectory("httpc-find")
+        try {
+            val state = fixture(root)
+            val other = root.resolve("u.http").also { Files.writeString(it, "GET http://u\n") }
+            setContent { AppRoot(state) }
+            onNodeWithTag("find-toggle").performClick()
+            onNodeWithTag("find-query").performTextInput("x/a")
+            onNodeWithTag("find-replace").performTextInput("x/q")
+            waitForIdle()
+            onNodeWithTag("find-replace-all").performClick(); waitForIdle()
+            onNodeWithTag("find-count").assertTextEquals("Replaced 2 matches")
+            state.open(other)                // another tab (the first one stays open)
+            waitForIdle()
+            state.switchTo(0)                // back to the first, unchanged
+            waitForIdle()
+            onNodeWithTag("find-count").assertTextEquals("No matches")
+        } finally { root.toFile().deleteRecursively() }
+    }
+
     @Test fun noMatchesAreReportedAndNothingCanBeReplaced() = runComposeUiTest {
         val root = Files.createTempDirectory("httpc-find")
         try {
