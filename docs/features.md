@@ -286,6 +286,7 @@ Failure messages (also in reports and on stderr) never contain substituted varia
 httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] [--allow-file-root DIR] [--list]
                   [--report-json FILE] [--report-junit FILE] [--quiet] [--output FILE] [--var NAME=VALUE] [--timeout DURATION]
                   [--fail-on-http-error]
+httpc <file.http> --check [--env NAME] [--var NAME=VALUE]
 ```
 
 | Option        | Effect                                               |
@@ -295,6 +296,7 @@ httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] 
 | `--allow-env N` | let `{{$env.N}}` read these OS environment variables (repeatable) |
 | `--allow-file-root DIR` | also let `< path` bodies be read from `DIR` (repeatable) |
 | `--list`      | list requests and exit (cannot be combined with `--report-*`, `--quiet`, `--var`, `--timeout`, `--fail-on-http-error`, `--output`) |
+| `--check`     | look for problems without sending anything (see below); only `--env` and `--var` may be added |
 | `--report-json FILE` / `--report-junit FILE` | write a run report (see Run reports) |
 | `--quiet`     | no per-request output on stdout (see below) |
 | `--output FILE` | write the raw response body of the single selected request to `FILE` |
@@ -304,6 +306,8 @@ httpc <file.http> [--env NAME] [--request NAME|INDEX] [--allow-env NAME[,NAME]] 
 
 For each request the output is the status line with timing, the response headers, then the body. After a response, each assertion is printed as `PASS ...` or `FAIL ... -- message` (`NOT RUN ...` when the request failed), and a total line `Assertions: N passed, M failed, K not run` follows the run. After a run the CLI prints a summary such as `3 requests, 2 passed, 1 failed in 1.2s` to **stderr** (so stdout stays the response data); it counts every request that ran, prerequisites included. It is not printed for `--list` or when the run cannot start.
 
+**`--check`:** analyses the file like the editors do (undefined variables, requests that do not exist or have not run yet, bad or circular references, bad dynamic variables, lines that do not parse) and sends nothing, so it needs no network and no `--allow-*` options. Each problem is one line on stdout, `FILE:LINE:COLUMN: error|warning: message [code]` (1-based; the column is where the variable name starts; codes are the stable ones of `DiagnosticCodes`), and a count goes to stderr (`2 errors, 1 warning`, or `No problems`). Exit `1` when there is an error (or the file or environment cannot be read), `0` otherwise: warnings alone pass. A variable counts as defined when the file defines it before use, the chosen `--env` has it, or `--var` names it (names only: no value is read into the analysis or printed). Parser warnings (ignored response handlers, ignored settings) are not part of it. Any other option is a usage error (exit `2`).
+
 **`--quiet`:** nothing per request on stdout (no heading, status, headers, body, `PASS`, `NOT RUN` or the `Assertions:` total). Failed assertions go to stderr as `FAIL ...`, request errors as `Error: ...`, and the summary line still appears.
 
 **`--fail-on-http-error`:** by default an HTTP error status is not a failure (a `404` or `503` without a failed assertion exits `0`). With the option, any selected request answering status >= 400 fails the run (exit `1`) even if its assertions pass, printed to stderr as `FAIL HTTP 503 from <request name or METHOD url> (--fail-on-http-error)`, also with `--quiet`. Prerequisites that run only to feed chaining are not judged; redirects (3xx) are not errors. In reports the entry fails: JSON gets `"httpError": "HTTP 503"` and `passed: false`; JUnit gets a `failure` of type `HttpStatusFailure` (message such as `HTTP 503 from GET http://host/path`).
@@ -312,7 +316,7 @@ For each request the output is the status line with timing, the response headers
 
 **`--var NAME=VALUE`:** the name is everything before the first `=` and must be non-empty without whitespace or braces; the value may be empty or contain `=`. Repeating a name is a usage error. Precedence: `--var` beats file variables (`@name = value`), which beat the environment file; other file variables that mention an overridden name see the `--var` value. Values are replaced by `{{name}}` in failure messages and usage errors never echo them.
 
-**Exit codes**, by precedence: `2` bad arguments (usage is printed, nothing runs); `1` a request or setup failed (missing file, unknown environment or request), an assertion failed, a selected request got an HTTP error status with `--fail-on-http-error`, or any other error; `3` the run passed but a requested report or output file could not be written; `0` otherwise. Parser warnings (ignored response handlers) go to stderr as `warning: FILE: ...`; request failures as `Error: ...`.
+**Exit codes** (of a run; `--check` is described above), by precedence: `2` bad arguments (usage is printed, nothing runs); `1` a request or setup failed (missing file, unknown environment or request), an assertion failed, a selected request got an HTTP error status with `--fail-on-http-error`, or any other error; `3` the run passed but a requested report or output file could not be written; `0` otherwise. Parser warnings (ignored response handlers) go to stderr as `warning: FILE: ...`; request failures as `Error: ...`.
 
 Run with `./gradlew :cli:run --args="requests.http --env dev"`, or build a launcher with `./gradlew :cli:installDist` (output in `cli/build/install/httpc/bin`).
 
