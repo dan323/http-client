@@ -1,0 +1,11 @@
+{
+  "name": "http-client",
+  "owner": { "name": "dan323" },
+  "plugins": [
+    {
+      "name": "http-client",
+      "source": "./agent-skill",
+      "description": "Write, check and run .http files with httpc."
+    }
+  ]
+}
