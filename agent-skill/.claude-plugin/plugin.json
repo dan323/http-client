@@ -1,0 +1,6 @@
+{
+  "name": "http-client",
+  "description": "Teaches coding agents the .http request format and the httpc command line: write, check and run API requests and assertions.",
+  "version": "0.1.0",
+  "repository": "https://github.com/dan323/http-client"
+}

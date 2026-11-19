@@ -30,7 +30,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F19 | Plugin: richer response panel, remember environment, run all | plugin | partial: shared view-model, run guard, reset chain done; remember environment across restarts and run all done in code (T23, unverified by hand); the response panel is still plain text |
 | F20 | Verification and release: plugin tried in a real IDE, CI on macOS/Windows/Linux, installers | all | partial: tests on all three OS, plugin build and best-effort installer packaging (T24) in CI; plugin checked by hand on Ultimate 2026.3 (T21); Community install, 2026.1 baseline and macOS/Linux installer QA open |
 | F21 | User guide on GitHub Pages: step-by-step pages per interface (written, published by `pages.yml`), generated screenshots, links from the interfaces | docs, all UIs | partial: text guides done; screenshots, build check and links open ([user-guide-plan.md](user-guide-plan.md)) |
-| F22 | Agent-friendly: an offline `httpc --check`, a skill that teaches coding agents the dialect and the CLI, an MCP server over the session | cli, new module, docs | partial: `--check` done (T32); skill (T33) and MCP server (T34) open |
+| F22 | Agent-friendly: an offline `httpc --check`, a skill that teaches coding agents the dialect and the CLI, an MCP server over the session | cli, new module, docs | partial: `--check` (T32) and the skill (T33) done; MCP server (T34) open |
 | F23 | Bruno collections: run and convert `.bru` files and Bruno environments | adapters, cli | open (T35) |
 | F24 | VS Code: diagnostics, completion and go to definition through a language server, requests run through `httpc` | new modules | open (T36, T37) |
 
@@ -40,7 +40,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 
 Done tasks are listed in the CHANGELOG, not here: T1 (file variables, settings), T2 (executor options), T3 (cookie jar),
 T4 (`ResponseExtractor`), T5 (assertions), T6 (dynamic variables v2), T7 (Basic auth shortcut), T9 (`RunReport`, JSON and JUnit export),
-T8 (multipart bodies), T12 (`view-model`), T15 (desktop tabs, restored tabs and folder view), T17 (desktop search, save and image preview), T18 (desktop history and compare), T20 (environment editor: file store, editor model and desktop panel), T16 (desktop editor intelligence: diagnostics, completion, find/replace), T32 (`httpc --check`). Done as well: the review fixes R1-R13 (see [known-limitations.md](known-limitations.md) for what was left), including the
+T8 (multipart bodies), T12 (`view-model`), T15 (desktop tabs, restored tabs and folder view), T17 (desktop search, save and image preview), T18 (desktop history and compare), T20 (environment editor: file store, editor model and desktop panel), T16 (desktop editor intelligence: diagnostics, completion, find/replace), T32 (`httpc --check`), T33 (agent skill). Done as well: the review fixes R1-R13 (see [known-limitations.md](known-limitations.md) for what was left), including the
 composition root, environment resolution, file confinement, the CI matrix part of T24 and build quality reports.
 
 Each remaining task is listed once even when it serves several features. Size: S ≈ 1 day, M ≈ 2 days, L ≈ 3 days
@@ -58,8 +58,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 | T29 | **Guide screenshots:** desktop images generated headless from the real composables, CLI transcripts from real runs, plugin images by checklist | F21 | M | – |
 | T30 | **`user-guide` build module:** Gradle tasks that generate the assets and assemble the site for the PR check and the deploy | F21 | M | T29 |
 | T31 | **Links to the guide from the interfaces:** desktop Help, plugin Help link, one line in `httpc --help` | F21 | S | T29 (guide stable) |
-| T33 | **Agent skill:** a Claude Code skill (and plugin) in the repo teaching the dialect, `httpc`, the reports and exit codes, `--check`; written against the CLI | F22 | S | – |
-| T34 | **MCP server** (`mcp-server` module over `SessionFactory`/`RunController`): `list_requests`, `run`, `run_all`, `list_environments`, `analyze`. Needs its safety model first: file roots and host allow-list, private environment values never returned, a way to confirm requests that change data. Plan the model before coding | F22 | M | T32, T33 |
+| T34 | **MCP server** (`mcp-server` module over `SessionFactory`/`RunController`): `list_requests`, `run`, `run_all`, `list_environments`, `analyze`. Needs its safety model first: file roots and host allow-list, private environment values never returned, a way to confirm requests that change data. Plan the model before coding | F22 | M | T32, T33 (done) |
 | T35 | **Bruno import:** a reader port in `core` with an adapter that turns `.bru` files and `environments/*.bru` into `RequestTemplate`s and `Environment`s (`httpc run collection/`, convert to `.http`); unsupported parts (JavaScript scripts, tests in Bruno syntax) are reported, never skipped silently; no write-back | F23 | M | – |
 | T36 | **Language server:** `.http` diagnostics, completion and go to declaration over LSP in a new module, reusing `VariableAnalysis`, `HttpLineLexer` and the `view-model` helpers of T22 | F24 | L | T22 |
 | T37 | **VS Code extension:** a thin client of T36 (TextMate grammar or LSP semantic tokens, run through `httpc`, environment picker); needs a Java runtime or a bundled one | F24 | L | T36 |
@@ -75,7 +74,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 | F19 | T21, T23 |
 | F20 | T25 (T21, T24 done) |
 | F21 | T28, T29, T30, T31 |
-| F22 | T33, T34 (T32 done) |
+| F22 | T34 (T32, T33 done) |
 | F23 | T35 |
 | F24 | T36, T37 |
 
@@ -95,7 +94,7 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 | 5    | T27 (plugin part: open linked response)                           | T20 is done                                                  |
 | 6    | T25 (QA and release notes)                                                                                                 | needs everything                                             |
 | 7    | T28 (guide check), T29 (screenshots), T30 (guide module), T31 (links) | any time after wave 5 for T29-T31; T28 can go first       |
-| 8    | T33 (agent skill), then T34 (MCP server, after its safety model is written down); T35 (Bruno) | independent of the waves above; T32 (`--check`) is done |
+| 8    | T34 (MCP server, after its safety model is written down); T35 (Bruno) | independent of the waves above; T32 (`--check`) and T33 (skill) are done |
 | 9    | T36 (language server), then T37 (VS Code extension) | after T22 and the QA of wave 6 |
 
 ### Rules for every task
