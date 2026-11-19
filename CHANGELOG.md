@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- A `<>` link lookup (`HistoryStore.latestLinked`) now throws an `IOException` when the history folder cannot be listed, instead of returning null with only a warning on stderr, so the plugin's **Show Linked HTTP Response** and the desktop **Linked response** report `Could not read the linked response: cannot list ...` and not "Run it first". Other history reads stay lenient. Tested with the production `FileHistoryStore` (POSIX only).
 - The lexer left a gap in `@name = value` lines (the space before `=` belonged to no token), which IntelliJ rejects (`Discontinuous sequence of tokens`) in any `.http` file with a file variable. Found by the first editor-level plugin test; `HttpLineLexerTest` now checks that every character of a line is covered, for sample files too.
 
 ### Added
