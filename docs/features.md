@@ -110,7 +110,7 @@ GET {{host}}/users/{{user}}
 
 ### Editor diagnostics (analysis)
 
-The `{{...}}` of a `.http` text can be checked without running anything, for the editors (desktop and plugin use it in later tasks). Messages name variables and requests, never values.
+The `{{...}}` of a `.http` text can be checked without running anything, for the editors (the desktop app and the plugin underline and complete with it) and for `httpc --check`. Messages name variables and requests, never values.
 
 | Code | Severity | Meaning |
 |---|---|---|
@@ -361,4 +361,4 @@ Do not install it next to the bundled HTTP Client plugin of IntelliJ Ultimate, s
 
 ## Not yet implemented
 
-Response handlers (`> {% ... %}`, `> file`), and opening `<>`-linked responses in the plugin.
+Response handlers (`> {% ... %}`, `> file`).
