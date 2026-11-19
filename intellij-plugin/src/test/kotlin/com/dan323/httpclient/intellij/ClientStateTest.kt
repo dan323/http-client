@@ -279,6 +279,19 @@ class ClientStateTest {
         } finally {
             java.nio.file.Files.setPosixFilePermissions(root, java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"))
         }
+        // the folder above it denies traversal: still a read error, not "nothing recorded"
+        val parent = java.nio.file.Files.createTempDirectory("histparent")
+        val nested = com.dan323.httpclient.adapters.FileHistoryStore({ parent.resolve("inner") }, onWarning = {})
+        nested.recordLinked(file, "a", report, storedA.response)
+        val t = linkedState(nested)
+        java.nio.file.Files.setPosixFilePermissions(parent, emptySet())
+        try {
+            org.junit.jupiter.api.Assumptions.assumeTrue(!java.nio.file.Files.isReadable(parent))
+            t.showLinked(file, linkedText, 1)
+            assertTrue(t.lastReport.message!!.startsWith("Could not read the linked response: cannot read"), t.lastReport.message)
+        } finally {
+            java.nio.file.Files.setPosixFilePermissions(parent, java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"))
+        }
     }
 
     @Test fun showLinkedRefusesWhileARunIsInProgress() {

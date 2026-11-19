@@ -143,6 +143,22 @@ class FileHistoryStoreTest {
         assertEquals("A", s.latestLinked(http, "a")!!.response.bodyAsString())
     }
 
+    @Test fun aLinkLookupAlsoThrowsWhenTheParentHistoryFolderDeniesAccess() {
+        assumeTrue(posix)
+        val s = store()
+        s.recordLinked(http, "a", report("a"), response("A"))
+        val parent = dir.resolve(".http-history")
+        Files.setPosixFilePermissions(parent, emptySet())
+        try {
+            assumeTrue(!Files.isReadable(parent))   // running as root can read anything
+            val e = assertFailsWith<java.io.IOException> { s.latestLinked(http, "a") }
+            assertTrue(e.message!!.contains("cannot read"), e.message)
+        } finally {
+            Files.setPosixFilePermissions(parent, PosixFilePermissions.fromString("rwx------"))
+        }
+        assertEquals("A", s.latestLinked(http, "a")!!.response.bodyAsString())
+    }
+
     @Test fun leavesNoTempFilesAndWritesOnlyInsideTheHistoryFolder() {
         val s = store()
         val run = s.record(http, report("a"), listOf(response("x")))
