@@ -40,7 +40,7 @@ Install the zip via *Settings → Plugins → ⚙ → Install Plugin from Disk�
 - `HttpLanguage.kt`, `HttpLexer.kt`, `HttpParserDefinition.kt`, `HttpSyntaxHighlighter.kt` — language support.
   The PSI is flat (a sequence of tokens); request structure comes from `core`'s `HttpFileParser`.
 - `RunLineMarker.kt` — gutter run icons.
-- `Actions.kt` — run and environment actions.
+- `Actions.kt` — run, run all, cancel, environment and show-linked-response actions.
 - `HttpAnnotator.kt`, `HttpCompletion.kt`, `HttpGotoDeclaration.kt` — editor intelligence on top of `VariableAnalysis` and the `view-model` helpers (`analyzeFor`, `completions`/`applyCompletion`, `declarationOf`).
 - `EnvironmentEditorHeader.kt` — the environment picker shown in the header of `.http` editors (an `EditorNotificationProvider`).
 - `ClientState.kt` — IDE-independent state: environment choice, last report and listeners, the run guard, text-based session invalidation, on top of the shared `RunController`.
@@ -80,7 +80,7 @@ Known problems: the default shortcut `Ctrl+Alt+R` has not been tried in a runnin
 Not verified: a real Community install, and the 2026.1 baseline (build 261, the `since-build`) itself: the plugin
 was run on 2026.3 only. It does not load in 2025.3 (build 253) by design.
 
-The VFS listener, gutter icon and tool window are not covered by tests (they need a running IDE). No completion or navigation for `{{variables}}` yet. The assertion rendering is plain text in the tool window and was not run in an IDE.
+The VFS listener, gutter icon and tool window are not covered by tests (they need a running IDE). The editor intelligence (underlines, completion, go to declaration) has a light-fixture test for completion only; the annotator, go to declaration and the assertion rendering in the tool window were not run in an IDE. Find usages and rename of variables do not exist.
 
 `{{$env.NAME}}` reads nothing by default: allow names with `-Dhttpclient.allowEnv=NAME,NAME` (JVM option) or the environment variable `HTTPC_ALLOW_ENV=NAME,NAME`; see [docs/features.md](../docs/features.md).
 

@@ -30,6 +30,7 @@ How the behaviour described in [features.md](features.md) is implemented, and wh
 
 - `analyze(text, environmentNames)` returns `Diagnostic(code, severity, message, range)`; a `SourceRange` is in UTF-16 chars (offset, length, 0-based line and column).
 - `knownVariablesAt(offset)` lists file variables above, environment variables, `name.response.` prefixes of earlier requests and the dynamic variable templates. `findUsages`, `findVariableUsages`, `findRequestUsages` and `occurrenceAt` return ranges covering exactly the name (for rename).
+- Consumers: the desktop editor, the plugin (`HttpAnnotator`, `HttpCompletionContributor`, `HttpGotoDeclarationHandler` through the `view-model` helpers `analyzeFor`, `completions` and `declarationOf`) and `httpc --check`, which prints the diagnostics sorted by offset.
 - It shares the reference pattern and lookup order with `VariableResolver`; a consistency test runs `samples/` and compares with run time. A file variable beats the environment in request text, and in a value only when defined above it.
 - A file that does not parse still gets analysed: each rejected line becomes a `parse-error` and is left out without shifting the other offsets. A file with more than 50 bad lines reports only parse errors. The request that failed has no `name.response.` prefix and its references are not scanned.
 - A response reference inside a file variable value is only checked for an existing request name, because the request that uses the variable is not known. Duplicate request names resolve to the latest response at run time. Analysis is linear in the text size.
@@ -68,6 +69,7 @@ The desktop app records ordinary runs through the same store, only when the user
 
 `HistoryStore` (port in `core`: `record`, `list`, `read`, `readResponse`, `latestResponse` by request name, `recordLinked`, `latestLinked`) is implemented by `FileHistoryStore` (`adapters`) in `.http-history/<file name>/` next to the `.http` file; the folder is injectable (`FileHistoryStore.underRoot(dir)` or any `(Path) -> Path`).
 
+- Reads are lenient (an unreadable or foreign entry is skipped with a warning), except `latestLinked`: a history folder that cannot be listed, or whose existence cannot be told (a parent denying access), throws an `IOException`, so a link lookup never reports "nothing recorded" for an unreadable history. Only a folder known to be absent means no history.
 - Layout: one folder per run, named by its id, e.g. `20261106T101500123Z-n0000-a1b2c3d4` (UTC time, a sequence number within the millisecond so equal-time runs keep their order, random suffix; older ids without the sequence stay readable and sort first). It holds `run.json` (version, id, timestamp, the report in `JsonRunReport` format, per response status, headers, duration, body size, `bodyTruncated`, `originalBodySize`) and `<index>.body` (raw bytes).
 - Atomicity: all files are written atomically and `run.json` last; a folder without it is incomplete, ignored and removed after an hour. There is no shared index file, so two processes recording at once cannot lose each other's runs.
 - Confinement: only the history folder is written. Body files are named by index, never by request name. The `.http` file name used as folder name is sanitised (separators, Windows-illegal characters, `.`/`..`, reserved names such as `CON`, trailing dots, length over 80), run ids are validated before use and symlinked entries are not followed.
@@ -83,6 +85,8 @@ The desktop app records ordinary runs through the same store, only when the user
 Extraction (JSONPath subset, header, XPath, regex) is `ResponseExtractor` in `core`, shared by chaining and assertions. XPath evaluation cannot be interrupted, so its number is capped instead: at most 4 at a time in the whole process, and timed-out ones count until they really end.
 
 ## Command line
+
+`--check` (`check()` in `cli`'s `Main.kt`) resolves the environment names only (`EnvironmentLocator`, values dropped at once), reads the file strictly as UTF-8 and prints `VariableAnalysis.analyze` diagnostics; it never builds a session or an executor, so nothing can be sent. Any other option is a usage error.
 
 `--output` goes through the `OutputWriter` port (bytes), implemented by `AtomicReportWriter` together with `ReportWriter`. `--fail-on-http-error` is `RunReport.from(outcomes, failOnHttpError = true)`. The resolver prefers file variables over the variable map, so the CLI removes names overridden by `--var` from the file variables first.
 

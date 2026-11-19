@@ -45,6 +45,10 @@ When a request uses {% raw %}`{{login.response.body.token}}`{% endraw %}, **Send
 
 Only one run happens at a time. While it runs, editing, saving, opening and creating files are disabled.
 
+## 6. More in the app
+
+The app also has tabs for several files, a folder view, find and replace, problem underlines and completion inside {% raw %}`{{`{% endraw %}, an environment editor (**Edit environments**), response search and image preview, and optional run history with a comparison of two responses. Each is described in the [feature reference, desktop app](https://github.com/dan323/http-client/blob/master/docs/features.md#desktop-app).
+
 ## More
 
 What the app remembers and where, and the exact behavior: [feature reference, desktop app](https://github.com/dan323/http-client/blob/master/docs/features.md#desktop-app).
