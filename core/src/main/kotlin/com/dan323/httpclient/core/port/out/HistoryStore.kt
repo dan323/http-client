@@ -56,6 +56,6 @@ interface HistoryStore {
      */
     fun recordLinked(httpFile: Path, key: String, report: RunReport, response: HttpResponse): HistoryRun
 
-    /** The most recent stored response recorded for [key] (a request name, or the key of an unnamed request), or null. */
+    /** The most recent stored response recorded for [key] (a request name, or the key of an unnamed request), or null when nothing is recorded; throws [java.io.IOException] when the history cannot be read at all (a folder that cannot be listed), so that is never mistaken for "nothing recorded". */
     fun latestLinked(httpFile: Path, key: String): StoredResponse?
 }

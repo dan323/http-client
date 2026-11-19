@@ -1,7 +1,12 @@
 package com.dan323.httpclient.intellij
 
 import com.dan323.httpclient.core.application.EnvironmentChoice
+import com.dan323.httpclient.core.application.HttpFileParser
+import com.dan323.httpclient.core.application.HttpParseException
 import com.dan323.httpclient.core.application.RequestSession
+import com.dan323.httpclient.core.application.ResponseLinks
+import com.dan323.httpclient.core.application.RunOutcome
+import com.dan323.httpclient.core.port.out.HistoryStore
 import com.dan323.httpclient.core.port.out.EnvironmentLocator
 import com.dan323.httpclient.viewmodel.OutcomeDisplay
 import com.dan323.httpclient.viewmodel.RunCancellation
@@ -9,6 +14,10 @@ import com.dan323.httpclient.viewmodel.RunController
 import com.dan323.httpclient.viewmodel.RunResult
 import com.dan323.httpclient.viewmodel.RunTarget
 import com.dan323.httpclient.viewmodel.Tracked
+import com.dan323.httpclient.viewmodel.asRequest
+import com.dan323.httpclient.viewmodel.requestAt
+import com.dan323.httpclient.viewmodel.storedLabel
+import com.dan323.httpclient.viewmodel.truncationNotice
 import com.dan323.httpclient.viewmodel.cancelledLabel
 import com.dan323.httpclient.viewmodel.display
 import com.dan323.httpclient.viewmodel.reusedDisplay
@@ -27,7 +36,12 @@ data class Report(val message: String? = null, val environment: String? = null, 
  * The IDE-independent state behind [HttpClientService]: the environment choice, the last report and its listeners, the
  * session controller, and the "one run at a time" guard. No `Project` here, so it is testable headless.
  */
-class ClientState(locator: EnvironmentLocator, maxSessions: Int = 16, newSession: (Path) -> Result<RequestSession>) {
+class ClientState(
+    locator: EnvironmentLocator,
+    maxSessions: Int = 16,
+    private val history: HistoryStore? = null,
+    newSession: (Path) -> Result<RequestSession>,
+) {
     /** The user's explicit choice: [EnvironmentChoice.None] by default, never silently replaced by another environment. */
     @Volatile var environmentChoice: EnvironmentChoice = EnvironmentChoice.None
         set(value) {
@@ -135,6 +149,31 @@ class ClientState(locator: EnvironmentLocator, maxSessions: Int = 16, newSession
      * fails does not stop the ones after it. Blocking. Returns false, doing nothing, when another run is in progress.
      */
     fun runAll(file: Path, text: String): Boolean = runTarget(file, text, RunTarget.All)
+
+    /**
+     * Shows the latest response recorded for the `<>` link of the request at [caretLine] (see [ResponseLinks]) as the
+     * report, without sending anything. A request with no link, nothing recorded yet or a store that cannot be read is
+     * reported in the message, never thrown. Blocking (disk). Returns false, doing nothing, while a run is in progress
+     * (a run owns the report). A link is found by the request's name or start line, so pass the text as saved.
+     */
+    fun showLinked(file: Path, text: String, caretLine: Int): Boolean = synchronized(runLock) {
+        if (running.get()) return false
+        publish(linkedReport(file, text, caretLine))
+        true
+    }
+
+    private fun linkedReport(file: Path, text: String, caretLine: Int): Report {
+        val store = history ?: return Report(message = "No response history is available.")
+        val request = try { requestAt(HttpFileParser().parse(text).requests, caretLine) } catch (e: HttpParseException) {
+            return Report(message = e.message ?: "Could not parse the file.")
+        } ?: return Report(message = "No request found at the caret.")
+        if (request.responseLinks.isEmpty()) return Report(message = "This request has no <> link.")
+        val stored = try { ResponseLinks.latest(store, file.toAbsolutePath(), request) } catch (e: Exception) {
+            return Report(message = "Could not read the linked response: ${e.message ?: e::class.simpleName}")
+        } ?: return Report(message = "No response is recorded for this request's <> link yet. Run it first.")
+        val message = "Linked response: ${storedLabel(stored)}" + (truncationNotice(stored)?.let { "\n$it" } ?: "")
+        return Report(message = message, sections = listOf(Section(RunOutcome.Success(stored.asRequest(), stored.response).display())))
+    }
 
     private fun runTarget(file: Path, text: String, target: RunTarget): Boolean {
         if (!begin()) return false

@@ -10,7 +10,7 @@ It depends only on `com.intellij.modules.platform`, so it is meant to work in Co
   `###` separators, `< file` bodies).
 - Green run icon in the gutter on each request line.
 - **Run HTTP Request** (editor context menu, or `Ctrl+Alt+R`; see [known limitations](../docs/known-limitations.md)) runs the request at the caret,
-  plus any requests it chains on (`{{login.response.body.$.token}}`). **Run All HTTP Requests** (editor context menu, or Find Action) sends every request of the file in order and reports each one; a failing request does not stop the rest, and a file without requests says so.
+  plus any requests it chains on (`{{login.response.body.$.token}}`). **Run All HTTP Requests** (editor context menu, or Find Action) sends every request of the file in order and reports each one; a failing request does not stop the rest, and a file without requests says so. **Show Linked HTTP Response** (editor context menu, or Find Action) shows the latest response recorded for the `<>` link of the request at the caret in the same window, without sending anything; it says so when the request has no link or nothing was recorded yet (unverified by hand in an IDE).
 - **Select HTTP Environment** (the picker in the header of every `.http` editor, or the editor context menu) picks variables from the nearest
   `http-client.env.json`, searching upward from the file. The default is "(none)" (variables from the file only); a name that
   no longer exists is an error. The choice is kept per project and survives an IDE restart (stored in the project's workspace file, so it is not shared through version control); a saved name that no longer exists is reported when you run, never replaced.
@@ -40,7 +40,7 @@ Install the zip via *Settings → Plugins → ⚙ → Install Plugin from Disk�
 - `HttpLanguage.kt`, `HttpLexer.kt`, `HttpParserDefinition.kt`, `HttpSyntaxHighlighter.kt` — language support.
   The PSI is flat (a sequence of tokens); request structure comes from `core`'s `HttpFileParser`.
 - `RunLineMarker.kt` — gutter run icons.
-- `Actions.kt` — run and environment actions.
+- `Actions.kt` — run, run all, cancel, environment and show-linked-response actions.
 - `HttpAnnotator.kt`, `HttpCompletion.kt`, `HttpGotoDeclaration.kt` — editor intelligence on top of `VariableAnalysis` and the `view-model` helpers (`analyzeFor`, `completions`/`applyCompletion`, `declarationOf`).
 - `EnvironmentEditorHeader.kt` — the environment picker shown in the header of `.http` editors (an `EditorNotificationProvider`).
 - `ClientState.kt` — IDE-independent state: environment choice, last report and listeners, the run guard, text-based session invalidation, on top of the shared `RunController`.
@@ -80,7 +80,7 @@ Known problems: the default shortcut `Ctrl+Alt+R` has not been tried in a runnin
 Not verified: a real Community install, and the 2026.1 baseline (build 261, the `since-build`) itself: the plugin
 was run on 2026.3 only. It does not load in 2025.3 (build 253) by design.
 
-The VFS listener, gutter icon and tool window are not covered by tests (they need a running IDE). No completion or navigation for `{{variables}}` yet. The assertion rendering is plain text in the tool window and was not run in an IDE.
+The VFS listener, gutter icon and tool window are not covered by tests (they need a running IDE). The editor intelligence (underlines, completion, go to declaration) has a light-fixture test for completion only; the annotator, go to declaration and the assertion rendering in the tool window were not run in an IDE. Find usages and rename of variables do not exist.
 
 `{{$env.NAME}}` reads nothing by default: allow names with `-Dhttpclient.allowEnv=NAME,NAME` (JVM option) or the environment variable `HTTPC_ALLOW_ENV=NAME,NAME`; see [docs/features.md](../docs/features.md).
 

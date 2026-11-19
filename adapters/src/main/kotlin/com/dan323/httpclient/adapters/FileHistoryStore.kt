@@ -70,7 +70,8 @@ class FileHistoryStore(
     override fun latestLinked(httpFile: Path, key: String): StoredResponse? {
         if (key.isBlank()) return null
         val fileDir = fileDir(httpFile)
-        for (id in runIds(fileDir)) {
+        // A link must tell "nothing recorded yet" from "the history cannot be read": the folder failing to list throws.
+        for (id in runIds(fileDir, strict = true)) {
             val run = loadRun(fileDir, id) ?: continue
             val entries = run.report().entries
             // a keyed response matches its key; responses of ordinary runs carry no key and match by request name
@@ -181,9 +182,14 @@ class FileHistoryStore(
         }
     }
 
-    /** Names of the run folders of [fileDir] that look like run ids, newest first. Foreign entries are ignored. */
-    private fun runIds(fileDir: Path): List<String> {
-        if (!Files.isDirectory(fileDir, LinkOption.NOFOLLOW_LINKS)) return emptyList()
+    /** Names of the run folders of [fileDir] that look like run ids, newest first. Foreign entries are ignored. A folder that cannot be listed gives a warning and no ids, or an [IOException] when [strict]. */
+    private fun runIds(fileDir: Path, strict: Boolean = false): List<String> {
+        if (!Files.isDirectory(fileDir, LinkOption.NOFOLLOW_LINKS)) {
+            // `isDirectory` is also false when the answer cannot be had (a parent that denies traversal); only a folder
+            // that is known to be absent means "no history".
+            if (strict && !Files.notExists(fileDir, LinkOption.NOFOLLOW_LINKS)) throw IOException("cannot read $fileDir")
+            return emptyList()
+        }
         return try {
             Files.list(fileDir).use { s ->
                 s.filter { Files.isDirectory(it, LinkOption.NOFOLLOW_LINKS) }
@@ -193,6 +199,7 @@ class FileHistoryStore(
                     .toList()
             }
         } catch (e: IOException) {
+            if (strict) throw IOException("cannot list $fileDir: ${e.message}", e)
             warn("cannot list $fileDir: ${e.message}")
             emptyList()
         }

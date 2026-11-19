@@ -13,6 +13,7 @@ Hexagonal layout:
 - `mock-server/` — local httpbin-style server used by `samples/` (`./gradlew :mock-server:run`).
 - `samples/` — `.http` files for manual testing ([README](samples/README.md)).
 - `examples/` — a CI smoke-test `.http` file with its environment file (see [getting started](docs/getting-started.md)).
+- `agent-skill/` — a Claude Code plugin with a skill that teaches coding agents the `.http` format and `httpc` ([README](agent-skill/README.md)).
 - `intellij-plugin/` — IntelliJ plugin ([README](intellij-plugin/README.md)) (works in Community editions). Build with `./gradlew :intellij-plugin:buildPlugin`; set `ideaPath` in `gradle.properties` to a local IDE install.
 
 Run tests: `./gradlew test`.
@@ -38,6 +39,7 @@ Documentation: [getting started](docs/getting-started.md) · [features](docs/fea
 - `--allow-env NAME[,NAME]` — let `{{$env.NAME}}` read these OS variables (none by default).
 - `--allow-file-root DIR` — also let `< path` bodies be read from `DIR` (by default only the `.http` file's folder).
 - `--list` — list the requests in the file and exit.
+- `--check` — look for problems (undefined variables, bad references, lines that do not parse) without sending anything; one `FILE:LINE:COLUMN: error|warning: message [code]` per line, exit `1` on an error. Only `--env` and `--var` may be added.
 - `--report-json FILE` / `--report-junit FILE` — also write a run report (per-request status, timings, assertion results, totals) as JSON or JUnit XML; console output is unchanged; a report path must differ from the input file (see [features](docs/features.md#run-reports)).
 
 - `--quiet` — no per-request output on stdout; failed assertions and errors still go to stderr.

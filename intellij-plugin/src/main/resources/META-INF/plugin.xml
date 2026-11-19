@@ -34,6 +34,10 @@
                 text="Run All HTTP Requests" description="Run every request of the file in order">
             <add-to-group group-id="EditorPopupMenu" anchor="after" relative-to-action="httpclient.RunRequest"/>
         </action>
+        <action id="httpclient.ShowLinkedResponse" class="com.dan323.httpclient.intellij.ShowLinkedResponseAction"
+                text="Show Linked HTTP Response" description="Show the latest response recorded for the request's &lt;&gt; link, without sending it">
+            <add-to-group group-id="EditorPopupMenu" anchor="after" relative-to-action="httpclient.RunAllRequests"/>
+        </action>
         <action id="httpclient.CancelRequest" class="com.dan323.httpclient.intellij.CancelRequestAction"
                 text="Cancel HTTP Request" description="Stop the HTTP request that is running"
                 icon="AllIcons.Actions.Suspend"/>

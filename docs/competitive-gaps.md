@@ -17,7 +17,7 @@ We do not try to match either there; we win on plain files, no proprietary colle
 | CLI and CI reports                          | yes                            | yes    | yes     | yes (separate CLI)      |
 | Assertions, chaining, environments, cookies | yes                            | yes    | yes     | yes                     |
 | Free in an open IDE (Community)             | plugin works, Community unverified | n/a    | n/a     | paid (Ultimate)         |
-| Editor intelligence                         | not yet                        | n/a    | n/a     | yes                     |
+| Editor intelligence                         | desktop and plugin (plugin unverified by hand) | n/a    | n/a     | yes                     |
 | Multipart / form bodies                     | multipart yes, urlencoded as text | yes    | yes     | yes                     |
 | Pre/post-request scripts                    | no                             | yes    | yes     | yes (response handlers) |
 | GraphQL, WebSocket, gRPC, OAuth 2           | no                             | yes    | yes     | yes                     |
@@ -29,8 +29,7 @@ We do not try to match either there; we win on plain files, no proprietary colle
 | Gap                                                                                            | Task                  |
 |------------------------------------------------------------------------------------------------|-----------------------|
 | Plugin checked on Ultimate 2026.3 only; Community and the 2026.1 baseline unverified           | T21 (rest)            |
-| Variable completion, diagnostics and find in the editors (the analysis in `core` is done, T13) | T16, T22              |
-| Run all, remember environment in the plugin                                                    | T23                   |
+| Plugin editor intelligence, run all and linked responses are implemented but unverified in an IDE | T21 (rest)          |
 | Installers and plugin zip built in CI (release workflow done; T25 QA of the assets remains)    | T25                   |
 
 ## 2. Gaps not in the plan yet
@@ -43,18 +42,18 @@ These are what Bruno / Postman users will ask for. Each needs a decision, not a 
 
 | Item                                        | Competitors        | Suggested stance                                                                                                                      |
 |---------------------------------------------|--------------------|---------------------------------------------------------------------------------------------------------------------------------------|
-| Postman and cURL import                     | Bruno, JetBrains   | Cheapest way to win switchers; a CLI `httpc import` that writes `.http` files. Revisit after G1-G6.                                   |
+| Postman and cURL import                     | Bruno, JetBrains   | Cheapest way to win switchers; a CLI `httpc import` that writes `.http` files. Bruno collections are planned (T35); Postman and cURL stay a decision.                                   |
 | Pre/post-request scripts, response handlers | all                | Needs a sandboxed script engine (a third-party dependency; would live in `adapters`). Assertions + chaining cover most CI use. Defer. |
 | OAuth 2 flows, Digest auth                  | Postman, JetBrains | Defer; Basic and Bearer cover the common case.                                                                                        |
 | GraphQL, WebSocket, gRPC                    | all                | Defer. They already fail loudly: a parse error naming the line (G4, done).                                                            |
-| OpenAPI-based completion, HTTP/2 settings   | JetBrains          | Later, after editor intelligence (T16, T22).                                                                                          |
+| OpenAPI-based completion, HTTP/2 settings   | JetBrains          | Later; editor intelligence (T16, T22) is done.                                                                                          |
 | Cloud sync, team workspaces                 | Postman            | Non-goal: Git is the sync mechanism.                                                                                                  |
 
 ## 4. Suggested order
 
 1. T21 (rest): verify the plugin in a Community IDE and on the 2026.1 baseline (checked by hand on Ultimate 2026.3).
 2. Robustness quick-wins: G1-G8 are done.
-3. Planned feature-work from PLAN.md: the editor-intelligence and plugin tasks.
+3. Planned feature-work from PLAN.md: Bruno import (T35), the MCP server (T34), the language server and VS Code (T36, T37) and the guide tasks (T28-T31).
 4. Publishing to external channels (Marketplace, Homebrew, Scoop, winget; see the follow-ups in [getting-started.md](getting-started.md)), T25 and the import decision. In-repo distribution (G9: release workflow, CLI distribution, getting-started page, examples) is done.
 
 Do not add protocols or collaboration before the plugin is verified and the quick wins land: the IDE experience is the differentiator.
