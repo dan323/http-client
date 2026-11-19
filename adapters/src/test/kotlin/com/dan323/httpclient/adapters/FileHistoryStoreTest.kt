@@ -125,6 +125,24 @@ class FileHistoryStoreTest {
         for (f in listOf("run.json", "0.body")) assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(runDir.resolve(f))), f)
     }
 
+    @Test fun aLinkLookupThrowsWhenTheHistoryFolderCannotBeListedButNothingRecordedIsNull() {
+        assumeTrue(posix)
+        val s = store()
+        assertEquals(null, s.latestLinked(http, "a"))   // no history folder yet: nothing recorded
+        s.recordLinked(http, "a", report("a"), response("A"))
+        val folder = runFolder()
+        Files.setPosixFilePermissions(folder, emptySet())
+        try {
+            assumeTrue(!Files.isReadable(folder))   // running as root can read anything
+            val e = assertFailsWith<java.io.IOException> { s.latestLinked(http, "a") }
+            assertTrue(e.message!!.contains("cannot list"), e.message)
+            assertEquals(emptyList(), s.list(http))   // the other reads stay lenient: a warning, never fatal
+        } finally {
+            Files.setPosixFilePermissions(folder, PosixFilePermissions.fromString("rwx------"))
+        }
+        assertEquals("A", s.latestLinked(http, "a")!!.response.bodyAsString())
+    }
+
     @Test fun leavesNoTempFilesAndWritesOnlyInsideTheHistoryFolder() {
         val s = store()
         val run = s.record(http, report("a"), listOf(response("x")))

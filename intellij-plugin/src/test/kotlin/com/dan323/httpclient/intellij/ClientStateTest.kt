@@ -261,6 +261,26 @@ class ClientStateTest {
             .let { assertEquals("No response history is available.", it.lastReport.message) }
     }
 
+    @Test fun showLinkedReportsAnUnreadableHistoryFolderWithTheProductionStore() {
+        org.junit.jupiter.api.Assumptions.assumeTrue(java.nio.file.FileSystems.getDefault().supportedFileAttributeViews().contains("posix"))
+        val root = java.nio.file.Files.createTempDirectory("hist")
+        val store = com.dan323.httpclient.adapters.FileHistoryStore({ root }, onWarning = {})
+        val report = RunReport(listOf(com.dan323.httpclient.core.application.ReportEntry("a", "GET", "http://h/a", 200, 1, emptyList(), 0, null)))
+        store.recordLinked(file, "a", report, storedA.response)
+        val s = linkedState(store)
+        s.showLinked(file, linkedText, 1)
+        assertTrue(s.lastReport.message!!.startsWith("Linked response: a"), s.lastReport.message)
+        java.nio.file.Files.setPosixFilePermissions(root, emptySet())
+        try {
+            org.junit.jupiter.api.Assumptions.assumeTrue(!java.nio.file.Files.isReadable(root))   // root can read anything
+            s.showLinked(file, linkedText, 1)
+            assertTrue(s.lastReport.message!!.startsWith("Could not read the linked response: cannot list"), s.lastReport.message)
+            assertFalse(s.lastReport.message!!.contains("Run it first"))
+        } finally {
+            java.nio.file.Files.setPosixFilePermissions(root, java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"))
+        }
+    }
+
     @Test fun showLinkedRefusesWhileARunIsInProgress() {
         val s = ClientState(locator, history = fakeStore(storedA)) { Result.success(RequestSession(RequestRunner(executor, FileReader { ByteArray(0) }), executor, json)) }
         entered = CountDownLatch(1)

@@ -36,7 +36,7 @@ Add `# @assert` lines under a request. After the response each assertion is prin
 
 ## 5. Check a file without sending it
 
-`httpc api.http --check --env staging` looks for undefined variables, bad references and lines that do not parse, and sends nothing, so it needs no network. Each problem is one line, `api.http:4:7: error: Undefined variable: token [undefined-variable]`; the exit code is `1` when there is an error and `0` otherwise (warnings do not fail). Only `--env` and `--var` can be added.
+`httpc api.http --check --env staging` looks for undefined variables, bad references and lines that do not parse, and sends nothing, so it needs no network. Each problem is one line, `api.http:4:7: error: Undefined variable: token [undefined-variable]`; the exit code is `1` when there is an error (or the file or environment cannot be read, which prints an `Error:` line) and `0` otherwise (warnings do not fail). Any other option, such as `--quiet`, is a usage error with exit code `2`. Only `--env` and `--var` can be added.
 
 ## 6. Use it in a script or in CI
 
