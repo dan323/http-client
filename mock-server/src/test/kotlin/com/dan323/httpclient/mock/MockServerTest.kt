@@ -9,6 +9,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class MockServerTest {
     private val server = MockServer(0).start()
@@ -61,6 +62,25 @@ class MockServerTest {
         assertEquals("/redirect/1", redirect.headers().firstValue("Location").get())
         assertEquals(200, send("HEAD", "/get").statusCode())
         assertContains(send("OPTIONS", "/get").headers().firstValue("Allow").get(), "GET")
+    }
+
+    @Test fun delayWaitsThenEchoesAndRefusesOutOfRangeValues() {
+        val started = System.nanoTime()
+        val r = send("GET", "/delay/1")
+        assertEquals(200, r.statusCode())
+        assertContains(r.body(), "\"method\": \"GET\"")
+        assertTrue((System.nanoTime() - started) >= 900_000_000L, "answered before the delay")
+        assertEquals(200, send("GET", "/delay/0").statusCode())
+        for (bad in listOf("/delay/11", "/delay/-1", "/delay/x", "/delay")) assertEquals(404, send("GET", bad).statusCode(), bad)
+    }
+
+    @Test fun aSleepingRequestDoesNotBlockOthers() {
+        val slow = kotlin.concurrent.thread { send("GET", "/delay/2") }
+        Thread.sleep(200)
+        val started = System.nanoTime()
+        assertEquals(200, send("GET", "/get").statusCode())
+        assertTrue((System.nanoTime() - started) < 1_000_000_000L, "blocked by the sleeping request")
+        slow.join()
     }
 
     @Test fun bearerRequiresToken() {

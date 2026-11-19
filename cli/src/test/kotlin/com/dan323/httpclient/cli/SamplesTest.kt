@@ -115,6 +115,16 @@ class SamplesTest {
         assertContains(r.out, "payload.json")
     }
 
+    @Test fun slowHasOnePassAndOneExpectedTimeout() {
+        val r = sample("slow.http")
+        assertEquals(1, r.code)
+        assertContains(r.out, "waits-one-second")
+        assertContains(r.err, "Error:")
+        assertContains(r.err, "imed out", message = r.err)
+        assertContains(r.err, "1 failed")
+        assertEquals(0, sample("slow.http", "--request", "waits-one-second").code)
+    }
+
     @Test fun methods() {
         val r = sample("methods.http")
         assertEquals(0, r.code, r.err)

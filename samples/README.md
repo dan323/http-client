@@ -2,7 +2,7 @@
 
 Manual test files for all front ends. They run against the local mock server in `../mock-server`
 (an httpbin-style subset: `/get`, `/post`, `/put`, `/patch`, `/delete`, `/anything`, `/headers`,
-`/status/{code}`, `/redirect/{n}`, `/bearer`), so no internet is needed.
+`/status/{code}`, `/redirect/{n}`, `/delay/{seconds}`, `/bearer`), so no internet is needed.
 
 1. Start the mock server (port 8080):
    ```
@@ -24,6 +24,7 @@ starts with "(none)", so samples that use `{{base}}` fail with an undefined vari
 | `dynamic.http` | dynamic variables (`$random.*`, offsets, `$env`) |
 | `file-body.http` | `< ./payload.json` body |
 | `multipart.http` | `multipart/form-data` upload with a text part and a file part |
+| `slow.http` | `/delay/{seconds}`: a slow request that passes and one cut off by `# @timeout` (expected to fail); handy to try Cancel |
 | `methods.http` | PUT, PATCH, DELETE, HEAD, OPTIONS, QUERY, 404, redirects |
 
 Environments are in `http-client.env.json`: `dev` is the mock server; `httpbin` targets the public
