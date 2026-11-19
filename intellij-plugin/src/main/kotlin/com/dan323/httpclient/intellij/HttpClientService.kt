@@ -34,8 +34,9 @@ class HttpClientService(private val project: Project) : Disposable, PersistentSt
     class Saved { var environment: String? = null }
 
     private val locator = UpwardEnvironmentLocator()
-    private val factory = SessionFactory(history = FileHistoryStore())
-    private val clientState = ClientState(locator) { file -> factory.createConfigured(file) }
+    private val history = FileHistoryStore()
+    private val factory = SessionFactory(history = history)
+    private val clientState = ClientState(locator, history = history) { file -> factory.createConfigured(file) }
 
     var environmentChoice: EnvironmentChoice
         get() = clientState.environmentChoice
@@ -96,6 +97,9 @@ class HttpClientService(private val project: Project) : Disposable, PersistentSt
 
     /** See [ClientState.run]. Returns false when another request is still running. Blocking. */
     fun run(file: Path, text: String, caretLine: Int): Boolean = clientState.run(file, text, caretLine)
+
+    /** See [ClientState.showLinked]. Returns false when a request is running. Blocking (disk). */
+    fun showLinked(file: Path, text: String, caretLine: Int): Boolean = clientState.showLinked(file, text, caretLine)
 
     /** See [ClientState.runAll]. Returns false when another request is still running. Blocking. */
     fun runAll(file: Path, text: String): Boolean = clientState.runAll(file, text)

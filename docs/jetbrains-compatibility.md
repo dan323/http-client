@@ -101,7 +101,7 @@ Decided in review, not bugs (also in [known-limitations.md](known-limitations.md
 
 From [PLAN.md](PLAN.md) and [competitive-gaps.md](competitive-gaps.md):
 
-- Planned: find usages and rename of variables in the plugin; opening `<>` links in the plugin (T27; the desktop app has it).
+- Planned: find usages and rename of variables in the plugin.
 - Later or out of scope: GraphQL, WebSocket, gRPC; full OAuth 2 and Digest; handler scripts; Postman and cURL import; team sync.
 - Not on any list: `import`/`run`, client certificates, `# @connection-timeout`, `# @no-log`, Faker-based `$random.*`.
 

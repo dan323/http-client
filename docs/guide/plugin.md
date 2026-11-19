@@ -6,7 +6,7 @@ permalink: /plugin/
 
 # IntelliJ plugin
 
-Adds `.http` files to IntelliJ IDEA (Community or Ultimate) and other IntelliJ-based IDEs: highlighting, a run icon on each request, an environment picker and an **HTTP Response** tool window.
+Adds `.http` files to IntelliJ IDEA (Community or Ultimate) and other IntelliJ-based IDEs: highlighting, underlined problems and completion, a run icon on each request, an environment picker and an **HTTP Response** tool window.
 
 ## 1. Install
 
@@ -40,6 +40,10 @@ A request that uses {% raw %}`{{login.response.body.token}}`{% endraw %} runs th
 ## 5. Stop a running request
 
 While a request runs, press **Cancel** in the **HTTP Response** tool window (or the stop icon in its title bar). The window shows **Cancelled** above the responses that had already arrived. The next run sends the whole chain again.
+
+## 6. Editor help and linked responses
+
+Problems are underlined while you type: an undefined variable, a bad request reference or a line that does not parse. Typing {% raw %}`{{`{% endraw %} offers the variables you can use there, and Ctrl+click on a variable or a request name goes to where it is defined. The underlines follow the environment you picked. For a request with a `<> file` line, right-click inside it and choose **Show Linked HTTP Response** to see the latest response recorded for it without sending the request. These editor features have not been tried by hand in an IDE yet.
 
 ## More
 

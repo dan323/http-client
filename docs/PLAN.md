@@ -18,7 +18,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F6 | More dynamic variables (`$random.*`, `$env.X`, timestamp offsets, `$randomInt` range) | core | done |
 | F7 | More extraction: XPath, regex, headers (for chaining and assertions) | core | done |
 | F8 | Executor settings: redirects, timeouts, proxy | core | done |
-| F9 | Response history and saved responses | core, UIs | partial: `>>` / `>>!` / `<>`, link recording (T26) and the desktop history browser (T18) done; opening a `<>`-linked response is done in the desktop app (T27); the plugin part (T27) is open |
+| F9 | Response history and saved responses | core, UIs | done: `>>` / `>>!` / `<>`, link recording (T26), the desktop history browser (T18) and opening a `<>`-linked response in the desktop app and the plugin (T27; the plugin part is unverified by hand, see T21) |
 | F10 | CLI: `--json`, `--junit`, `--quiet`, `--output`, `--var`, meaningful exit codes | CLI | done (T10): reports, exit codes 0/1/2/3, `--quiet`, `--output`, `--var`, summary line |
 | F11 | Desktop: remember last file, environment, window, recent files | desktop | done (T14): last file, environment, window, recent files |
 | F12 | Desktop: several files at once, folder view | desktop | done (T15): tabs, restored at start, folder view |
@@ -40,7 +40,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 
 Done tasks are listed in the CHANGELOG, not here: T1 (file variables, settings), T2 (executor options), T3 (cookie jar),
 T4 (`ResponseExtractor`), T5 (assertions), T6 (dynamic variables v2), T7 (Basic auth shortcut), T9 (`RunReport`, JSON and JUnit export),
-T8 (multipart bodies), T12 (`view-model`), T15 (desktop tabs, restored tabs and folder view), T17 (desktop search, save and image preview), T18 (desktop history and compare), T20 (environment editor: file store, editor model and desktop panel), T16 (desktop editor intelligence: diagnostics, completion, find/replace), T22 (plugin intelligence: underlines, completion, go to declaration), T32 (`httpc --check`), T33 (agent skill). Done as well: the review fixes R1-R13 (see [known-limitations.md](known-limitations.md) for what was left), including the
+T8 (multipart bodies), T12 (`view-model`), T15 (desktop tabs, restored tabs and folder view), T17 (desktop search, save and image preview), T18 (desktop history and compare), T20 (environment editor: file store, editor model and desktop panel), T16 (desktop editor intelligence: diagnostics, completion, find/replace), T22 (plugin intelligence: underlines, completion, go to declaration), T32 (`httpc --check`), T33 (agent skill), T27 (open the linked response in the plugin). Done as well: the review fixes R1-R13 (see [known-limitations.md](known-limitations.md) for what was left), including the
 composition root, environment resolution, file confinement, the CI matrix part of T24 and build quality reports.
 
 Each remaining task is listed once even when it serves several features. Size: S ≈ 1 day, M ≈ 2 days, L ≈ 3 days
@@ -51,7 +51,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 | T21 | **Plugin GUI verification:** checked by hand on Ultimate 2026.3 (IU-263.7307.200) with the 0.5.0-rc1 zip, see `intellij-plugin/README.md`; still open: a Community install and the 2026.1 baseline (the `Ctrl+Alt+R` run shortcut is still to be tried in an IDE) | F20, F19, F18 | S | – |
 | T23 | **Plugin response panel:** remember the environment across restarts, run all: done in code, to be tried in an IDE (with T21's open checks) | F19 | M | T21 |
 | T24 | **Packaging in CI** (rest of F20): done in `.github/workflows/release.yml` on tags `v*` (DMG/MSI/DEB best effort, plugin zip, CLI zip/tar); first real run on tag v0.5.0-rc1: all jobs passed | F20 | S | – |
-| T27 | **Open the linked response** of a request (`<>` link, `ResponseLinks.latest`) in the plugin (the desktop part is done: **Linked response** button) | F9 | S | T21 |
 | T25 | **Final cross-platform QA and release notes:** Windows MSI and plugin checked by hand on 0.5.0-rc1; CLI zip checked on 0.5.0-rc1 (`--list`, smoke test with a JUnit report); still open: macOS DMG, Linux DEB and the native file dialogs; desktop UI polish (button text, dropdown position, request list highlighting, env file editing) planned after 0.5.0 | F20 | M | all |
 | T28 | **Guide build check:** build the Jekyll site on pull requests that change `docs/guide/**` and check links | F21 | S | – |
 | T29 | **Guide screenshots:** desktop images generated headless from the real composables, CLI transcripts from real runs, plugin images by checklist | F21 | M | – |
@@ -66,7 +65,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 
 | Feature | Open tasks |
 |---|---|
-| F9 | T27 |
 | F11 | T14 |
 | F18 | T21 |
 | F19 | T21, T23 |
@@ -89,7 +87,6 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 | 2    | T13 (variable analysis), T14 (desktop persistence)                                                                         | disjoint areas                                               |
 | 3    | T23 (plugin panel)                                                                                  | (T8 done)                                                    |
 | 4    | T22 (plugin intelligence)                                                                                                | done                                                         |
-| 5    | T27 (plugin part: open linked response)                           | T20 is done                                                  |
 | 6    | T25 (QA and release notes)                                                                                                 | needs everything                                             |
 | 7    | T28 (guide check), T29 (screenshots), T30 (guide module), T31 (links) | any time after wave 5 for T29-T31; T28 can go first       |
 | 8    | T34 (MCP server, after its safety model is written down); T35 (Bruno) | independent of the waves above; T32 (`--check`) and T33 (skill) are done |

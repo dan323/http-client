@@ -38,6 +38,37 @@ fun runRequest(project: Project, vfile: VirtualFile, line: Int?) {
     }
 }
 
+/** Shows the latest response recorded for the `<>` link of the request at the caret, without sending anything. */
+fun showLinkedResponse(project: Project, vfile: VirtualFile, line: Int) {
+    val documents = FileDocumentManager.getInstance()
+    val document = documents.getDocument(vfile)
+    documents.saveAllDocuments()   // a link is found by the request's name or start line: use the text as saved
+    val text = document?.text ?: String(vfile.contentsToByteArray(), vfile.charset)
+    val toolWindows = ToolWindowManager.getInstance(project)
+    toolWindows.getToolWindow("HTTP Response")?.show()
+    ApplicationManager.getApplication().executeOnPooledThread {
+        val shown = project.getService(HttpClientService::class.java).showLinked(Path.of(vfile.path), text, line)
+        if (!shown) ApplicationManager.getApplication().invokeLater({
+            toolWindows.notifyByBalloon("HTTP Response", MessageType.INFO, "A request is running; wait for it to finish.")
+        }, project.disposed)
+    }
+}
+
+class ShowLinkedResponseAction : AnAction(), DumbAware {
+    override fun getActionUpdateThread() = ActionUpdateThread.BGT
+
+    override fun update(e: AnActionEvent) {
+        e.presentation.isEnabledAndVisible = e.project != null && e.isHttpFile()
+    }
+
+    override fun actionPerformed(e: AnActionEvent) {
+        val project = e.project ?: return
+        val editor = e.getData(CommonDataKeys.EDITOR) ?: return
+        val vfile = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
+        showLinkedResponse(project, vfile, editor.document.getLineNumber(editor.caretModel.offset))
+    }
+}
+
 class RunRequestAction : AnAction(), DumbAware {
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
 
