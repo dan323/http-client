@@ -103,3 +103,13 @@ class VariableCompletionTest {
         assertEquals(listOf("file variable", "environment", "response", "dynamic"), listOf(VariableKind.FILE, VariableKind.ENVIRONMENT, VariableKind.REQUEST_RESPONSE, VariableKind.DYNAMIC).map(::kindLabel))
     }
 }
+
+class CompletionLimitTest {
+    private val many = (1..20).map { KnownVariable("v$it", VariableKind.FILE) }
+
+    @Test fun `the list is cut at 12 unless a limit is given`() {
+        assertEquals(MAX_SUGGESTIONS, completions(many, "v").size)
+        assertEquals(20, completions(many, "v", Int.MAX_VALUE).size)
+        assertEquals(3, completions(many, "v", 3).size)
+    }
+}

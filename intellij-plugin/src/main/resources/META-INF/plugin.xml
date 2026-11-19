@@ -13,6 +13,10 @@
                                implementationClass="com.dan323.httpclient.intellij.HttpParserDefinition"/>
         <lang.syntaxHighlighterFactory language="HttpClientFile"
                                        implementationClass="com.dan323.httpclient.intellij.HttpSyntaxHighlighterFactory"/>
+        <externalAnnotator language="HttpClientFile" implementationClass="com.dan323.httpclient.intellij.HttpAnnotator"/>
+        <completion.contributor language="HttpClientFile" implementationClass="com.dan323.httpclient.intellij.HttpCompletionContributor"/>
+        <typedHandler implementation="com.dan323.httpclient.intellij.HttpTypedHandler"/>
+        <gotoDeclarationHandler implementation="com.dan323.httpclient.intellij.HttpGotoDeclarationHandler"/>
         <runLineMarkerContributor language="HttpClientFile"
                                   implementationClass="com.dan323.httpclient.intellij.RunLineMarker"/>
         <editorNotificationProvider implementation="com.dan323.httpclient.intellij.EnvironmentEditorHeaderProvider"/>
