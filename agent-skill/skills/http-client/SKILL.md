@@ -1,6 +1,10 @@
 ---
 name: http-client
-description: Write, check and run `.http` request files with the `httpc` command line (the JetBrains-style HTTP format: requests separated by `###`, `{{variables}}`, `# @assert`, request chaining, `http-client.env.json` environments). Use when the user asks to call or test an HTTP API from a `.http` file, to add requests or assertions to one, to find out why one fails, or to produce a JUnit/JSON report of API checks.
+description: >-
+  Write, check and run `.http` request files with the `httpc` command line (the JetBrains-style HTTP format,
+  with requests separated by `###`, `{{variables}}`, `# @assert`, request chaining and `http-client.env.json`
+  environments). Use when the user asks to call or test an HTTP API from a `.http` file, to add requests or
+  assertions to one, to find out why one fails, or to produce a JUnit/JSON report of API checks.
 ---
 
 # `.http` files and `httpc`
@@ -17,7 +21,8 @@ description: Write, check and run `.http` request files with the `httpc` command
 ## The format
 
 ```
-@base = http://localhost:8080          # file variable, applies from here on
+# a file variable applies from its line to the end of the file (no comment after the value)
+@base = http://localhost:8080
 
 # @name login
 # @assert status == 200
@@ -74,7 +79,7 @@ After a named request ran, later ones read it: `{{login.response.body.$.token}}`
 
 ## Exit codes and diagnostics
 
-`0` passed, `1` a request or assertion failed (or `--check` found an error), `2` usage error (bad option combination, nothing ran), `3` the run passed but a report/output file could not be written. A summary line goes to stderr; `Saved response: PATH` too when `>>` fired.
+`0` passed, `1` a request or assertion failed, a setup problem (missing file, unknown environment or request), a response save (`>>`) that failed, or `--check` found an error. **Exit 1 does not mean nothing was sent**: a POST may have taken effect and only its save or a later assertion failed, so read stderr before retrying anything that changes data; `2` usage error (bad option combination, nothing ran), `3` the run passed but a report/output file (`--report-*`, `--output`) could not be written. A summary line goes to stderr; `Saved response: PATH` too when `>>` fired.
 
 Diagnostic codes from `--check`: `undefined-variable`, `unknown-request`, `malformed-reference` (errors in the reference); `invalid-dynamic-variable`, `circular-variable`, `parse-error` (errors); `request-not-run-yet`, `self-reference`, `duplicate-request-name`, `variable-defined-later`, `unterminated-reference`, `invalid-reference-text` (warnings — read them, they usually mean a real mistake). `--check` never reads values, so a name defined in the environment file counts as defined even if its value is empty.
 
