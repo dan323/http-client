@@ -65,7 +65,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 
 | Feature | Open tasks |
 |---|---|
-| F11 | T14 |
 | F18 | T21 |
 | F19 | T21, T23 |
 | F20 | T25 (T21, T24 done) |
@@ -74,7 +73,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 | F23 | T35 |
 | F24 | T36, T37 |
 
-Shared work, written once: T13 (F14, F18), T14 (F11, F12), T21 (F18, F19, F20).
+Shared work, written once: T21 (F18, F19, F20). (T13 and T14 were shared as well and are done.)
 
 ## 3. Order
 
@@ -84,7 +83,7 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 | Wave | Tasks                                                                                                                      | Why together                                                 |
 |------|----------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------|
 | 1    | T21 (plugin GUI check)                                                                                                     | Done on Ultimate 2026.3 (Community and 2026.1 baseline still open); its findings may reshape T22/T23 |
-| 2    | T13 (variable analysis), T14 (desktop persistence)                                                                         | disjoint areas                                               |
+| 2    | T13 (variable analysis), T14 (desktop persistence)                                                                         | done; disjoint areas                                         |
 | 3    | T23 (plugin panel)                                                                                  | (T8 done)                                                    |
 | 4    | T22 (plugin intelligence)                                                                                                | done                                                         |
 | 6    | T25 (QA and release notes)                                                                                                 | needs everything                                             |
