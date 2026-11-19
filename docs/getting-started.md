@@ -17,7 +17,7 @@ unzip httpc-X.Y.Z.zip            # or: tar xf httpc-X.Y.Z.tar
 httpc-X.Y.Z/bin/httpc --list my-requests.http      # Windows: httpc-X.Y.Z\bin\httpc.bat
 ```
 
-Add `httpc-<version>/bin` to your `PATH` to call `httpc` from anywhere. Nothing else is installed or changed. Options, exit codes and reports: [Command line](features.md#command-line) and [Run reports](features.md#run-reports).
+Add `httpc-<version>/bin` to your `PATH` to call `httpc` from anywhere. Nothing else is installed or changed. `httpc FILE --check --env NAME` checks a file without sending anything (handy in a pre-commit hook or a coding agent's loop). Options, exit codes and reports: [Command line](features.md#command-line) and [Run reports](features.md#run-reports).
 
 **In GitHub Actions**, download the asset of a release that has it and run it (replace `X.Y.Z`):
 

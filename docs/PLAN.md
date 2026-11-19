@@ -27,7 +27,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F15 | Desktop response extras: search in body, save to file, image/HTML preview | desktop | done (T17): search, save and image preview; HTML and SVG previews are not planned (no web view in Compose Desktop) |
 | F17 | Edit environments in the UI | desktop | done (T20): editor panel in the desktop app |
 | F18 | Plugin: completion, navigation, inspections | plugin | done in code (T22: underlines, completion, go to declaration), to be tried in an IDE with T21's open checks; find usages and rename are not done |
-| F19 | Plugin: richer response panel, remember environment, run all | plugin | partial: shared view-model, run guard, reset chain done; remember environment across restarts and run all done in code (T23, unverified by hand); the response panel is still plain text |
+| F19 | Plugin: richer response panel, remember environment, run all | plugin | partial: shared view-model, run guard, reset chain done; remember environment across restarts and run all done in code (T23, unverified by hand); the response panel is coloured text (status colours, JSON colouring, assertion lines) without the desktop's tree, search, save and preview |
 | F20 | Verification and release: plugin tried in a real IDE, CI on macOS/Windows/Linux, installers | all | partial: tests on all three OS, plugin build and best-effort installer packaging (T24) in CI; plugin checked by hand on Ultimate 2026.3 (T21); Community install, 2026.1 baseline and macOS/Linux installer QA open |
 | F21 | User guide on GitHub Pages: step-by-step pages per interface (written, published by `pages.yml`), generated screenshots, links from the interfaces | docs, all UIs | partial: text guides done; screenshots, build check and links open ([user-guide-plan.md](user-guide-plan.md)) |
 | F22 | Agent-friendly: an offline `httpc --check`, a skill that teaches coding agents the dialect and the CLI, an MCP server over the session | cli, new module, docs | partial: `--check` (T32) and the skill (T33) done; MCP server (T34) open |
@@ -40,7 +40,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 
 Done tasks are listed in the CHANGELOG, not here: T1 (file variables, settings), T2 (executor options), T3 (cookie jar),
 T4 (`ResponseExtractor`), T5 (assertions), T6 (dynamic variables v2), T7 (Basic auth shortcut), T9 (`RunReport`, JSON and JUnit export),
-T8 (multipart bodies), T12 (`view-model`), T15 (desktop tabs, restored tabs and folder view), T17 (desktop search, save and image preview), T18 (desktop history and compare), T20 (environment editor: file store, editor model and desktop panel), T16 (desktop editor intelligence: diagnostics, completion, find/replace), T22 (plugin intelligence: underlines, completion, go to declaration), T32 (`httpc --check`), T33 (agent skill), T27 (open the linked response in the plugin). Done as well: the review fixes R1-R13 (see [known-limitations.md](known-limitations.md) for what was left), including the
+T8 (multipart bodies), T12 (`view-model`), T15 (desktop tabs, restored tabs and folder view), T17 (desktop search, save and image preview), T18 (desktop history and compare), T20 (environment editor: file store, editor model and desktop panel), T16 (desktop editor intelligence: diagnostics, completion, find/replace), T22 (plugin intelligence: underlines, completion, go to declaration), T10 (CLI reports and exit codes), T13 (`VariableAnalysis`), T14 (desktop persistence), T19 (cancel), T26 (`>>` / `>>!` / `<>`), T32 (`httpc --check`), T33 (agent skill), T27 (open the linked response in the plugin). Done as well: the review fixes R1-R13 (see [known-limitations.md](known-limitations.md) for what was left), including the
 composition root, environment resolution, file confinement, the CI matrix part of T24 and build quality reports.
 
 Each remaining task is listed once even when it serves several features. Size: S ≈ 1 day, M ≈ 2 days, L ≈ 3 days
@@ -51,12 +51,12 @@ Each remaining task is listed once even when it serves several features. Size: S
 | T21 | **Plugin GUI verification:** checked by hand on Ultimate 2026.3 (IU-263.7307.200) with the 0.5.0-rc1 zip, see `intellij-plugin/README.md`; still open: a Community install and the 2026.1 baseline (the `Ctrl+Alt+R` run shortcut is still to be tried in an IDE) | F20, F19, F18 | S | – |
 | T23 | **Plugin response panel:** remember the environment across restarts, run all: done in code, to be tried in an IDE (with T21's open checks) | F19 | M | T21 |
 | T24 | **Packaging in CI** (rest of F20): done in `.github/workflows/release.yml` on tags `v*` (DMG/MSI/DEB best effort, plugin zip, CLI zip/tar); first real run on tag v0.5.0-rc1: all jobs passed | F20 | S | – |
-| T25 | **Final cross-platform QA and release notes:** Windows MSI and plugin checked by hand on 0.5.0-rc1; CLI zip checked on 0.5.0-rc1 (`--list`, smoke test with a JUnit report); still open: macOS DMG, Linux DEB and the native file dialogs; desktop UI polish (button text, dropdown position, request list highlighting, env file editing) planned after 0.5.0 | F20 | M | all |
+| T25 | **Final cross-platform QA and release notes:** Windows MSI and plugin checked by hand on 0.5.0-rc1; CLI zip checked on 0.5.0-rc1 (`--list`, smoke test with a JUnit report); still open: macOS DMG, Linux DEB and the native file dialogs; desktop UI polish (button text, dropdown position, request list highlighting) planned after 0.5.0 | F20 | M | all |
 | T28 | **Guide build check:** build the Jekyll site on pull requests that change `docs/guide/**` and check links | F21 | S | – |
 | T29 | **Guide screenshots:** desktop images generated headless from the real composables, CLI transcripts from real runs, plugin images by checklist | F21 | M | – |
 | T30 | **`user-guide` build module:** Gradle tasks that generate the assets and assemble the site for the PR check and the deploy | F21 | M | T29 |
 | T31 | **Links to the guide from the interfaces:** desktop Help, plugin Help link, one line in `httpc --help` | F21 | S | T29 (guide stable) |
-| T34 | **MCP server** (`mcp-server` module over `SessionFactory`/`RunController`): `list_requests`, `run`, `run_all`, `list_environments`, `analyze`. Needs its safety model first: file roots and host allow-list, private environment values never returned, a way to confirm requests that change data. Plan the model before coding | F22 | M | T32, T33 (done) |
+| T34 | **MCP server** (`mcp-server` module over `SessionFactory`/`RunController`): `list_requests`, `run`, `run_all`, `list_environments`, `analyze`. Needs its safety model first: file roots and host allow-list, private environment values never returned, a way to confirm requests that change data. Plan the model before coding | F22 | M | – |
 | T35 | **Bruno import:** a reader port in `core` with an adapter that turns `.bru` files and `environments/*.bru` into `RequestTemplate`s and `Environment`s (`httpc run collection/`, convert to `.http`); unsupported parts (JavaScript scripts, tests in Bruno syntax) are reported, never skipped silently; no write-back | F23 | M | – |
 | T36 | **Language server:** `.http` diagnostics, completion and go to declaration over LSP in a new module, reusing `VariableAnalysis`, `HttpLineLexer` and the `view-model` helpers of T22 | F24 | L | T22 |
 | T37 | **VS Code extension:** a thin client of T36 (TextMate grammar or LSP semantic tokens, run through `httpc`, environment picker); needs a Java runtime or a bundled one | F24 | L | T36 |
@@ -65,7 +65,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 
 | Feature | Open tasks |
 |---|---|
-| F11 | T14 |
 | F18 | T21 |
 | F19 | T21, T23 |
 | F20 | T25 (T21, T24 done) |
@@ -74,7 +73,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 | F23 | T35 |
 | F24 | T36, T37 |
 
-Shared work, written once: T13 (F14, F18), T14 (F11, F12), T21 (F18, F19, F20).
+Shared work, written once: T21 (F18, F19, F20). (T13 and T14 were shared as well and are done.)
 
 ## 3. Order
 
@@ -84,8 +83,8 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 | Wave | Tasks                                                                                                                      | Why together                                                 |
 |------|----------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------|
 | 1    | T21 (plugin GUI check)                                                                                                     | Done on Ultimate 2026.3 (Community and 2026.1 baseline still open); its findings may reshape T22/T23 |
-| 2    | T13 (variable analysis), T14 (desktop persistence)                                                                         | disjoint areas                                               |
-| 3    | T23 (plugin panel)                                                                                  | (T8 done)                                                    |
+| 2    | T13 (variable analysis), T14 (desktop persistence)                                                                         | done; disjoint areas                                         |
+| 3    | T23 (plugin panel)                                                                                  | done in code; to be tried in an IDE with T21                 |
 | 4    | T22 (plugin intelligence)                                                                                                | done                                                         |
 | 6    | T25 (QA and release notes)                                                                                                 | needs everything                                             |
 | 7    | T28 (guide check), T29 (screenshots), T30 (guide module), T31 (links) | any time after wave 5 for T29-T31; T28 can go first       |
@@ -104,4 +103,4 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 
 - **T21 first on purpose:** the plugin was first used in a real IDE (Ultimate 2026.3) for 0.5.0-rc1; a Community install and the 2026.1 baseline are still unchecked. The findings may reshape T22/T23.
 - **Windows packaging:** the MSI is built by the release workflow (windows-2022, WiX 3) and was installed and run by hand on 0.5.0-rc1; macOS and Linux installers are untested.
-- **T26 writes files:** `>>` is the first feature that writes next to user data, so T26 must confine paths like reads do and never overwrite without `>>!`.
+- **T26 writes files (done):** `>>` is the first feature that writes next to user data, so T26 must confine paths like reads do and never overwrite without `>>!`.
