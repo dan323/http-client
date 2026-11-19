@@ -19,9 +19,15 @@ import com.dan323.httpclient.adapters.FileHistoryStore
 import com.dan323.httpclient.adapters.SessionFactory
 import com.dan323.httpclient.adapters.SystemEnvironmentVariables
 import com.dan323.httpclient.core.application.HttpFileParser
+import com.dan323.httpclient.core.application.DiagnosticCodes
+import com.dan323.httpclient.core.application.Severity
+import com.dan323.httpclient.core.application.VariableAnalysis
 import com.dan323.httpclient.core.application.RunOutcome
 import com.dan323.httpclient.core.application.withDependencies
 import com.dan323.httpclient.core.domain.RequestTemplate
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
 import java.nio.file.Files
 import java.io.PrintStream
 import java.nio.file.InvalidPathException
@@ -33,6 +39,7 @@ private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NA
                   [--report-json FILE] [--report-junit FILE] [--allow-file-root DIR]
                   [--quiet] [--output FILE] [--var NAME=VALUE] [--timeout DURATION]
                   [--fail-on-http-error]
+       httpc <file.http> --check [--env NAME] [--var NAME=VALUE]
 
   --env NAME       use variables from NAME in http-client.env.json (nearest http-client.env.json, searching
                    upward from the file; http-client.private.env.json beside it is merged)
@@ -41,7 +48,11 @@ private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NA
                    none are readable by default; -Dhttpclient.allowEnv and HTTPC_ALLOW_ENV are merged in
   --allow-file-root DIR  also let `< path` bodies be read from DIR (repeatable); by default only the
                    .http file's folder is readable (symlinks resolved)
-  --list           list the requests in the file and exit (cannot be combined with --report-*)
+  --check          look for problems without sending anything: undefined variables, bad references,
+                   lines that do not parse; one `FILE:LINE:COLUMN: error|warning: message [code]` per line
+                   on stdout; exit 1 when there is an error, 0 otherwise (warnings do not fail); only
+                   --env and --var may be added (names count as defined, values are never read)
+  --list           list the requests in the file and exit (cannot be combined with --report-* or --check)
   --report-json F  write a JSON run report (results, assertions, timings, totals) to F
   --report-junit F write a JUnit XML run report to F
   --quiet          print no per-request output on stdout (failed assertions and errors still go to stderr)
@@ -76,6 +87,8 @@ data class Options(
     val timeoutMillis: Long? = null,
     /** `--fail-on-http-error`: a selected request answering status >= 400 fails the run. */
     val failOnHttpError: Boolean = false,
+    /** `--check`: analyse the file and report problems; nothing is sent. */
+    val check: Boolean = false,
 )
 
 /**
@@ -114,6 +127,7 @@ private fun parseArgsUnchecked(args: List<String>, err: PrintStream): Options? {
     val vars = LinkedHashMap<String, String>()
     var timeoutMillis: Long? = null
     var failOnHttpError = false
+    var check = false
     var i = 0
     fun value(): String? = args.getOrNull(++i)?.takeIf { it.isNotEmpty() && !it.startsWith("--") }
     while (i < args.size) {
@@ -127,6 +141,7 @@ private fun parseArgsUnchecked(args: List<String>, err: PrintStream): Options? {
                 },
             )
             "--list" -> list = true
+            "--check" -> check = true
             "--quiet" -> quiet = true
             "--output" -> { if (output != null) return null; output = Path.of(value() ?: return null) }
             "--var" -> {
@@ -151,6 +166,10 @@ private fun parseArgsUnchecked(args: List<String>, err: PrintStream): Options? {
     }
     val input = file ?: return null
     if (reportJson != null && reportJunit != null && samePath(reportJson, reportJunit)) return null
+    if (check && (list || request != null || allowEnv.isNotEmpty() || allowFileRoots.isNotEmpty() || reportJson != null || reportJunit != null ||
+            output != null || quiet || timeoutMillis != null || failOnHttpError)) {
+        err.println("httpc: --check only combines with --env and --var (nothing is sent)"); return null
+    }
     val targets = listOf("--report-json" to reportJson, "--report-junit" to reportJunit, "--output" to output)
     for ((flag, target) in targets) {
         if (target == null) continue
@@ -167,7 +186,7 @@ private fun parseArgsUnchecked(args: List<String>, err: PrintStream): Options? {
     if (list && (quiet || vars.isNotEmpty() || timeoutMillis != null || failOnHttpError)) {
         err.println("httpc: --quiet, --var, --timeout and --fail-on-http-error cannot be combined with --list (nothing is run)"); return null
     }
-    return Options(input, env, request, list, allowEnv, reportJson, reportJunit, allowFileRoots, quiet, output, vars, timeoutMillis, failOnHttpError)
+    return Options(input, env, request, list, allowEnv, reportJson, reportJunit, allowFileRoots, quiet, output, vars, timeoutMillis, failOnHttpError, check)
 }
 
 /** True when both paths name the same file: equal after normalisation, or the same existing file (symlinks, hard links). */
@@ -234,6 +253,8 @@ fun run(args: List<String>, out: PrintStream, err: PrintStream, outputWriter: Ou
 
 private fun execute(opts: Options, out: PrintStream, err: PrintStream, writer: ReportWriter, outputWriter: OutputWriter): Int {
     if (!Files.isRegularFile(opts.file)) return failWithReport(opts, err, writer, "No such file: ${opts.file}")
+
+    if (opts.check) return check(opts, out, err)
 
     val parsed = HttpFileParser().parse(Files.readString(opts.file))
     parsed.warnings.forEach { err.println("warning: ${opts.file}: $it") }
@@ -323,6 +344,37 @@ private fun execute(opts: Options, out: PrintStream, err: PrintStream, writer: R
     }
     if (!written) err.println("Run passed; only the report/output file could not be written.")
     return if (written) 0 else 3
+}
+
+/**
+ * `--check`: the problems [VariableAnalysis] finds in the file, against the names of the chosen environment and of
+ * `--var` (names only: values are never read into the analysis). Exit 1 when there is an error, warnings alone pass.
+ */
+private fun check(opts: Options, out: PrintStream, err: PrintStream): Int {
+    val names = try {
+        EnvironmentChoice.of(opts.env).resolve(UpwardEnvironmentLocator(), opts.file)?.variables?.keys.orEmpty().toSet() + opts.vars.keys
+    } catch (e: UnknownEnvironmentException) {
+        return fail(err, e.message ?: "Unknown environment: ${opts.env}")
+    } catch (e: EnvironmentFileException) {
+        return fail(err, e.message ?: "Invalid environment file")
+    }
+    val text = try {
+        Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(Files.readAllBytes(opts.file))).toString()
+    } catch (_: CharacterCodingException) {
+        return fail(err, "${opts.file} is not valid UTF-8")
+    }
+    val problems = VariableAnalysis.analyze(text, names).diagnostics.sortedBy { it.range.offset }
+    problems.forEach {
+        val kind = if (it.severity == Severity.ERROR) "error" else "warning"
+        // The parser's message names its line already; the position prefix says it once.
+        val message = if (it.code == DiagnosticCodes.PARSE_ERROR) it.message.replaceFirst(Regex("^Line \\d+: "), "") else it.message
+        out.println("${opts.file}:${it.range.line + 1}:${it.range.column + 1}: $kind: $message [${it.code}]")
+    }
+    val errors = problems.count { it.severity == Severity.ERROR }
+    val warnings = problems.size - errors
+    err.println(if (problems.isEmpty()) "No problems" else "$errors ${if (errors == 1) "error" else "errors"}, $warnings ${if (warnings == 1) "warning" else "warnings"}")
+    return if (errors > 0) 1 else 0
 }
 
 /** `3 requests, 2 passed, 1 failed in 1.2s`: prerequisites count, as in the report; a request passes when it completed and its assertions held. */
