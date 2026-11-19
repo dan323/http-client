@@ -82,8 +82,7 @@ cover it (see "Sources and limits"). Status: **Partial** (accepted with limits),
 
 Checked by hand on IntelliJ IDEA Ultimate 2026.3 (highlighting, run gutter, tool window, environments, chaining; see
 `intellij-plugin/README.md`); a real Community install and the 2026.1 baseline are not verified. Assertion results are
-shown in the tool window but not checked by hand, the run shortcut `Ctrl+Alt+R` is not yet tried in a running IDE, and completion, navigation and inspections are not
-available (T16, T22). Do not install the plugin
+shown in the tool window but not checked by hand, the run shortcut `Ctrl+Alt+R` is not yet tried in a running IDE, and the variable completion, underlines and go to declaration (T22) are not yet tried in an IDE (find usages and rename do not exist). Do not install the plugin
 next to the bundled JetBrains one (both claim `.http`). See [features.md](features.md#intellij-plugin).
 
 ## Deliberate deviations
@@ -102,7 +101,7 @@ Decided in review, not bugs (also in [known-limitations.md](known-limitations.md
 
 From [PLAN.md](PLAN.md) and [competitive-gaps.md](competitive-gaps.md):
 
-- Planned: editor completion and inspections (T16, T22); opening `<>` links in the plugin (T27; the desktop app has it).
+- Planned: find usages and rename of variables in the plugin; opening `<>` links in the plugin (T27; the desktop app has it).
 - Later or out of scope: GraphQL, WebSocket, gRPC; full OAuth 2 and Digest; handler scripts; Postman and cURL import; team sync.
 - Not on any list: `import`/`run`, client certificates, `# @connection-timeout`, `# @no-log`, Faker-based `$random.*`.
 

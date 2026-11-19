@@ -15,7 +15,11 @@ dependencies {
     implementation(project(":adapters"))
     implementation(project(":view-model"))
     testImplementation(kotlin("test"))
+    testImplementation("junit:junit:4.13.2")
+    testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.11.4")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
     intellijPlatform {
+        testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
         // A local IDE install when ideaPath points at one (developer machines); otherwise download
         // ideaVersion (CI has no IDE installed).
         val localIde = providers.gradleProperty("ideaPath").orNull?.takeIf { file(it).exists() }

@@ -6,6 +6,7 @@ import com.dan323.httpclient.adapters.UpwardEnvironmentLocator
 import com.dan323.httpclient.core.application.EnvironmentChoice
 import com.dan323.httpclient.core.application.environments
 import com.dan323.httpclient.core.domain.Environment
+import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.vfs.VirtualFileManager
@@ -28,7 +29,7 @@ import java.nio.file.Path
  */
 @Service(Service.Level.PROJECT)
 @State(name = "HttpClientEnvironment", storages = [Storage(StoragePathMacros.WORKSPACE_FILE)])
-class HttpClientService(@Suppress("unused") private val project: Project) : Disposable, PersistentStateComponent<HttpClientService.Saved> {
+class HttpClientService(private val project: Project) : Disposable, PersistentStateComponent<HttpClientService.Saved> {
     /** What survives an IDE restart (workspace file, so it is not shared through version control): the chosen environment name, null for none. */
     class Saved { var environment: String? = null }
 
@@ -58,6 +59,14 @@ class HttpClientService(@Suppress("unused") private val project: Project) : Disp
         })
     }
 
+    init {
+        // The underlines depend on the chosen environment: analyse the open files again when it changes.
+        val remove = clientState.onEnvironmentChoice {
+            ApplicationManager.getApplication().invokeLater({ DaemonCodeAnalyzer.getInstance(project).restart() }, project.disposed)
+        }
+        Disposer.register(this, Disposable { remove() })
+    }
+
     override fun dispose() = factory.close()
 
     /** Called whenever the environment choice is set; unregistered when [parent] is disposed. */
@@ -76,6 +85,14 @@ class HttpClientService(@Suppress("unused") private val project: Project) : Disp
 
     /** Environments for [file]: the nearest enclosing `http-client.env.json` (same rule as the CLI and desktop). */
     fun environments(file: Path): List<Environment> = locator.environments(file)
+
+    /**
+     * The variable names (never the values) of each environment of [file]'s env file, for editor intelligence. Reads the
+     * file: not on the UI thread. An unreadable file throws [com.dan323.httpclient.core.port.out.EnvironmentFileException]
+     * (its message names the file and the position, never a value); no environments is an empty map.
+     */
+    fun environmentVariableNames(file: Path): Map<String, Set<String>> =
+        environments(file).associate { it.name to it.variables.keys.toSet() }   // a copy: `keys` is a view that would keep the values (secrets) reachable
 
     /** See [ClientState.run]. Returns false when another request is still running. Blocking. */
     fun run(file: Path, text: String, caretLine: Int): Boolean = clientState.run(file, text, caretLine)

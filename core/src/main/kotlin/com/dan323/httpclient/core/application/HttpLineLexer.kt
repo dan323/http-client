@@ -67,7 +67,9 @@ object HttpLineLexer {
                 val indent = line.length - line.trimStart().length
                 val eq = line.indexOf('=', indent)
                 add(HttpTokenKind.WHITESPACE, 0, indent)
-                add(HttpTokenKind.HEADER_NAME, indent, line.substring(indent, eq).trimEnd().length + indent)
+                val nameEnd = line.substring(indent, eq).trimEnd().length + indent
+                add(HttpTokenKind.HEADER_NAME, indent, nameEnd)
+                add(HttpTokenKind.WHITESPACE, nameEnd, eq)   // no gap: the IDE refuses a token stream with holes
                 add(HttpTokenKind.COLON, eq, eq + 1)
                 addText(HttpTokenKind.HEADER_VALUE, eq + 1, line.length)
             }

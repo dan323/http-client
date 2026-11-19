@@ -18,6 +18,7 @@ It depends only on `com.intellij.modules.platform`, so it is meant to work in Co
   drops them, and **Reset chain** in the tool window forgets them all. One request runs at a time.
 - **HTTP Response** tool window (with the **Reset chain** and **Cancel** buttons, which have icons and tooltips; before the first run it explains how to run a request, naming the shortcut as bound in your keymap) with status, timing, assertion results (`# @assert`: a summary and a PASS/FAIL line each; unverified by hand in an IDE), headers and the body (JSON pretty-printed).
 - **Cancel** (a button in the tool window and the title-bar action *Cancel HTTP Request*, enabled only while a request runs) stops the running request; the tool window shows `Cancelled` above the responses that had arrived, and the cancelled request is not remembered. Unverified by hand in an IDE (only the shared logic and `ClientState` have tests).
+- **Problems** are underlined in `.http` editors (undefined variables, bad references, cycles, lines that do not parse), checked against the environment chosen in the header (names only, never values); `{{` opens **completion** of the names usable there, and Ctrl+click or Go to Declaration on `{{host}}` / `{{login.response...}}` goes to the `@host =` line or the `# @name login`. Unverified by hand in an IDE; the logic is tested in `view-model`.
 
 See [../docs/features.md](../docs/features.md) for the `.http` syntax, variables and chaining.
 
@@ -29,7 +30,7 @@ The plugin is compiled against a locally installed IDE. Set `ideaPath` in the ro
 ```
 ./gradlew :intellij-plugin:buildPlugin    # zip in intellij-plugin/build/distributions/
 ./gradlew :intellij-plugin:runIde         # sandbox IDE with the plugin
-./gradlew :intellij-plugin:test           # lexer, environment-item and ClientState (run guard, session reuse) tests; needs an IDE
+./gradlew :intellij-plugin:test           # lexer, ClientState (run guard, session reuse) and completion (light editor fixture) tests; needs an IDE
 ```
 
 Install the zip via *Settings → Plugins → ⚙ → Install Plugin from Disk…*.
@@ -40,6 +41,7 @@ Install the zip via *Settings → Plugins → ⚙ → Install Plugin from Disk�
   The PSI is flat (a sequence of tokens); request structure comes from `core`'s `HttpFileParser`.
 - `RunLineMarker.kt` — gutter run icons.
 - `Actions.kt` — run and environment actions.
+- `HttpAnnotator.kt`, `HttpCompletion.kt`, `HttpGotoDeclaration.kt` — editor intelligence on top of `VariableAnalysis` and the `view-model` helpers (`analyzeFor`, `completions`/`applyCompletion`, `declarationOf`).
 - `EnvironmentEditorHeader.kt` — the environment picker shown in the header of `.http` editors (an `EditorNotificationProvider`).
 - `ClientState.kt` — IDE-independent state: environment choice, last report and listeners, the run guard, text-based session invalidation, on top of the shared `RunController`.
 - `HttpClientService.kt` — project service wrapping `ClientState`; forgets files on VFS delete/move and closes the `SessionFactory` when the project is disposed.

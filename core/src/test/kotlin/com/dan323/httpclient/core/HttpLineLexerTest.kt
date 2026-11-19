@@ -131,4 +131,25 @@ class HttpLineLexerTest {
         assertEquals(true, t.none { text.substring(it.start, it.end).contains('\r') })
         assertEquals("?a=1", text.substring(t.first { it.kind == HttpTokenKind.URL && it.start > 12 }.start, t.first { it.kind == HttpTokenKind.URL && it.start > 12 }.end))
     }
+
+    /** The IDE refuses a token stream with holes, so every character of a line (not its break) belongs to a token. */
+    private fun assertTiles(text: String) {
+        var mode = HttpLineLexer.Mode.BEFORE
+        text.split('\n').forEachIndexed { n, raw ->
+            val line = raw.removeSuffix("\r")
+            val r = HttpLineLexer.lexLine(line, mode)
+            var at = 0
+            for (t in r.tokens) { assertEquals(at, t.start, "gap before ${t.kind} on line ${n + 1}: '$line'"); at = t.end }
+            assertEquals(line.length, at, "the end of line ${n + 1} is not covered: '$line'")
+            mode = r.nextMode
+        }
+    }
+
+    @Test fun `tokens cover every character of a line`() {
+        listOf(
+            "@host = http://x\n", "@host   =   x\n", "  @host=x\n", "@host =\n", "@a = {{b}} c\n",
+            "GET   http://x\nA : b\nB:c\n\nbody {{v}}\n", "# c\n//c\n###\n", "POST /x\n\n< ./f\n>> out.txt\n<> r.json\n> {% a %}\n",
+        ).forEach(::assertTiles)
+        java.io.File("../samples").listFiles { f -> f.extension == "http" }.orEmpty().forEach { assertTiles(it.readText()) }
+    }
 }

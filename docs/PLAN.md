@@ -23,10 +23,10 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F11 | Desktop: remember last file, environment, window, recent files | desktop | done (T14): last file, environment, window, recent files |
 | F12 | Desktop: several files at once, folder view | desktop | done (T15): tabs, restored at start, folder view |
 | F13 | Desktop: history browser and response comparison | desktop | done |
-| F14 | Editor intelligence: variable completion, undefined-variable and bad-reference diagnostics, find | desktop, plugin | partial: desktop done (T16: diagnostics, completion, find/replace); the plugin (T22) open |
+| F14 | Editor intelligence: variable completion, undefined-variable and bad-reference diagnostics, find | desktop, plugin | done: desktop (T16: diagnostics, completion, find/replace) and plugin (T22: underlines, completion, go to declaration; unverified by hand) |
 | F15 | Desktop response extras: search in body, save to file, image/HTML preview | desktop | done (T17): search, save and image preview; HTML and SVG previews are not planned (no web view in Compose Desktop) |
 | F17 | Edit environments in the UI | desktop | done (T20): editor panel in the desktop app |
-| F18 | Plugin: completion, navigation, inspections | plugin | open |
+| F18 | Plugin: completion, navigation, inspections | plugin | done in code (T22: underlines, completion, go to declaration), to be tried in an IDE with T21's open checks; find usages and rename are not done |
 | F19 | Plugin: richer response panel, remember environment, run all | plugin | partial: shared view-model, run guard, reset chain done; remember environment across restarts and run all done in code (T23, unverified by hand); the response panel is still plain text |
 | F20 | Verification and release: plugin tried in a real IDE, CI on macOS/Windows/Linux, installers | all | partial: tests on all three OS, plugin build and best-effort installer packaging (T24) in CI; plugin checked by hand on Ultimate 2026.3 (T21); Community install, 2026.1 baseline and macOS/Linux installer QA open |
 | F21 | User guide on GitHub Pages: step-by-step pages per interface (written, published by `pages.yml`), generated screenshots, links from the interfaces | docs, all UIs | partial: text guides done; screenshots, build check and links open ([user-guide-plan.md](user-guide-plan.md)) |
@@ -40,7 +40,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 
 Done tasks are listed in the CHANGELOG, not here: T1 (file variables, settings), T2 (executor options), T3 (cookie jar),
 T4 (`ResponseExtractor`), T5 (assertions), T6 (dynamic variables v2), T7 (Basic auth shortcut), T9 (`RunReport`, JSON and JUnit export),
-T8 (multipart bodies), T12 (`view-model`), T15 (desktop tabs, restored tabs and folder view), T17 (desktop search, save and image preview), T18 (desktop history and compare), T20 (environment editor: file store, editor model and desktop panel), T16 (desktop editor intelligence: diagnostics, completion, find/replace), T32 (`httpc --check`). Done as well: the review fixes R1-R13 (see [known-limitations.md](known-limitations.md) for what was left), including the
+T8 (multipart bodies), T12 (`view-model`), T15 (desktop tabs, restored tabs and folder view), T17 (desktop search, save and image preview), T18 (desktop history and compare), T20 (environment editor: file store, editor model and desktop panel), T16 (desktop editor intelligence: diagnostics, completion, find/replace), T22 (plugin intelligence: underlines, completion, go to declaration), T32 (`httpc --check`). Done as well: the review fixes R1-R13 (see [known-limitations.md](known-limitations.md) for what was left), including the
 composition root, environment resolution, file confinement, the CI matrix part of T24 and build quality reports.
 
 Each remaining task is listed once even when it serves several features. Size: S ≈ 1 day, M ≈ 2 days, L ≈ 3 days
@@ -49,7 +49,6 @@ Each remaining task is listed once even when it serves several features. Size: S
 | ID | Task | Serves | Size | Needs |
 |---|---|---|---|---|
 | T21 | **Plugin GUI verification:** checked by hand on Ultimate 2026.3 (IU-263.7307.200) with the 0.5.0-rc1 zip, see `intellij-plugin/README.md`; still open: a Community install and the 2026.1 baseline (the `Ctrl+Alt+R` run shortcut is still to be tried in an IDE) | F20, F19, F18 | S | – |
-| T22 | **Plugin intelligence:** completion, go-to-request, inspections from T13 | F18, F14 | L | T21 (T13 done: `VariableAnalysis`) |
 | T23 | **Plugin response panel:** remember the environment across restarts, run all: done in code, to be tried in an IDE (with T21's open checks) | F19 | M | T21 |
 | T24 | **Packaging in CI** (rest of F20): done in `.github/workflows/release.yml` on tags `v*` (DMG/MSI/DEB best effort, plugin zip, CLI zip/tar); first real run on tag v0.5.0-rc1: all jobs passed | F20 | S | – |
 | T27 | **Open the linked response** of a request (`<>` link, `ResponseLinks.latest`) in the plugin (the desktop part is done: **Linked response** button) | F9 | S | T21 |
@@ -70,8 +69,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 |---|---|
 | F9 | T27 |
 | F11 | T14 |
-| F14 | T22 |
-| F18 | T13, T21, T22 |
+| F18 | T21 |
 | F19 | T21, T23 |
 | F20 | T25 (T21, T24 done) |
 | F21 | T28, T29, T30, T31 |
@@ -91,7 +89,7 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 | 1    | T21 (plugin GUI check)                                                                                                     | Done on Ultimate 2026.3 (Community and 2026.1 baseline still open); its findings may reshape T22/T23 |
 | 2    | T13 (variable analysis), T14 (desktop persistence)                                                                         | disjoint areas                                               |
 | 3    | T23 (plugin panel)                                                                                  | (T8 done)                                                    |
-| 4    | T22 (plugin intelligence)                                                                                                | needs T13 and T21 (T16, the desktop part, is done)           |
+| 4    | T22 (plugin intelligence)                                                                                                | done                                                         |
 | 5    | T27 (plugin part: open linked response)                           | T20 is done                                                  |
 | 6    | T25 (QA and release notes)                                                                                                 | needs everything                                             |
 | 7    | T28 (guide check), T29 (screenshots), T30 (guide module), T31 (links) | any time after wave 5 for T29-T31; T28 can go first       |
