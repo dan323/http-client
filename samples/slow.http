@@ -1,0 +1,13 @@
+# Slow responses from the mock server's /delay/{seconds} (0 to 10). Run with --env dev.
+# The first request answers after one second and passes. The second would take three
+# seconds but is cut off after one: it fails with a timeout (expected).
+
+# @name waits-one-second
+# @timeout 5
+# @assert status == 200
+GET {{base}}/delay/1
+
+###
+# @name times-out
+# @timeout 1s
+GET {{base}}/delay/3

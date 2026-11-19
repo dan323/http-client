@@ -11,12 +11,16 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.net.InetSocketAddress
 import java.net.URLDecoder
+import java.util.concurrent.Executors
 
 /**
  * A tiny subset of httpbin.org: echo endpoints (`/get`, `/post`, `/put`, `/patch`, `/delete`, `/anything[/...]`),
- * `/headers`, `/status/{code}`, `/redirect/{n}` and `/bearer`. Pass port 0 to pick a free port.
+ * `/headers`, `/status/{code}`, `/redirect/{n}`, `/delay/{seconds}` (a whole number from 0 to 10; answers like `/get` after
+ * that long) and `/bearer`. Pass port 0 to pick a free port.
  */
 private val PRETTY_JSON = Json { prettyPrint = true }
+
+private const val MAX_DELAY_SECONDS = 10
 
 class MockServer(port: Int = 8080) {
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", port), 0)
@@ -32,10 +36,15 @@ class MockServer(port: Int = 8080) {
 
     init {
         server.createContext("/") { ex -> ex.use { route(it) } }
+        // One thread per request: a request that sleeps (`/delay`) or whose client gave up must not block the next one.
+        server.executor = Executors.newCachedThreadPool { r -> Thread(r, "mock-server").apply { isDaemon = true } }
     }
 
     fun start() = apply { server.start() }
-    fun stop() = server.stop(0)
+    fun stop() {
+        server.stop(0)
+        (server.executor as? java.util.concurrent.ExecutorService)?.shutdownNow()
+    }
 
     private fun route(ex: HttpExchange) {
         val path = ex.requestURI.path
@@ -51,6 +60,10 @@ class MockServer(port: Int = 8080) {
                 }
             }
             segments[0] == "anything" -> reply(ex, 200, echo(ex))
+            segments[0] == "delay" && segments.size == 2 && segments[1].toIntOrNull() in 0..MAX_DELAY_SECONDS -> {
+                Thread.sleep(segments[1].toLong() * 1000)
+                reply(ex, 200, echo(ex))
+            }
             path == "/headers" -> reply(ex, 200, buildJsonObject { put("headers", headers(ex)) })
             segments[0] == "status" && segments.size == 2 && segments[1].toIntOrNull() in 200..599 ->
                 reply(ex, segments[1].toInt(), null)
