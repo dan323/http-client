@@ -10,7 +10,7 @@ It depends only on `com.intellij.modules.platform`, so it is meant to work in Co
   `###` separators, `< file` bodies).
 - Green run icon in the gutter on each request line.
 - **Run HTTP Request** (editor context menu, or `Ctrl+Alt+R`; see [known limitations](../docs/known-limitations.md)) runs the request at the caret,
-  plus any requests it chains on (`{{login.response.body.$.token}}`). **Run All HTTP Requests** (editor context menu, or Find Action) sends every request of the file in order and reports each one; a failing request does not stop the rest, and a file without requests says so.
+  plus any requests it chains on (`{{login.response.body.$.token}}`). **Run All HTTP Requests** (editor context menu, or Find Action) sends every request of the file in order and reports each one; a failing request does not stop the rest, and a file without requests says so. **Show Linked HTTP Response** (editor context menu, or Find Action) shows the latest response recorded for the `<>` link of the request at the caret in the same window, without sending anything; it says so when the request has no link or nothing was recorded yet (unverified by hand in an IDE).
 - **Select HTTP Environment** (the picker in the header of every `.http` editor, or the editor context menu) picks variables from the nearest
   `http-client.env.json`, searching upward from the file. The default is "(none)" (variables from the file only); a name that
   no longer exists is an error. The choice is kept per project and survives an IDE restart (stored in the project's workspace file, so it is not shared through version control); a saved name that no longer exists is reported when you run, never replaced.
