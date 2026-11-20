@@ -70,7 +70,15 @@ object BrunoCollections {
         fun walk(folder: Path, relative: String, outer: BrunoSettings) {
             val inherited = if (relative.isEmpty()) {
                 val root = settingsOf(folder.resolve("collection.bru"), "collection.bru", outer)
-                if (environments.isEmpty()) root else { collectionVariables += root.variables; root.copy(variables = emptyMap()) }
+                if (environments.isEmpty()) root else {
+                    // environment values are not expanded, so a collection variable that refers to other variables
+                    // cannot be copied into one: it stays a file variable unless an environment defines the same name
+                    val (refs, plain) = root.variables.entries.partition { "{{" in it.value }
+                    collectionVariables += plain.associate { it.key to it.value }
+                    val clash = refs.map { it.key }.filter { k -> environments.any { k in it.environment.variables } }
+                    if (clash.isNotEmpty()) warnings += "collection.bru: variables ${clash.joinToString(", ")} refer to other variables and an environment defines them too; not converted (environment values are not expanded in a .http file)"
+                    root.copy(variables = refs.filter { it.key !in clash }.associate { it.key to it.value })
+                }
             } else settingsOf(folder.resolve("folder.bru"), "$relative/folder.bru", outer)
             val entries = Files.list(folder).use { it.toList() }.sortedBy { it.fileName.toString() }
             val requests = mutableListOf<BrunoRequest>()
