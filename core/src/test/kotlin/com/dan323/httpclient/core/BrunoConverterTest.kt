@@ -384,4 +384,49 @@ class BrunoConverterTest {
         assertTrue(r.template.headers.isEmpty(), "no Content-Type without a body")
         assertTrue(r.warnings.any { "###" in it })
     }
+
+    @Test fun anOwnAuthorizationHeaderBeatsInheritedAuth() {
+        val inherited = BrunoConverter.settings("auth {\n  mode: bearer\n}\n\nauth:bearer {\n  token: inherited\n}\n")
+        val r = BrunoConverter.request("get {\n  url: http://h\n  auth: inherit\n}\n\nheaders {\n  authorization: Token mine\n}\n", "f", inherited = inherited)
+        assertEquals(listOf(Header("authorization", "Token mine")), r.template.headers)
+        val fromFolderHeader = BrunoConverter.settings("headers {\n  Authorization: Token folder\n}\n\nauth {\n  mode: bearer\n}\n\nauth:bearer {\n  token: x\n}\n")
+        val r2 = BrunoConverter.request("get {\n  url: http://h\n  auth: inherit\n}\n", "f", inherited = fromFolderHeader)
+        assertEquals(listOf(Header("Authorization", "Token folder")), r2.template.headers)
+    }
+
+    @Test fun multiLineValuesAreParsedWholeAndNotConvertedSilently() {
+        val block = com.dan323.httpclient.core.application.BruParser.parse("vars:pre-request {\n  payload: \'\'\'\n    hello\n      world\n  \'\'\'\n  next: 1\n}\n").blocks.single()
+        assertEquals(listOf("payload" to "hello\n  world", "next" to "1"), block.entries().map { it.key to it.value })
+        val r = convert("""
+            get {
+              url: http://h
+            }
+
+            headers {
+              X-Big: '''
+                a
+                b
+              '''
+              X-Ok: 1
+            }
+
+            vars:pre-request {
+              payload: '''
+                hello
+                world
+              '''
+              ok: 2
+            }
+        """)
+        assertEquals(listOf(Header("X-Ok", "1")), r.template.headers)
+        assertEquals(mapOf("ok" to "2"), r.template.fileVariables)
+        assertEquals(2, r.warnings.size)
+        assertTrue(r.warnings.all { "multi-line" in it })
+    }
+
+    @Test fun multiLineEnvironmentValuesAreReported() {
+        val e = BrunoConverter.environment("dev", "vars {\n  a: \'\'\'\n    x\n    y\n  \'\'\'\n  b: 1\n}\n")
+        assertEquals(mapOf("b" to "1"), e.environment.variables)
+        assertTrue(e.warnings.single().contains("multi-line"))
+    }
 }

@@ -34,7 +34,7 @@ data class BrunoSettings(
 }
 
 /** An environment from `an environment file`; [secrets] are the names listed in `vars:secret` (Bruno keeps their values outside the file). */
-data class BrunoEnvironment(val environment: Environment, val secrets: List<String>)
+data class BrunoEnvironment(val environment: Environment, val secrets: List<String>, val warnings: List<String> = emptyList())
 
 /** Converts the text of Bruno `.bru` files into [RequestTemplate]s and [Environment]s. Pure text work, no I/O. */
 object BrunoConverter {
@@ -68,15 +68,18 @@ object BrunoConverter {
         var url = fix(settings["url"].orEmpty())
         url = withParams(url, file, warnings)
 
-        val own = file.block("headers")?.entries().orEmpty().filter { it.enabled }.map { Header(it.key, fix(it.value)) }
+        val own = file.block("headers")?.entries().orEmpty().filter { it.enabled }.singleLine("header", warnings).map { Header(it.key, fix(it.value)) }
         val headers = (inherited.headers.filter { h -> own.none { it.name.equals(h.name, ignoreCase = true) } } + own).toMutableList()
         val declared = headers.toList()
         val body = body(settings["body"], file, headers, warnings, rootPrefix).takeUnless { splitsRequest(it, warnings) }
         // a dropped body must not leave the Content-Type that was added for it
         if (body == null) { headers.clear(); headers.addAll(declared) }
-        if (settings["auth"] == "inherit") inherited.auth?.let { headers += it }
+        if (settings["auth"] == "inherit") {
+            // a request that sets Authorization itself keeps it (as for every other header)
+            if (headers.none { it.name.equals("Authorization", ignoreCase = true) }) inherited.auth?.let { headers += it }
+        }
         else authHeader(settings["auth"], file, warnings)?.let { headers += it }
-        val ownVariables = file.block("vars:pre-request")?.entries().orEmpty().filter { it.enabled }.associate { it.key to fix(it.value) }
+        val ownVariables = file.block("vars:pre-request")?.entries().orEmpty().filter { it.enabled }.singleLine("variable", warnings).associate { it.key to fix(it.value) }
 
         val assertions = assertions(file.block("assert"), warnings)
         for (block in file.blocks) {
@@ -113,10 +116,10 @@ object BrunoConverter {
             warnings += "block '${block.name}' is not converted"
         }
         return BrunoSettings(
-            headers = file.block("headers")?.entries().orEmpty().filter { it.enabled }.map { Header(it.key, fix(it.value)) },
+            headers = file.block("headers")?.entries().orEmpty().filter { it.enabled }.singleLine("header", warnings).map { Header(it.key, fix(it.value)) },
             auth = auth,
             authSet = mode != null && mode != "inherit",
-            variables = file.block("vars:pre-request")?.entries().orEmpty().filter { it.enabled }.associate { it.key to fix(it.value) },
+            variables = file.block("vars:pre-request")?.entries().orEmpty().filter { it.enabled }.singleLine("variable", warnings).associate { it.key to fix(it.value) },
             warnings = warnings,
         )
     }
@@ -124,9 +127,17 @@ object BrunoConverter {
     /** Parses `environments/NAME.bru`: the `vars` block gives the variables, `vars:secret` the names whose values are not in the file. */
     fun environment(name: String, text: String): BrunoEnvironment {
         val file = BruParser.parse(text)
-        val vars = file.block("vars")?.entries().orEmpty().filter { it.enabled }.associate { it.key to fix(it.value) }
+        val warnings = mutableListOf<String>()
+        val vars = file.block("vars")?.entries().orEmpty().filter { it.enabled }.singleLine("variable", warnings).associate { it.key to fix(it.value) }
         val secrets = file.block("vars:secret")?.lines.orEmpty().map { it.trim().trimEnd(',').trim() }.filter { it.isNotEmpty() && !it.startsWith("~") }
-        return BrunoEnvironment(Environment(name, vars), secrets)
+        return BrunoEnvironment(Environment(name, vars), secrets, warnings)
+    }
+
+    /** A `.http` header, variable or form field is one line: entries with a multi-line value are left out, each with a warning. */
+    private fun List<BruBlock.Entry>.singleLine(what: String, warnings: MutableList<String>): List<BruBlock.Entry> = filter {
+        val ok = '\n' !in it.value
+        if (!ok) warnings += "$what '${it.key}' has a multi-line value, which is not converted"
+        ok
     }
 
     /** `{{process.env.X}}` becomes `{{$processEnv X}}` (which still needs `--allow-env X`); other `{{...}}` text is shared by both formats. */
@@ -135,12 +146,12 @@ object BrunoConverter {
     /** Path params (`:id`) are substituted; enabled query params that the URL does not hold yet are appended. */
     private fun withParams(url: String, file: BruFile, warnings: MutableList<String>): String {
         var result = url
-        for (p in file.block("params:path")?.entries().orEmpty().filter { it.enabled }) {
+        for (p in file.block("params:path")?.entries().orEmpty().filter { it.enabled }.singleLine("path parameter", warnings)) {
             val marker = Regex("(?<=/):" + Regex.escape(p.key) + "(?=[/?#]|$)")
             if (marker.containsMatchIn(result)) result = marker.replace(result) { fix(p.value) }
             else warnings += "path parameter '${p.key}' does not occur in the URL"
         }
-        val missing = file.block("params:query")?.entries().orEmpty().filter { it.enabled }
+        val missing = file.block("params:query")?.entries().orEmpty().filter { it.enabled }.singleLine("query parameter", warnings)
             .filter { !queryHas(result, it.key) }
         if (missing.isNotEmpty()) {
             val extra = missing.joinToString("&") { "${it.key}=${fix(it.value)}" }
@@ -162,7 +173,7 @@ object BrunoConverter {
             "text" -> text(file, "body:text", "text/plain", ::ensureType, warnings)
             "xml" -> text(file, "body:xml", "application/xml", ::ensureType, warnings)
             "formUrlEncoded" -> {
-                val fields = file.block("body:form-urlencoded")?.entries().orEmpty().filter { it.enabled }
+                val fields = file.block("body:form-urlencoded")?.entries().orEmpty().filter { it.enabled }.singleLine("form field", warnings)
                 if (fields.isEmpty()) null else {
                     ensureType("application/x-www-form-urlencoded")
                     Body.Text(fields.joinToString("&") { "${it.key}=${fix(it.value)}" })

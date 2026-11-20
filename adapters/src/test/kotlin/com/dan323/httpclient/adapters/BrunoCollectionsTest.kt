@@ -160,4 +160,21 @@ class BrunoCollectionsTest {
         val w = BrunoCollections.convert(source, target).warnings.joinToString("\n")
         assertTrue("folder.bru: ignored here" in w && "sub/collection.bru: ignored here" in w, w)
     }
+
+    @Test fun collectionVariablesRankBelowTheEnvironment() {
+        file("bruno.json", "{}")
+        file("collection.bru", "vars:pre-request {\n  host: http://default\n  only: c\n}\n")
+        file("environments/dev.bru", "vars {\n  host: http://dev\n}\n")
+        file("a.bru", request("A", 1, "{{host}}/a"))
+        file("api/folder.bru", "vars:pre-request {\n  host: http://folder\n}\n")
+        file("api/b.bru", request("B", 1, "{{host}}/b"))
+
+        val result = BrunoCollections.convert(source, target)
+
+        val env = Files.readString(target.resolve("http-client.env.json"))
+        assertTrue("\"host\": \"http://dev\"" in env && "\"only\": \"c\"" in env && "http://default" !in env, env)
+        assertFalse("@host" in Files.readString(target.resolve("requests.http")))
+        assertTrue("@host = http://folder" in Files.readString(target.resolve("api/api.http")))
+        assertTrue(result.warnings.any { "copied into each environment" in it && "only" in it })
+    }
 }

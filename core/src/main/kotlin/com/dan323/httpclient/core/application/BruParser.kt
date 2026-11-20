@@ -2,16 +2,36 @@ package com.dan323.httpclient.core.application
 
 /** One `name { ... }` (or `name [ ... ]`) block of a Bruno `.bru` file; [lines] are its content without the 2-space indent. */
 data class BruBlock(val name: String, val lines: List<String>) {
+    private companion object { const val MULTILINE = "'''" }
+
     /** One `key: value` line of a dictionary block; [enabled] is false for a `~key: value` line. */
     data class Entry(val key: String, val value: String, val enabled: Boolean)
 
-    /** The `key: value` lines (blank lines and lines without a colon are left out). */
-    fun entries(): List<Entry> = lines.mapNotNull { raw ->
-        val line = raw.trim()
-        val enabled = !line.startsWith("~")
-        val body = line.removePrefix("~")
-        val colon = body.indexOf(':')
-        if (colon <= 0) null else Entry(body.substring(0, colon).trim(), body.substring(colon + 1).trim(), enabled)
+    /**
+     * The `key: value` lines (blank lines and lines without a colon are left out). A value written as `key: '''`
+     * followed by lines up to a closing `'''` is a multi-line value: its lines (common indent removed) joined by `\n`.
+     */
+    fun entries(): List<Entry> {
+        val result = mutableListOf<Entry>()
+        var i = 0
+        while (i < lines.size) {
+            val line = lines[i++].trim()
+            val enabled = !line.startsWith("~")
+            val body = line.removePrefix("~")
+            val colon = body.indexOf(':')
+            if (colon <= 0) continue
+            val key = body.substring(0, colon).trim()
+            var value = body.substring(colon + 1).trim()
+            if (value == MULTILINE) {
+                val content = mutableListOf<String>()
+                while (i < lines.size && lines[i].trim() != MULTILINE) content += lines[i++]
+                i++ // the closing delimiter
+                val indent = content.filter { it.isNotBlank() }.minOfOrNull { l -> l.length - l.trimStart().length } ?: 0
+                value = content.joinToString("\n") { it.drop(indent) }
+            }
+            result += Entry(key, value, enabled)
+        }
+        return result
     }
 
     /** The content as one text, lines joined by `\n`. */
