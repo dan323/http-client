@@ -180,17 +180,17 @@ class BrunoCollectionsTest {
 
     @Test fun collectionVariablesThatReferToOthersStayExpandable() {
         file("bruno.json", "{}")
-        file("collection.bru", "vars:pre-request {\n  base: {{host}}/api\n  clash: {{host}}/c\n  plain: p\n}\n")
-        file("environments/dev.bru", "vars {\n  host: http://dev\n  clash: own\n}\n")
+        file("collection.bru", "vars:pre-request {\n  base: {{host}}/api\n  clash: {{host}}/c\n  token: {{fallback}}\n  plain: p\n}\n")
+        file("environments/dev.bru", "vars {\n  host: http://dev\n  clash: own\n}\n\nvars:secret [\n  token\n]\n")
         file("a.bru", request("A", 1, "{{base}}/a"))
 
         val result = BrunoCollections.convert(source, target)
 
         val requests = Files.readString(target.resolve("requests.http"))
         assertTrue("@base = {{host}}/api" in requests, requests)
-        assertFalse("@clash" in requests || "@plain" in requests, requests)
+        assertFalse("@clash" in requests || "@plain" in requests || "@token" in requests, requests)
         val env = Files.readString(target.resolve("http-client.env.json"))
         assertTrue("\"plain\": \"p\"" in env && "\"clash\": \"own\"" in env && "{{host}}/api" !in env, env)
-        assertTrue(result.warnings.any { "clash" in it && "not converted" in it })
+        assertTrue(result.warnings.any { "clash" in it && "token" in it && "not converted" in it }, result.warnings.toString())
     }
 }
