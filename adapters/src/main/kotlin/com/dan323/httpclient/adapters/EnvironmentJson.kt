@@ -36,6 +36,12 @@ internal object EnvironmentJson {
         throw EnvironmentFileException(file, malformedDetail(text, e.message))
     }
 
+    /** The text of an environment file holding [environments] (name to variables), pretty printed. */
+    fun render(environments: Map<String, Map<String, String>>): String {
+        val root = JsonObject(environments.mapValues { (_, vars) -> JsonObject(vars.mapValues { JsonPrimitive(it.value) }) })
+        return Json { prettyPrint = true; prettyPrintIndent = "  " }.encodeToString(JsonObject.serializer(), root) + "\n"
+    }
+
     /** Environment name to its variables with a text, number or boolean value; JSON `null` and other values are treated as undefined. */
     fun variables(root: JsonObject): Map<String, Map<String, String>> = root.mapValues { (_, env) ->
         (env as? JsonObject).orEmpty().mapNotNull { (k, v) ->

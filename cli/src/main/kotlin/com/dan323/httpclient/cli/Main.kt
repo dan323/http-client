@@ -40,6 +40,7 @@ private const val USAGE = """Usage: httpc <file.http> [--env NAME] [--request NA
                   [--quiet] [--output FILE] [--var NAME=VALUE] [--timeout DURATION]
                   [--fail-on-http-error]
        httpc <file.http> --check [--env NAME] [--var NAME=VALUE]
+$CONVERT_USAGE
 
   --env NAME       use variables from NAME in http-client.env.json (nearest http-client.env.json, searching
                    upward from the file; http-client.private.env.json beside it is merged)
@@ -243,6 +244,7 @@ fun main(args: Array<String>) {
  * environment or request, unexpected exception) an error report with a single failed entry is still written.
  */
 fun run(args: List<String>, out: PrintStream, err: PrintStream, outputWriter: OutputWriter = AtomicReportWriter(), writer: ReportWriter = AtomicReportWriter()): Int {
+    if (args.firstOrNull() == "convert-bruno") return convertBruno(args.drop(1), out, err)
     val opts = parseArgs(args, err) ?: run { err.println(USAGE); return 2 }
     return try {
         execute(opts, out, err, writer, outputWriter)

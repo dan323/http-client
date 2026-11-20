@@ -42,7 +42,7 @@ These are what Bruno / Postman users will ask for. Each needs a decision, not a 
 
 | Item                                        | Competitors        | Suggested stance                                                                                                                      |
 |---------------------------------------------|--------------------|---------------------------------------------------------------------------------------------------------------------------------------|
-| Postman and cURL import                     | Bruno, JetBrains   | Cheapest way to win switchers; a CLI `httpc import` that writes `.http` files. Bruno collections are planned (T35); Postman and cURL stay a decision.                                   |
+| Postman and cURL import                     | Bruno, JetBrains   | Cheapest way to win switchers; a CLI `httpc import` that writes `.http` files. Bruno collections convert with `httpc convert-bruno` (T35, running them directly is open); Postman and cURL stay a decision.                                   |
 | Pre/post-request scripts, response handlers | all                | Needs a sandboxed script engine (a third-party dependency; would live in `adapters`). Assertions + chaining cover most CI use. Defer. |
 | OAuth 2 flows, Digest auth                  | Postman, JetBrains | Defer; Basic and Bearer cover the common case.                                                                                        |
 | GraphQL, WebSocket, gRPC                    | all                | Defer. They already fail loudly: a parse error naming the line (G4, done).                                                            |
