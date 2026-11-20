@@ -31,7 +31,7 @@ Status: **done**, **partial** (what is missing is in the task table) or **open**
 | F20 | Verification and release: plugin tried in a real IDE, CI on macOS/Windows/Linux, installers | all | partial: tests on all three OS, plugin build and best-effort installer packaging (T24) in CI; plugin checked by hand on Ultimate 2026.3 (T21); Community install, 2026.1 baseline and macOS/Linux installer QA open |
 | F21 | User guide on GitHub Pages: step-by-step pages per interface (written, published by `pages.yml`), generated screenshots, links from the interfaces | docs, all UIs | partial: text guides and the PR build check (T28) done; screenshots and links open ([user-guide-plan.md](user-guide-plan.md)) |
 | F22 | Agent-friendly: an offline `httpc --check`, a skill that teaches coding agents the dialect and the CLI, an MCP server over the session | cli, new module, docs | partial: `--check` (T32) and the skill (T33) done; MCP server (T34) open |
-| F23 | Bruno collections: run and convert `.bru` files and Bruno environments | adapters, cli | open (T35) |
+| F23 | Bruno collections: run and convert `.bru` files and Bruno environments | core, adapters, cli | partial: `httpc convert-bruno` done; running a collection directly is open (T35) |
 | F24 | VS Code: diagnostics, completion and go to definition through a language server, requests run through `httpc` | new modules | open (T36, T37) |
 
 **Later / out of scope for now:** GraphQL, WebSocket, gRPC, full OAuth2 flows, Postman/curl import (Bruno is F23), team sync.
@@ -56,7 +56,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 | T30 | **`user-guide` build module:** Gradle tasks that generate the assets and assemble the site for the PR check and the deploy | F21 | M | T29 |
 | T31 | **Links to the guide from the interfaces:** desktop Help, plugin Help link, one line in `httpc --help` | F21 | S | T29 (guide stable) |
 | T34 | **MCP server** (`mcp-server` module over `SessionFactory`/`RunController`): `list_requests`, `run`, `run_all`, `list_environments`, `analyze`. Needs its safety model first: file roots and host allow-list, private environment values never returned, a way to confirm requests that change data. Plan the model before coding | F22 | M | – |
-| T35 | **Bruno import:** a reader port in `core` with an adapter that turns `.bru` files and `environments/*.bru` into `RequestTemplate`s and `Environment`s (`httpc run collection/`, convert to `.http`); unsupported parts (JavaScript scripts, tests in Bruno syntax) are reported, never skipped silently; no write-back | F23 | M | – |
+| T35 | **Bruno import, rest:** `httpc convert-bruno` is done; still open: run a collection directly (`httpc run collection/`), folder and collection level headers, auth and variables, `vars:pre-request` as file variables, and `.bru` files that use the newer OpenCollection YAML format | F23 | S | – |
 | T36 | **Language server:** `.http` diagnostics, completion and go to declaration over LSP in a new module, reusing `VariableAnalysis`, `HttpLineLexer` and the `view-model` helpers of T22 | F24 | L | T22 |
 | T37 | **VS Code extension:** a thin client of T36 (TextMate grammar or LSP semantic tokens, run through `httpc`, environment picker); needs a Java runtime or a bundled one | F24 | L | T36 |
 
@@ -69,7 +69,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 | F20 | T25 (T21, T24 done) |
 | F21 | T29, T30, T31 (T28 done) |
 | F22 | T34 (T32, T33 done) |
-| F23 | T35 |
+| F23 | T35 | **Bruno import, rest:** `httpc convert-bruno` is done; still open: run a collection directly (`httpc run collection/`), folder and collection level headers, auth and variables, `vars:pre-request` as file variables, and `.bru` files that use the newer OpenCollection YAML format | F23 | S | – |
 | F24 | T36, T37 |
 
 Shared work, written once: T21 (F18, F19, F20). (T13 and T14 were shared as well and are done.)
