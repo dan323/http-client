@@ -429,4 +429,17 @@ class BrunoConverterTest {
         assertEquals(mapOf("b" to "1"), e.environment.variables)
         assertTrue(e.warnings.single().contains("multi-line"))
     }
+
+    @Test fun aCollectionReferenceSeesTheFolderValueOverTheEnvironment() {
+        val collection = BrunoConverter.settings("vars:pre-request {\n  base: {{host}}/api\n}\n")
+        val folder = BrunoConverter.settings("vars:pre-request {\n  host: http://folder\n}\n")
+        val request = BrunoConverter.request("get {\n  url: {{base}}/a\n}\n", "r", inherited = collection.then(folder))
+        assertEquals(listOf("host", "base"), request.template.fileVariables.keys.toList())
+        val text = HttpFileWriter.write(listOf(request.template))
+        val parsed = HttpFileParser().parse(text).requests.single()
+        val url = com.dan323.httpclient.core.application.VariableResolver.resolve(
+            parsed.url, mapOf("host" to "http://dev"), fileVariables = parsed.fileVariables,
+        )
+        assertEquals("http://folder/api/a", url)
+    }
 }

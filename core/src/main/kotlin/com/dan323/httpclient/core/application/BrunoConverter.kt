@@ -99,10 +99,21 @@ object BrunoConverter {
             url = url,
             headers = headers,
             body = body,
-            fileVariables = inherited.variables + ownVariables,
+            fileVariables = referencesLast(inherited.variables + ownVariables),
             assertions = assertions,
         )
         return BrunoRequest(template, sequence, warnings)
+    }
+
+    /**
+     * Variables whose value refers to others go last: a reference to an *earlier* file variable beats the environment,
+     * one to a *later* file variable does not, and Bruno resolves a reference with the final value (a folder or
+     * request variable over the environment). Limit: a request-level variable that only some requests of a file define
+     * is cumulative in a `.http` file, so it can still come after a reference-valued variable written for an earlier request.
+     */
+    private fun referencesLast(variables: Map<String, String>): Map<String, String> {
+        val (refs, plain) = variables.entries.partition { "{{" in it.value }
+        return LinkedHashMap<String, String>().apply { plain.forEach { put(it.key, it.value) }; refs.forEach { put(it.key, it.value) } }
     }
 
     /** Parses `collection.bru` or `folder.bru`: headers, the authentication mode and `vars:pre-request` are kept, the rest is reported. */
