@@ -325,6 +325,7 @@ class BrunoConverterTest {
             }
         """)
         assertNull(r.template.body)
+        assertTrue(r.template.headers.isEmpty(), "no Content-Type without a body")
         assertTrue(r.warnings.any { "###" in it })
     }
 }

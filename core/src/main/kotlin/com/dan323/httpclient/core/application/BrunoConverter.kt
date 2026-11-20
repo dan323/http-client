@@ -47,7 +47,10 @@ object BrunoConverter {
         url = withParams(url, file, warnings)
 
         val headers = file.block("headers")?.entries().orEmpty().filter { it.enabled }.map { Header(it.key, fix(it.value)) }.toMutableList()
+        val declared = headers.toList()
         val body = body(settings["body"], file, headers, warnings, rootPrefix).takeUnless { splitsRequest(it, warnings) }
+        // a dropped body must not leave the Content-Type that was added for it
+        if (body == null) { headers.clear(); headers.addAll(declared) }
         auth(settings["auth"], file, headers, warnings)
 
         val assertions = assertions(file.block("assert"), warnings)
