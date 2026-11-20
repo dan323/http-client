@@ -1,0 +1,26 @@
+name: Guide check
+
+# Builds the user guide (docs/guide) the same way pages.yml does, without deploying, and checks its links.
+# Not a required check: the path filter means it only runs when the guide changes.
+on:
+  pull_request:
+    paths: ["docs/guide/**", ".github/scripts/check-guide-links.sh", ".github/workflows/guide-check.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: guide-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guide:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check links into the repository and between guide pages
+        run: .github/scripts/check-guide-links.sh
+      - uses: actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1.0.13
+        with:
+          source: ./docs/guide
+          destination: ./_site
