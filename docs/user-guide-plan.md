@@ -7,7 +7,7 @@ The user guide is a small Jekyll site in [`guide/`](guide/) (home, command line,
 - Sources: `docs/guide/*.md`, theme `minima`, configured in `docs/guide/_config.yml`. No toolchain beyond the `actions/jekyll-build-pages` step.
 - Publishing needs a one-time setting by a repository admin: *Settings > Pages > Build and deployment > Source: GitHub Actions*. The site is then at `https://dan323.github.io/http-client/`.
 - The guides are tutorials ("how do I run my first request"). The reference stays in [features.md](features.md); the guides link to it instead of copying it.
-- Pull requests that change only docs skip the build (see `ci.yml`), so a broken guide page is only seen when the Pages workflow runs on `master`. T28 adds a build check on pull requests.
+- Pull requests that change only docs skip the build (see `ci.yml`), so a broken guide page used to be seen only when the Pages workflow ran on `master`. [`guide-check.yml`](../.github/workflows/guide-check.yml) (T28) now builds the site and checks links on pull requests that change the guide.
 
 ## Plan
 
