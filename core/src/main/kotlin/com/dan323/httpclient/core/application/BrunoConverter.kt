@@ -13,6 +13,26 @@ import com.dan323.httpclient.core.domain.RequestTemplate
  */
 data class BrunoRequest(val template: RequestTemplate, val sequence: Int, val warnings: List<String>)
 
+/**
+ * Settings from `collection.bru` or `folder.bru` that requests inherit: [headers], [auth] (set when [authSet], also
+ * when the setting is "no authentication") and [variables] from `vars:pre-request`. [warnings] name what was not converted.
+ */
+data class BrunoSettings(
+    val headers: List<Header> = emptyList(),
+    val auth: Header? = null,
+    val authSet: Boolean = false,
+    val variables: Map<String, String> = emptyMap(),
+    val warnings: List<String> = emptyList(),
+) {
+    /** The settings seen by a request or sub-folder of this level: [child] wins over this by header name, auth and variable name. */
+    fun then(child: BrunoSettings) = BrunoSettings(
+        headers = headers.filter { h -> child.headers.none { it.name.equals(h.name, ignoreCase = true) } } + child.headers,
+        auth = if (child.authSet) child.auth else auth,
+        authSet = authSet || child.authSet,
+        variables = variables + child.variables,
+    )
+}
+
 /** An environment from `an environment file`; [secrets] are the names listed in `vars:secret` (Bruno keeps their values outside the file). */
 data class BrunoEnvironment(val environment: Environment, val secrets: List<String>)
 
@@ -30,8 +50,10 @@ object BrunoConverter {
      * [fallbackName] names a request without `meta { name }` (usually its file name without `.bru`).
      * [rootPrefix] is put before the relative file paths of multipart parts: Bruno resolves them from the collection
      * root, a `.http` file from its own folder, so a request converted into a subfolder needs `../` for each level.
+     * [inherited] are the settings of the collection and the folders above: their headers are added unless the request
+     * sets the same header, `auth: inherit` takes their authentication, their variables become file variables.
      */
-    fun request(text: String, fallbackName: String, rootPrefix: String = ""): BrunoRequest {
+    fun request(text: String, fallbackName: String, rootPrefix: String = "", inherited: BrunoSettings = BrunoSettings()): BrunoRequest {
         val file = BruParser.parse(text)
         val warnings = file.problems.map { "malformed block: $it" }.toMutableList()
         val methodBlock = file.blocks.firstOrNull { it.name in methods }
@@ -46,18 +68,22 @@ object BrunoConverter {
         var url = fix(settings["url"].orEmpty())
         url = withParams(url, file, warnings)
 
-        val headers = file.block("headers")?.entries().orEmpty().filter { it.enabled }.map { Header(it.key, fix(it.value)) }.toMutableList()
+        val own = file.block("headers")?.entries().orEmpty().filter { it.enabled }.map { Header(it.key, fix(it.value)) }
+        val headers = (inherited.headers.filter { h -> own.none { it.name.equals(h.name, ignoreCase = true) } } + own).toMutableList()
         val declared = headers.toList()
         val body = body(settings["body"], file, headers, warnings, rootPrefix).takeUnless { splitsRequest(it, warnings) }
         // a dropped body must not leave the Content-Type that was added for it
         if (body == null) { headers.clear(); headers.addAll(declared) }
-        auth(settings["auth"], file, headers, warnings)
+        if (settings["auth"] == "inherit") inherited.auth?.let { headers += it }
+        else authHeader(settings["auth"], file, warnings)?.let { headers += it }
+        val ownVariables = file.block("vars:pre-request")?.entries().orEmpty().filter { it.enabled }.associate { it.key to fix(it.value) }
 
         val assertions = assertions(file.block("assert"), warnings)
         for (block in file.blocks) {
             if (block.name in quiet || block.name in methods) continue
             warnings += when {
                 block.name.startsWith("script:") || block.name == "tests" -> "block '${block.name}' (JavaScript) is not converted"
+                block.name == "vars:pre-request" -> continue
                 block.name.startsWith("vars:") -> "block '${block.name}' is not converted (set the variables in the environment or as file variables)"
                 block.name.startsWith("auth:") -> "authentication '${block.name}' is not converted"
                 block.name.startsWith("body:") -> "body '${block.name}' is not converted"
@@ -70,9 +96,29 @@ object BrunoConverter {
             url = url,
             headers = headers,
             body = body,
+            fileVariables = inherited.variables + ownVariables,
             assertions = assertions,
         )
         return BrunoRequest(template, sequence, warnings)
+    }
+
+    /** Parses `collection.bru` or `folder.bru`: headers, the authentication mode and `vars:pre-request` are kept, the rest is reported. */
+    fun settings(text: String): BrunoSettings {
+        val file = BruParser.parse(text)
+        val warnings = file.problems.map { "malformed block: $it" }.toMutableList()
+        val mode = file.block("auth")?.entries().orEmpty().firstOrNull { it.key == "mode" }?.value
+        val auth = if (mode == null || mode == "inherit") null else authHeader(mode, file, warnings)
+        for (block in file.blocks) {
+            if (block.name in setOf("meta", "docs", "headers", "auth", "auth:basic", "auth:bearer", "vars:pre-request")) continue
+            warnings += "block '${block.name}' is not converted"
+        }
+        return BrunoSettings(
+            headers = file.block("headers")?.entries().orEmpty().filter { it.enabled }.map { Header(it.key, fix(it.value)) },
+            auth = auth,
+            authSet = mode != null && mode != "inherit",
+            variables = file.block("vars:pre-request")?.entries().orEmpty().filter { it.enabled }.associate { it.key to fix(it.value) },
+            warnings = warnings,
+        )
     }
 
     /** Parses `environments/NAME.bru`: the `vars` block gives the variables, `vars:secret` the names whose values are not in the file. */
@@ -170,20 +216,17 @@ object BrunoConverter {
         return Body.Multipart(BOUNDARY, parts)
     }
 
-    private fun auth(mode: String?, file: BruFile, headers: MutableList<Header>, warnings: MutableList<String>) {
-        when (mode) {
-            null, "none", "inherit" -> {}
-            "basic" -> {
-                val e = file.block("auth:basic")?.entries().orEmpty().associate { it.key to it.value }
-                headers += Header("Authorization", "Basic ${fix(e["username"].orEmpty())}:${fix(e["password"].orEmpty())}")
-            }
-            "bearer" -> {
-                val token = file.block("auth:bearer")?.entries().orEmpty().firstOrNull { it.key == "token" }?.value.orEmpty()
-                headers += Header("Authorization", "Bearer ${fix(token)}")
-            }
-            else -> warnings += "authentication '$mode' is not converted"
+    private fun authHeader(mode: String?, file: BruFile, warnings: MutableList<String>): Header? = when (mode) {
+        null, "none" -> null
+        "basic" -> {
+            val e = file.block("auth:basic")?.entries().orEmpty().associate { it.key to it.value }
+            Header("Authorization", "Basic ${fix(e["username"].orEmpty())}:${fix(e["password"].orEmpty())}")
         }
-        if (mode == "inherit") warnings += "authentication is inherited from the collection or folder, which is not converted"
+        "bearer" -> {
+            val token = file.block("auth:bearer")?.entries().orEmpty().firstOrNull { it.key == "token" }?.value.orEmpty()
+            Header("Authorization", "Bearer ${fix(token)}")
+        }
+        else -> { warnings += "authentication '$mode' is not converted"; null }
     }
 
     private val operators = mapOf(

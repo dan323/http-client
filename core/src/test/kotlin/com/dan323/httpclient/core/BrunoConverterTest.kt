@@ -167,8 +167,8 @@ class BrunoConverterTest {
               auth: oauth2
             }
 
-            vars:pre-request {
-              a: 1
+            vars:post-response {
+              a: res.body.id
             }
 
             script:post-response {
@@ -180,20 +180,76 @@ class BrunoConverterTest {
             }
         """)
         val all = r.warnings.joinToString("\n")
-        for (expected in listOf("graphql", "oauth2", "vars:pre-request", "script:post-response", "'tests' (JavaScript)")) {
+        for (expected in listOf("graphql", "oauth2", "vars:post-response", "script:post-response", "'tests' (JavaScript)")) {
             assertTrue(expected in all, "missing warning about $expected in:\n$all")
         }
         assertNull(r.template.body)
     }
 
-    @Test fun inheritedAuthIsReported() {
-        val r = convert("""
-            get {
-              url: http://h
-              auth: inherit
+    @Test fun inheritedHeadersAuthAndVariablesAreApplied() {
+        val inherited = BrunoConverter.settings("""
+            headers {
+              X-Team: a
+              Accept: text/plain
+              ~X-Off: no
             }
-        """)
-        assertTrue(r.warnings.single().contains("inherited"))
+
+            auth {
+              mode: bearer
+            }
+
+            auth:bearer {
+              token: {{t}}
+            }
+
+            vars:pre-request {
+              region: eu
+            }
+        """.trimIndent() + "\n")
+        assertTrue(inherited.warnings.isEmpty())
+        val r = BrunoConverter.request("get {\n  url: http://h\n  auth: inherit\n}\n\nheaders {\n  accept: application/json\n}\n\nvars:pre-request {\n  own: 1\n}\n", "f", inherited = inherited)
+        assertEquals(
+            listOf(Header("X-Team", "a"), Header("accept", "application/json"), Header("Authorization", "Bearer {{t}}")),
+            r.template.headers,
+        )
+        assertEquals(mapOf("region" to "eu", "own" to "1"), r.template.fileVariables)
+        assertTrue(r.warnings.isEmpty())
+    }
+
+    @Test fun aRequestWithItsOwnAuthIgnoresTheInheritedOne() {
+        val inherited = BrunoConverter.settings("auth {\n  mode: bearer\n}\n\nauth:bearer {\n  token: x\n}\n")
+        val noAuth = BrunoConverter.request("get {\n  url: http://h\n  auth: none\n}\n", "f", inherited = inherited)
+        assertTrue(noAuth.template.headers.isEmpty())
+        val without = BrunoConverter.request("get {\n  url: http://h\n}\n", "f", inherited = inherited)
+        assertTrue(without.template.headers.isEmpty())
+    }
+
+    @Test fun settingsCombineAndChildWins() {
+        val parent = BrunoConverter.settings("headers {\n  A: 1\n  B: 1\n}\n\nauth {\n  mode: bearer\n}\n\nauth:bearer {\n  token: p\n}\n\nvars:pre-request {\n  v: p\n}\n")
+        val child = BrunoConverter.settings("headers {\n  b: 2\n}\n\nauth {\n  mode: none\n}\n\nvars:pre-request {\n  v: c\n}\n")
+        val merged = parent.then(child)
+        assertEquals(listOf(Header("A", "1"), Header("b", "2")), merged.headers)
+        assertNull(merged.auth)
+        assertTrue(merged.authSet)
+        assertEquals(mapOf("v" to "c"), merged.variables)
+        val inheritOnly = parent.then(BrunoConverter.settings("auth {\n  mode: inherit\n}\n"))
+        assertEquals(Header("Authorization", "Bearer p"), inheritOnly.auth)
+    }
+
+    @Test fun settingsReportWhatTheyCannotConvert() {
+        val s = BrunoConverter.settings("script:pre-request {\n  x()\n}\n\nauth {\n  mode: oauth2\n}\n\nvars:post-response {\n  a: b\n}\n")
+        val all = s.warnings.joinToString("\n")
+        for (e in listOf("script:pre-request", "oauth2", "vars:post-response")) assertTrue(e in all, all)
+    }
+
+    @Test fun fileVariablesAreWrittenWhereTheyChange() {
+        val a = convert("get {\n  url: http://h/a\n}\n\nvars:pre-request {\n  v: 1\n}\n").template
+        val b = convert("get {\n  url: http://h/b\n}\n\nvars:pre-request {\n  v: 1\n}\n").template
+        val c = convert("get {\n  url: http://h/c\n}\n\nvars:pre-request {\n  v: 2\n}\n").template
+        val text = HttpFileWriter.write(listOf(a, b, c))
+        assertEquals(2, Regex("^@v = ", RegexOption.MULTILINE).findAll(text).count(), text)
+        val parsed = HttpFileParser().parse(text).requests
+        assertEquals(listOf("1", "1", "2"), parsed.map { it.fileVariables["v"] })
     }
 
     @Test fun assertionsAreMapped() {
