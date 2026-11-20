@@ -24,7 +24,9 @@ data class BrunoConversion(val files: List<String>, val warnings: List<String>)
  */
 object BrunoCollections {
     private const val MAX_FILE_BYTES = 1_000_000L
-    private val skippedFolders = setOf("node_modules", "environments")
+
+    /** The text of [file], or null when it cannot be read or is not valid UTF-8 (the caller reports it and goes on). */
+    private fun readText(file: Path): String? = try { Files.readString(file) } catch (_: IOException) { null }
 
     fun isCollection(dir: Path): Boolean = Files.isRegularFile(dir.resolve("bruno.json"), LinkOption.NOFOLLOW_LINKS)
 
@@ -41,16 +43,24 @@ object BrunoCollections {
                 val shown = if (relative.isEmpty()) name else "$relative/$name"
                 if (Files.isSymbolicLink(entry)) { warnings += "$shown: symbolic link skipped"; continue }
                 if (Files.isDirectory(entry)) {
-                    if (!name.startsWith(".") && name !in skippedFolders) walk(entry, shown)
+                    if (name.startsWith(".") || name == "node_modules" || (relative.isEmpty() && name == "environments")) {
+                        if (relative.isNotEmpty() || name != "environments") warnings += "$shown: folder skipped"
+                    } else walk(entry, shown)
                 } else if (name.endsWith(".bru")) {
                     if (name == "folder.bru" || name == "collection.bru") {
                         warnings += "$shown: folder and collection settings (headers, auth, scripts, variables) are not converted"
                     } else if (Files.size(entry) > MAX_FILE_BYTES) {
                         warnings += "$shown: larger than $MAX_FILE_BYTES bytes, skipped"
                     } else {
-                        val converted = BrunoConverter.request(Files.readString(entry), name.removeSuffix(".bru"))
-                        warnings += converted.warnings.map { "$shown: $it" }
-                        requests += converted
+                        val text = readText(entry)
+                        if (text == null) {
+                            warnings += "$shown: not readable as UTF-8 text, skipped"
+                        } else {
+                            val depth = if (relative.isEmpty()) 0 else relative.count { it == '/' } + 1
+                            val converted = BrunoConverter.request(text, name.removeSuffix(".bru"), "../".repeat(depth))
+                            warnings += converted.warnings.map { "$shown: $it" }
+                            requests += converted
+                        }
                     }
                 }
             }
@@ -63,7 +73,12 @@ object BrunoCollections {
         if (Files.isDirectory(envDir, LinkOption.NOFOLLOW_LINKS)) {
             Files.list(envDir).use { it.toList() }.filter { it.fileName.toString().endsWith(".bru") && Files.isRegularFile(it, LinkOption.NOFOLLOW_LINKS) }
                 .sortedBy { it.fileName.toString() }.forEach {
-                    val env = BrunoConverter.environment(it.fileName.toString().removeSuffix(".bru"), Files.readString(it))
+                    val envText = if (Files.size(it) > MAX_FILE_BYTES) null else readText(it)
+                    if (envText == null) {
+                        warnings += "environments/${it.fileName}: larger than $MAX_FILE_BYTES bytes or not readable as UTF-8 text, skipped"
+                        return@forEach
+                    }
+                    val env = BrunoConverter.environment(it.fileName.toString().removeSuffix(".bru"), envText)
                     if (env.secrets.isNotEmpty()) {
                         warnings += "environments/${it.fileName}: secret values are not in the file; put ${env.secrets.joinToString(", ")} in http-client.private.env.json"
                     }

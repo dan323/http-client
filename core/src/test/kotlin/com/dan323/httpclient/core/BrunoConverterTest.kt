@@ -301,4 +301,30 @@ class BrunoConverterTest {
         assertEquals(PartContent.Text("x"), multipart.parts[0].content)
         assertEquals(PartContent.File("p.json"), multipart.parts[1].content)
     }
+
+    @Test fun multipartFilesGetTheRootPrefixAndAWarning() {
+        val text = "post {\n  url: http://h\n  body: multipartForm\n}\n\nbody:multipart-form {\n  a: @file(d/x.json)\n  b: @file(/abs/y.json)\n}\n"
+        val r = BrunoConverter.request(text, "f", "../../")
+        val parts = (r.template.body as Body.Multipart).parts
+        assertEquals(PartContent.File("../../d/x.json"), parts[0].content)
+        assertEquals(PartContent.File("/abs/y.json"), parts[1].content)
+        assertEquals(1, r.warnings.size)
+        assertTrue("collection root" in r.warnings.single())
+    }
+
+    @Test fun aBodyLineStartingWithHashesIsLeftOutWithAWarning() {
+        val r = convert("""
+            post {
+              url: http://h
+              body: text
+            }
+
+            body:text {
+              a
+              ### b
+            }
+        """)
+        assertNull(r.template.body)
+        assertTrue(r.warnings.any { "###" in it })
+    }
 }

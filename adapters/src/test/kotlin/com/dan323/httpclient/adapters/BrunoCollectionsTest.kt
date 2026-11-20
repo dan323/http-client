@@ -106,4 +106,31 @@ class BrunoCollectionsTest {
         assertTrue(result.files.isEmpty())
         assertTrue(result.warnings.any { "symbolic link" in it })
     }
+
+    @Test fun unreadableOversizedAndSkippedFilesAreWarningsNotFailures() {
+        file("bruno.json", "{}")
+        file("ok.bru", request("Ok", 1, "http://h"))
+        Files.write(source.resolve("binary.bru"), byteArrayOf(0x67, 0x65, 0x74, 0x20, 0xC3.toByte(), 0x28))
+        Files.write(source.resolve("huge.bru"), ByteArray(1_000_001) { 'a'.code.toByte() })
+        file("environments/big.bru", "vars {\n  a: b\n}\n" + "#".repeat(1_000_001))
+        file(".hidden/h.bru", request("H", 1, "http://h"))
+        file("node_modules/n.bru", request("N", 1, "http://n"))
+        file("sub/environments/e.bru", request("E", 1, "http://e"))
+
+        val result = BrunoCollections.convert(source, target)
+
+        val w = result.warnings.joinToString("\n")
+        for (expected in listOf("binary.bru: not readable", "huge.bru: larger", "environments/big.bru: larger", ".hidden: folder skipped", "node_modules: folder skipped")) {
+            assertTrue(expected in w, "missing '$expected' in:\n$w")
+        }
+        assertTrue(result.files.containsAll(listOf("requests.http", "sub/environments/environments.http")), result.files.toString())
+        assertFalse("http-client.env.json" in result.files)
+    }
+
+    @Test fun nestedRequestsPointBackToTheCollectionRoot() {
+        file("bruno.json", "{}")
+        file("a/b/up.bru", "post {\n  url: http://h\n  body: multipartForm\n}\n\nbody:multipart-form {\n  f: @file(data.json)\n}\n")
+        BrunoCollections.convert(source, target)
+        assertTrue("< ../../data.json" in Files.readString(target.resolve("a/b/b.http")))
+    }
 }

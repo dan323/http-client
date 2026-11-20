@@ -26,8 +26,12 @@ object BrunoConverter {
     private val quiet = setOf("meta", "docs", "settings", "params:query", "params:path", "headers", "assert") +
         setOf("body:json", "body:text", "body:xml", "body:form-urlencoded", "body:multipart-form", "auth:basic", "auth:bearer")
 
-    /** [fallbackName] names a request without `meta { name }` (usually its file name without `.bru`). */
-    fun request(text: String, fallbackName: String): BrunoRequest {
+    /**
+     * [fallbackName] names a request without `meta { name }` (usually its file name without `.bru`).
+     * [rootPrefix] is put before the relative file paths of multipart parts: Bruno resolves them from the collection
+     * root, a `.http` file from its own folder, so a request converted into a subfolder needs `../` for each level.
+     */
+    fun request(text: String, fallbackName: String, rootPrefix: String = ""): BrunoRequest {
         val file = BruParser.parse(text)
         val warnings = file.problems.map { "malformed block: $it" }.toMutableList()
         val methodBlock = file.blocks.firstOrNull { it.name in methods }
@@ -43,7 +47,7 @@ object BrunoConverter {
         url = withParams(url, file, warnings)
 
         val headers = file.block("headers")?.entries().orEmpty().filter { it.enabled }.map { Header(it.key, fix(it.value)) }.toMutableList()
-        val body = body(settings["body"], file, headers, warnings)
+        val body = body(settings["body"], file, headers, warnings, rootPrefix).takeUnless { splitsRequest(it, warnings) }
         auth(settings["auth"], file, headers, warnings)
 
         val assertions = assertions(file.block("assert"), warnings)
@@ -99,7 +103,7 @@ object BrunoConverter {
     private fun queryHas(url: String, key: String) =
         url.substringAfter('?', "").substringBefore('#').split('&').any { it.substringBefore('=') == key }
 
-    private fun body(kind: String?, file: BruFile, headers: MutableList<Header>, warnings: MutableList<String>): Body? {
+    private fun body(kind: String?, file: BruFile, headers: MutableList<Header>, warnings: MutableList<String>, rootPrefix: String): Body? {
         fun ensureType(type: String) {
             if (headers.none { it.name.equals("Content-Type", ignoreCase = true) }) headers += Header("Content-Type", type)
         }
@@ -115,9 +119,21 @@ object BrunoConverter {
                     Body.Text(fields.joinToString("&") { "${it.key}=${fix(it.value)}" })
                 }
             }
-            "multipartForm" -> multipart(file, headers, warnings)
+            "multipartForm" -> multipart(file, headers, warnings, rootPrefix)
             else -> { warnings += "body type '$kind' is not converted"; null }
         }
+    }
+
+    /** A body line starting with `###` would split the request when the `.http` file is read, so such a body is left out with a warning. */
+    private fun splitsRequest(body: Body?, warnings: MutableList<String>): Boolean {
+        val texts = when (body) {
+            is Body.Text -> listOf(body.content)
+            is Body.Multipart -> body.parts.mapNotNull { (it.content as? PartContent.Text)?.content }
+            else -> emptyList()
+        }
+        val bad = texts.any { t -> t.lineSequence().any { it.startsWith("###") } }
+        if (bad) warnings += "the body has a line starting with ### , which a .http file reads as the start of the next request; the body is not converted"
+        return bad
     }
 
     private fun text(file: BruFile, block: String, type: String, ensureType: (String) -> Unit, warnings: MutableList<String>): Body? {
@@ -127,7 +143,7 @@ object BrunoConverter {
         return Body.Text(fix(content))
     }
 
-    private fun multipart(file: BruFile, headers: MutableList<Header>, warnings: MutableList<String>): Body? {
+    private fun multipart(file: BruFile, headers: MutableList<Header>, warnings: MutableList<String>, rootPrefix: String): Body? {
         val fields = file.block("body:multipart-form")?.entries().orEmpty().filter { it.enabled }
         if (fields.isEmpty()) return null
         headers.removeAll { it.name.equals("Content-Type", ignoreCase = true) }
@@ -138,7 +154,10 @@ object BrunoConverter {
             if (file != null) {
                 val paths = file.split('|')
                 if (paths.size > 1) warnings += "multipart field '${f.key}' lists several files; only the first is kept"
-                val path = paths.first().trim()
+                val given = paths.first().trim()
+                val absolute = given.startsWith("/") || given.startsWith("\\") || Regex("^[A-Za-z]:").containsMatchIn(given)
+                val path = if (absolute) given else rootPrefix + given
+                if (!absolute) warnings += "multipart file '$given' is relative to the collection root; the files are not copied, so keep them at the same place relative to the converted requests.http (or pass --allow-file-root)"
                 val shown = path.substringAfterLast('/').substringAfterLast('\\')
                 Part(listOf(Header("Content-Disposition", "form-data; name=\"${f.key}\"; filename=\"$shown\"")), PartContent.File(path))
             } else {
