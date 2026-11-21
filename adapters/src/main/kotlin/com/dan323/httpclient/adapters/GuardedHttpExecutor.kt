@@ -1,5 +1,7 @@
 package com.dan323.httpclient.adapters
 
+import com.dan323.httpclient.core.application.CookieJar
+import com.dan323.httpclient.core.application.RedirectFollower
 import com.dan323.httpclient.core.domain.HttpRequest
 import com.dan323.httpclient.core.domain.HttpResponse
 import com.dan323.httpclient.core.port.out.HttpExecutor
@@ -20,14 +22,24 @@ class GuardedHttpExecutor(
 ) : HttpExecutor {
     init { require(maxTimeoutMillis > 0) { "maxTimeoutMillis must be positive" } }
 
+    /**
+     * Follows redirects itself (like [JdkHttpExecutor]) and checks every hop, so a delegate that would follow them on
+     * its own (a direct call with redirects on) never sees an unchecked target. The session's follower turns following
+     * off for the hops it sends here, so the redirects are then left to it, as before.
+     */
     override fun execute(request: HttpRequest): HttpResponse {
+        val timeout = request.options.timeoutMillis?.coerceAtMost(maxTimeoutMillis) ?: maxTimeoutMillis
+        val options = request.options.copy(timeoutMillis = timeout, useCookieJar = false)
+        return RedirectFollower(::executeChecked, CookieJar()).send(request.copy(options = options))
+    }
+
+    private fun executeChecked(request: HttpRequest): HttpResponse {
         if (!allowWrite && request.method.uppercase() !in READ_ONLY) {
             throw RequestRefusedException("Request refused: ${request.method} changes data (allow it with --allow-write)")
         }
         if (request.options.proxy != null) throw RequestRefusedException("Request refused: # @proxy is not allowed here")
         hosts.check(request.url)
-        val timeout = request.options.timeoutMillis?.coerceAtMost(maxTimeoutMillis) ?: maxTimeoutMillis
-        return delegate.execute(request.copy(options = request.options.copy(timeoutMillis = timeout)))
+        return delegate.execute(request.copy(options = request.options.copy(followRedirects = false)))
     }
 
     private companion object { val READ_ONLY = setOf("GET", "HEAD", "OPTIONS") }

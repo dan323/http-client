@@ -66,7 +66,7 @@ class HostAllowListTest {
         val names = mapOf(
             "a" to "192.0.0.192", "b" to "198.18.0.1", "c" to "198.19.255.255", "d" to "192.0.2.1", "e" to "198.51.100.7", "f" to "203.0.113.9",
             "g" to "240.0.0.1", "h" to "::127.0.0.1", "i" to "::a9fe:a9fe", "j" to "2002:a9fe:a9fe::1", "k" to "2002:7f00:1::1",
-            "l" to "64:ff9b::a9fe:a9fe", "m" to "64:ff9b::7f00:1", "n" to "2001:db8::1", "o" to "0.1.2.3",
+            "l" to "64:ff9b::a9fe:a9fe", "m" to "64:ff9b::7f00:1", "n" to "2001:db8::1", "o" to "0.1.2.3", "p" to "64:ff9b::efff:fffa", "q" to "2002:efff:fffa::1", "r" to "239.255.255.250",
         )
         val l = list("*.r.test", dns = names.mapKeys { "${it.key}.r.test" }.mapValues { listOf(it.value) })
         names.keys.forEach { l.refuses("http://$it.r.test/") }

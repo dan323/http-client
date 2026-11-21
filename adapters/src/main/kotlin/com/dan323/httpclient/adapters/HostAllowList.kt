@@ -116,9 +116,9 @@ class HostAllowList(entries: Collection<String> = DEFAULT, private val resolve: 
             }
         }
 
-        /** Reserved or non-public IPv4 space beyond what the JDK's own checks know: 0/8, 100.64/10, 192.0.0/24, 192.0.2/24, 198.18/15, 198.51.100/24, 203.0.113/24, 240/4. */
+        /** Reserved or non-public IPv4 space beyond what the JDK's own checks know: 0/8, 100.64/10, 224/4 (multicast), 192.0.0/24, 192.0.2/24, 198.18/15, 198.51.100/24, 203.0.113/24, 240/4 (224/4 and up here). */
         private fun v4Restricted(o1: Int, o2: Int, o3: Int): Boolean = when {
-            o1 == 0 || o1 >= 240 || o1 == 10 || o1 == 127 -> true
+            o1 == 0 || o1 >= 224 || o1 == 10 || o1 == 127 -> true
             o1 == 100 && (o2 and 0xc0) == 0x40 -> true
             o1 == 169 && o2 == 254 || o1 == 172 && (o2 and 0xf0) == 0x10 || o1 == 192 && o2 == 168 -> true
             o1 == 192 && o2 == 0 && (o3 == 0 || o3 == 2) -> true

@@ -61,7 +61,9 @@ class GuardedHttpExecutorTest {
         g.execute(get())
         g.execute(get(options = RequestOptions(timeoutMillis = 3_600_000)))
         g.execute(get(options = RequestOptions(timeoutMillis = 1_000)))
-        assertEquals(listOf(5_000L, 5_000L, 1_000L), r.sent.map { it.options.timeoutMillis })
+        // the follower hands the hop what is left of the deadline, so a millisecond or so less
+        val sent = r.sent.map { it.options.timeoutMillis!! }
+        assertTrue(sent[0] in 4_900L..5_000L && sent[1] in 4_900L..5_000L && sent[2] in 900L..1_000L, "$sent")
     }
 
     @Test fun nonPositiveLimitIsRejected() { assertFailsWith<IllegalArgumentException> { GuardedHttpExecutor(Recorder(), maxTimeoutMillis = 0) } }
@@ -95,6 +97,23 @@ class GuardedHttpExecutorTest {
         assertEquals(2, r.sent.size)
         // the follower hands each hop what is left of the chain's deadline, so a little under the limit
         r.sent.forEach { assertTrue(it.options.timeoutMillis!! in 4_000L..5_000L, "${it.options.timeoutMillis}") }
+    }
+
+    @Test fun aDirectCallWithRedirectsOnChecksEveryHop() {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        var target = ""
+        server.createContext("/start") { ex -> ex.responseHeaders.add("Location", target); ex.sendResponseHeaders(302, -1); ex.close() }
+        server.createContext("/end") { ex -> ex.sendResponseHeaders(200, 2); ex.responseBody.use { it.write("ok".toByteArray()) } }
+        server.start()
+        try {
+            val port = server.address.port
+            val guarded = GuardedHttpExecutor(JdkHttpExecutor(), HostAllowList(listOf("127.0.0.1")))
+            target = "http://127.0.0.2:$port/end"
+            val e = assertFailsWith<RequestRefusedException> { guarded.execute(get("http://127.0.0.1:$port/start")) }
+            assertTrue("127.0.0.2" in e.message!!)
+            target = "http://127.0.0.1:$port/end"
+            assertEquals("ok", guarded.execute(get("http://127.0.0.1:$port/start")).bodyAsString())
+        } finally { server.stop(0) }
     }
 
     @Test fun withoutPersistenceSavingAndLinksFail() {
