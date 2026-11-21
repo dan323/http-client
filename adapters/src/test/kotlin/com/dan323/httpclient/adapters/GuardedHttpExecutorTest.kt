@@ -85,17 +85,33 @@ class GuardedHttpExecutorTest {
         } finally { allowed.stop(0) }
     }
 
+    @Test fun theSessionLimitBoundsTheTimeoutBeforeRedirectsAreFollowed() {
+        val r = Recorder()
+        val dir = Files.createTempDirectory("clamp")
+        val file = dir.resolve("a.http").also { Files.writeString(it, "# @timeout 60m\nGET http://127.0.0.1/a\n\n###\nGET http://127.0.0.1/b\n") }
+        SessionFactory(r).use { f ->
+            f.create(file, FileAccessPolicy(), maxTimeoutMillis = 5_000).runAll(HttpFileParser().parse(Files.readString(file)).requests, emptyMap())
+        }
+        assertEquals(2, r.sent.size)
+        // the follower hands each hop what is left of the chain's deadline, so a little under the limit
+        r.sent.forEach { assertTrue(it.options.timeoutMillis!! in 4_000L..5_000L, "${it.options.timeoutMillis}") }
+    }
+
     @Test fun withoutPersistenceSavingAndLinksFail() {
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/") { ex -> ex.sendResponseHeaders(200, 2); ex.responseBody.use { it.write("ok".toByteArray()) } }
         server.start()
         try {
             val dir = Files.createTempDirectory("nopersist")
-            val file = dir.resolve("a.http").also { Files.writeString(it, "GET http://127.0.0.1:${server.address.port}/\n>> out.txt\n") }
+            val file = dir.resolve("a.http").also { Files.writeString(it, "GET http://127.0.0.1:${server.address.port}/\n>>! out.txt\n<> link.json\n") }
             val requests = HttpFileParser().parse(Files.readString(file)).requests
-            SessionFactory().use { f ->
+            val history = Files.createTempDirectory("history")
+            SessionFactory(history = FileHistoryStore(historyDirFor = { history })).use { f ->
                 val out = assertIs<RunOutcome.Success>(f.create(file, FileAccessPolicy(), persistence = false).runAll(requests, emptyMap()).single())
                 assertTrue(out.saveError!!.contains("not available"), out.saveError)
+                assertTrue(out.linkError!!.contains("not available"), out.linkError)
+                assertTrue(Files.notExists(dir.resolve("link.json")))
+                Files.list(history).use { assertEquals(0, it.count()) }
                 assertTrue(Files.notExists(dir.resolve("out.txt")))
             }
             SessionFactory().use { f ->

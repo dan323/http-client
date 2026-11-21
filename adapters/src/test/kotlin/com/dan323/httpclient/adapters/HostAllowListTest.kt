@@ -62,6 +62,21 @@ class HostAllowListTest {
         l.refuses("http://mixed.nip.test/", "192.168.1.1")
     }
 
+    @Test fun reservedAndEmbeddedAddressesAreRestricted() {
+        val names = mapOf(
+            "a" to "192.0.0.192", "b" to "198.18.0.1", "c" to "198.19.255.255", "d" to "192.0.2.1", "e" to "198.51.100.7", "f" to "203.0.113.9",
+            "g" to "240.0.0.1", "h" to "::127.0.0.1", "i" to "::a9fe:a9fe", "j" to "2002:a9fe:a9fe::1", "k" to "2002:7f00:1::1",
+            "l" to "64:ff9b::a9fe:a9fe", "m" to "64:ff9b::7f00:1", "n" to "2001:db8::1", "o" to "0.1.2.3",
+        )
+        val l = list("*.r.test", dns = names.mapKeys { "${it.key}.r.test" }.mapValues { listOf(it.value) })
+        names.keys.forEach { l.refuses("http://$it.r.test/") }
+    }
+
+    @Test fun embeddedPublicIpv4StaysReachable() {
+        val l = list("*.r.test", dns = mapOf("a.r.test" to listOf("2002:5db8:d822::1"), "b.r.test" to listOf("64:ff9b::5db8:d822"), "c.r.test" to listOf("2606:4700::1111")))
+        listOf("a", "b", "c").forEach { l.check("http://$it.r.test/") }
+    }
+
     @Test fun listedAddressesAndRangesOpenRestrictedOnes() {
         val l = list("*.nip.test", "10.0.0.0/8", "169.254.169.254", dns = mapOf("lan.nip.test" to listOf("10.1.2.3"), "other.nip.test" to listOf("192.168.1.1")))
         l.check("http://lan.nip.test/")

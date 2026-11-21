@@ -6,8 +6,9 @@ import com.dan323.httpclient.core.port.out.HttpExecutor
 
 /**
  * Sends only what the start flags of an untrusted caller allow (docs/mcp-safety-model.md): hosts in [hosts], methods that
- * do not change data unless [allowWrite], no `# @proxy`, and a total timeout of at most [maxTimeoutMillis] (a request
- * without `# @timeout` gets it too). A refused request throws [RequestRefusedException] and nothing is sent.
+ * do not change data unless [allowWrite], no `# @proxy`, and a total timeout of at most [maxTimeoutMillis] for each hop (a request
+ * without `# @timeout` gets it too). It is a backstop: to bound a whole redirect chain, also pass the limit to
+ * `SessionFactory.create(maxTimeoutMillis = ...)`, because the redirect follower builds its deadline before this guard runs. A refused request throws [RequestRefusedException] and nothing is sent.
  *
  * Wrap the executor that the redirect follower of the session sends each hop through, so every hop is checked.
  */

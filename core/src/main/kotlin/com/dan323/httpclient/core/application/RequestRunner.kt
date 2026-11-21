@@ -17,6 +17,8 @@ class RequestRunner(
     private val dynamic: DynamicVariables,
     /** Total timeout for a request without `# @timeout`; null means none (the front ends pass [RequestTimeouts.DEFAULT_MILLIS]). */
     private val defaultTimeoutMillis: Long? = null,
+    /** Upper limit for any request's total timeout, `# @timeout` included (set before redirects are followed, so it bounds the whole chain); null means no limit. */
+    private val maxTimeoutMillis: Long? = null,
 ) : RunRequest {
     constructor(executor: HttpExecutor, files: FileReader) : this(executor, files, DynamicVariables())
 
@@ -69,5 +71,8 @@ class RequestRunner(
     )
 
     private fun options(t: RequestTemplate, text: (String) -> String): RequestOptions =
-        RequestOptionsParser.parse(t.settings, defaultTimeoutMillis, text)
+        RequestOptionsParser.parse(t.settings, defaultTimeoutMillis, text).let { o ->
+            val max = maxTimeoutMillis
+            if (max == null) o else o.copy(timeoutMillis = o.timeoutMillis?.coerceAtMost(max) ?: max)
+        }
 }

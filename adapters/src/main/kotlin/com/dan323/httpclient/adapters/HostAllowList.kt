@@ -101,11 +101,30 @@ class HostAllowList(entries: Collection<String> = DEFAULT, private val resolve: 
         private fun restricted(a: InetAddress): Boolean {
             if (a.isAnyLocalAddress || a.isLoopbackAddress || a.isLinkLocalAddress || a.isSiteLocalAddress || a.isMulticastAddress) return true
             val b = a.address
+            fun u(i: Int) = b[i].toInt() and 0xff
             return when (a) {
-                is Inet4Address -> (b[0].toInt() and 0xff).let { it == 0 || it == 100 && (b[1].toInt() and 0xc0) == 0x40 || it >= 240 }
-                is Inet6Address -> (b[0].toInt() and 0xfe) == 0xfc
+                is Inet4Address -> v4Restricted(u(0), u(1), u(2))
+                is Inet6Address -> when {
+                    (u(0) and 0xfe) == 0xfc -> true // fc00::/7 unique local
+                    (0 until 10).all { u(it) == 0 } && u(10) == 0 && u(11) == 0 -> true // ::/96 IPv4-compatible
+                    u(0) == 0x20 && u(1) == 0x02 -> v4Restricted(u(2), u(3), u(4)) // 2002::/16 6to4 carries an IPv4 address
+                    u(0) == 0x00 && u(1) == 0x64 && u(2) == 0xff && u(3) == 0x9b && (4 until 12).all { u(it) == 0 } -> v4Restricted(u(12), u(13), u(14)) // 64:ff9b::/96 NAT64
+                    u(0) == 0x20 && u(1) == 0x01 && u(2) == 0x0d && u(3) == 0xb8 -> true // 2001:db8::/32 documentation
+                    else -> false
+                }
                 else -> true
             }
+        }
+
+        /** Reserved or non-public IPv4 space beyond what the JDK's own checks know: 0/8, 100.64/10, 192.0.0/24, 192.0.2/24, 198.18/15, 198.51.100/24, 203.0.113/24, 240/4. */
+        private fun v4Restricted(o1: Int, o2: Int, o3: Int): Boolean = when {
+            o1 == 0 || o1 >= 240 || o1 == 10 || o1 == 127 -> true
+            o1 == 100 && (o2 and 0xc0) == 0x40 -> true
+            o1 == 169 && o2 == 254 || o1 == 172 && (o2 and 0xf0) == 0x10 || o1 == 192 && o2 == 168 -> true
+            o1 == 192 && o2 == 0 && (o3 == 0 || o3 == 2) -> true
+            o1 == 198 && (o2 == 18 || o2 == 19) -> true
+            o1 == 198 && o2 == 51 && o3 == 100 || o1 == 203 && o2 == 0 && o3 == 113 -> true
+            else -> false
         }
     }
 }
