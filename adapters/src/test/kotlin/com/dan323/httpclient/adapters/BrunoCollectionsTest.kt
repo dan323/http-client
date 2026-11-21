@@ -68,7 +68,7 @@ class BrunoCollectionsTest {
         file("bruno.json", "{}")
         file("a.bru", request("Same", 1, "http://h/a") + "\nscript:pre-request {\n  x();\n}\n")
         file("b.bru", request("Same", 2, "http://h/b"))
-        file("collection.bru", "headers {\n  X: 1\n}\n")
+        file("collection.bru", "script:pre-request {\n  x();\n}\n")
 
         val result = BrunoCollections.convert(source, target)
 
@@ -132,5 +132,65 @@ class BrunoCollectionsTest {
         file("a/b/up.bru", "post {\n  url: http://h\n  body: multipartForm\n}\n\nbody:multipart-form {\n  f: @file(data.json)\n}\n")
         BrunoCollections.convert(source, target)
         assertTrue("< ../../data.json" in Files.readString(target.resolve("a/b/b.http")))
+    }
+
+    @Test fun requestsInheritCollectionAndFolderSettings() {
+        file("bruno.json", "{}")
+        file("collection.bru", "headers {\n  X-All: 1\n}\n\nvars:pre-request {\n  region: eu\n}\n")
+        file("api/folder.bru", "headers {\n  X-Api: 2\n}\n\nauth {\n  mode: bearer\n}\n\nauth:bearer {\n  token: {{t}}\n}\n")
+        file("api/a.bru", "get {\n  url: http://h/a\n  auth: inherit\n}\n")
+        file("api/deep/b.bru", "get {\n  url: http://h/b\n  auth: inherit\n}\n")
+        file("root.bru", "get {\n  url: http://h/r\n}\n")
+
+        val result = BrunoCollections.convert(source, target)
+
+        val api = Files.readString(target.resolve("api/api.http"))
+        assertTrue("X-All: 1" in api && "X-Api: 2" in api && "Authorization: Bearer {{t}}" in api && "@region = eu" in api, api)
+        assertTrue("Authorization: Bearer {{t}}" in Files.readString(target.resolve("api/deep/deep.http")))
+        val root = Files.readString(target.resolve("requests.http"))
+        assertTrue("X-All: 1" in root && "X-Api" !in root && "Authorization" !in root, root)
+        assertTrue(result.warnings.isEmpty(), result.warnings.toString())
+    }
+
+    @Test fun misplacedSettingsFilesAreReported() {
+        file("bruno.json", "{}")
+        file("folder.bru", "headers {\n  A: 1\n}\n")
+        file("sub/collection.bru", "headers {\n  A: 1\n}\n")
+        file("sub/r.bru", request("R", 1, "http://h"))
+        val w = BrunoCollections.convert(source, target).warnings.joinToString("\n")
+        assertTrue("folder.bru: ignored here" in w && "sub/collection.bru: ignored here" in w, w)
+    }
+
+    @Test fun collectionVariablesRankBelowTheEnvironment() {
+        file("bruno.json", "{}")
+        file("collection.bru", "vars:pre-request {\n  host: http://default\n  only: c\n}\n")
+        file("environments/dev.bru", "vars {\n  host: http://dev\n}\n")
+        file("a.bru", request("A", 1, "{{host}}/a"))
+        file("api/folder.bru", "vars:pre-request {\n  host: http://folder\n}\n")
+        file("api/b.bru", request("B", 1, "{{host}}/b"))
+
+        val result = BrunoCollections.convert(source, target)
+
+        val env = Files.readString(target.resolve("http-client.env.json"))
+        assertTrue("\"host\": \"http://dev\"" in env && "\"only\": \"c\"" in env && "http://default" !in env, env)
+        assertFalse("@host" in Files.readString(target.resolve("requests.http")))
+        assertTrue("@host = http://folder" in Files.readString(target.resolve("api/api.http")))
+        assertTrue(result.warnings.any { "copied into each environment" in it && "only" in it })
+    }
+
+    @Test fun collectionVariablesThatReferToOthersStayExpandable() {
+        file("bruno.json", "{}")
+        file("collection.bru", "vars:pre-request {\n  base: {{host}}/api\n  clash: {{host}}/c\n  token: {{fallback}}\n  plain: p\n}\n")
+        file("environments/dev.bru", "vars {\n  host: http://dev\n  clash: own\n}\n\nvars:secret [\n  token\n]\n")
+        file("a.bru", request("A", 1, "{{base}}/a"))
+
+        val result = BrunoCollections.convert(source, target)
+
+        val requests = Files.readString(target.resolve("requests.http"))
+        assertTrue("@base = {{host}}/api" in requests, requests)
+        assertFalse("@clash" in requests || "@plain" in requests || "@token" in requests, requests)
+        val env = Files.readString(target.resolve("http-client.env.json"))
+        assertTrue("\"plain\": \"p\"" in env && "\"clash\": \"own\"" in env && "{{host}}/api" !in env, env)
+        assertTrue(result.warnings.any { "clash" in it && "token" in it && "not converted" in it }, result.warnings.toString())
     }
 }

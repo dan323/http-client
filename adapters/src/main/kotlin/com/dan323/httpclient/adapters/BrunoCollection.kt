@@ -3,7 +3,9 @@ package com.dan323.httpclient.adapters
 import com.dan323.httpclient.core.application.BrunoConverter
 import com.dan323.httpclient.core.application.BrunoEnvironment
 import com.dan323.httpclient.core.application.BrunoRequest
+import com.dan323.httpclient.core.application.BrunoSettings
 import com.dan323.httpclient.core.application.HttpFileWriter
+import com.dan323.httpclient.core.domain.Environment
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -35,39 +37,6 @@ object BrunoCollections {
         if (!isCollection(dir)) throw IOException("$dir is not a Bruno collection (no bruno.json)")
         val warnings = mutableListOf<String>()
         val folders = mutableListOf<BrunoFolder>()
-        fun walk(folder: Path, relative: String) {
-            val entries = Files.list(folder).use { it.toList() }.sortedBy { it.fileName.toString() }
-            val requests = mutableListOf<BrunoRequest>()
-            for (entry in entries) {
-                val name = entry.fileName.toString()
-                val shown = if (relative.isEmpty()) name else "$relative/$name"
-                if (Files.isSymbolicLink(entry)) { warnings += "$shown: symbolic link skipped"; continue }
-                if (Files.isDirectory(entry)) {
-                    if (name.startsWith(".") || name == "node_modules" || (relative.isEmpty() && name == "environments")) {
-                        if (relative.isNotEmpty() || name != "environments") warnings += "$shown: folder skipped"
-                    } else walk(entry, shown)
-                } else if (name.endsWith(".bru")) {
-                    if (name == "folder.bru" || name == "collection.bru") {
-                        warnings += "$shown: folder and collection settings (headers, auth, scripts, variables) are not converted"
-                    } else if (Files.size(entry) > MAX_FILE_BYTES) {
-                        warnings += "$shown: larger than $MAX_FILE_BYTES bytes, skipped"
-                    } else {
-                        val text = readText(entry)
-                        if (text == null) {
-                            warnings += "$shown: not readable as UTF-8 text, skipped"
-                        } else {
-                            val depth = if (relative.isEmpty()) 0 else relative.count { it == '/' } + 1
-                            val converted = BrunoConverter.request(text, name.removeSuffix(".bru"), "../".repeat(depth))
-                            warnings += converted.warnings.map { "$shown: $it" }
-                            requests += converted
-                        }
-                    }
-                }
-            }
-            // stable order: Bruno's own sequence, then file name (the listing is already sorted by name)
-            if (requests.isNotEmpty()) folders += BrunoFolder(relative, requests.sortedBy { it.sequence })
-        }
-        walk(dir, "")
         val environments = mutableListOf<BrunoEnvironment>()
         val envDir = dir.resolve("environments")
         if (Files.isDirectory(envDir, LinkOption.NOFOLLOW_LINKS)) {
@@ -82,10 +51,74 @@ object BrunoCollections {
                     if (env.secrets.isNotEmpty()) {
                         warnings += "environments/${it.fileName}: secret values are not in the file; put ${env.secrets.joinToString(", ")} in http-client.private.env.json"
                     }
+                    warnings += env.warnings.map { w -> "environments/${it.fileName}: $w" }
                     environments += env
                 }
         }
-        return BrunoCollection(folders, environments, warnings)
+        // collection.bru (root) and folder.bru (each folder) are read first: requests inherit them
+        fun settingsOf(file: Path, shown: String, inherited: BrunoSettings): BrunoSettings {
+            if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return inherited
+            val text = if (Files.size(file) > MAX_FILE_BYTES) null else readText(file)
+            if (text == null) { warnings += "$shown: larger than $MAX_FILE_BYTES bytes or not readable as UTF-8 text, skipped"; return inherited }
+            val own = BrunoConverter.settings(text)
+            warnings += own.warnings.map { "$shown: $it" }
+            return inherited.then(own)
+        }
+        // collection variables rank below the selected environment in Bruno, but a file variable would override it:
+        // with environments they are copied into each one as defaults, without any they stay file variables
+        val collectionVariables = LinkedHashMap<String, String>()
+        fun walk(folder: Path, relative: String, outer: BrunoSettings) {
+            val inherited = if (relative.isEmpty()) {
+                val root = settingsOf(folder.resolve("collection.bru"), "collection.bru", outer)
+                if (environments.isEmpty()) root else {
+                    // environment values are not expanded, so a collection variable that refers to other variables
+                    // cannot be copied into one: it stays a file variable unless an environment defines the same name
+                    val (refs, plain) = root.variables.entries.partition { "{{" in it.value }
+                    collectionVariables += plain.associate { it.key to it.value }
+                    val clash = refs.map { it.key }.filter { k -> environments.any { k in it.environment.variables || k in it.secrets } }
+                    if (clash.isNotEmpty()) warnings += "collection.bru: variables ${clash.joinToString(", ")} refer to other variables and an environment defines them too (a secret counts); not converted (environment values are not expanded in a .http file)"
+                    root.copy(variables = refs.filter { it.key !in clash }.associate { it.key to it.value })
+                }
+            } else settingsOf(folder.resolve("folder.bru"), "$relative/folder.bru", outer)
+            val entries = Files.list(folder).use { it.toList() }.sortedBy { it.fileName.toString() }
+            val requests = mutableListOf<BrunoRequest>()
+            for (entry in entries) {
+                val name = entry.fileName.toString()
+                val shown = if (relative.isEmpty()) name else "$relative/$name"
+                if (Files.isSymbolicLink(entry)) { warnings += "$shown: symbolic link skipped"; continue }
+                if (Files.isDirectory(entry)) {
+                    if (name.startsWith(".") || name == "node_modules" || (relative.isEmpty() && name == "environments")) {
+                        if (relative.isNotEmpty() || name != "environments") warnings += "$shown: folder skipped"
+                    } else walk(entry, shown, inherited)
+                } else if (name.endsWith(".bru")) {
+                    if ((name == "collection.bru" && relative.isEmpty()) || (name == "folder.bru" && relative.isNotEmpty())) {
+                        // read above
+                    } else if (name == "folder.bru" || name == "collection.bru") {
+                        warnings += "$shown: ignored here (collection.bru belongs at the collection root, folder.bru in a folder)"
+                    } else if (Files.size(entry) > MAX_FILE_BYTES) {
+                        warnings += "$shown: larger than $MAX_FILE_BYTES bytes, skipped"
+                    } else {
+                        val text = readText(entry)
+                        if (text == null) {
+                            warnings += "$shown: not readable as UTF-8 text, skipped"
+                        } else {
+                            val depth = if (relative.isEmpty()) 0 else relative.count { it == '/' } + 1
+                            val converted = BrunoConverter.request(text, name.removeSuffix(".bru"), "../".repeat(depth), inherited)
+                            warnings += converted.warnings.map { "$shown: $it" }
+                            requests += converted
+                        }
+                    }
+                }
+            }
+            // stable order: Bruno's own sequence, then file name (the listing is already sorted by name)
+            if (requests.isNotEmpty()) folders += BrunoFolder(relative, requests.sortedBy { it.sequence })
+        }
+        walk(dir, "", BrunoSettings())
+        if (collectionVariables.isNotEmpty()) {
+            warnings += "collection.bru: variables ${collectionVariables.keys.joinToString(", ")} were copied into each environment as defaults (an environment's own value wins, as in Bruno); without --env they are undefined"
+        }
+        val merged = environments.map { it.copy(environment = Environment(it.environment.name, collectionVariables + it.environment.variables)) }
+        return BrunoCollection(folders, merged, warnings)
     }
 
     /**
