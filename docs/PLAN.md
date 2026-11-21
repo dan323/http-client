@@ -55,7 +55,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 | T29 | **Guide screenshots:** desktop images generated headless from the real composables, CLI transcripts from real runs, plugin images by checklist | F21 | M | – |
 | T30 | **`user-guide` build module:** Gradle tasks that generate the assets and assemble the site for the PR check and the deploy | F21 | M | T29 |
 | T31 | **Links to the guide from the interfaces:** desktop Help, plugin Help link, one line in `httpc --help` | F21 | S | T29 (guide stable) |
-| T34 | **MCP server** (`mcp-server` module over `SessionFactory`/`RunController`): `list_requests`, `run`, `run_all`, `list_environments`, `analyze`. Needs its safety model first: file roots and host allow-list, private environment values never returned, a way to confirm requests that change data. Plan the model before coding | F22 | M | – |
+| T34 | **MCP server** (`mcp-server` module over `SessionFactory`/`RunController`): `list_requests`, `run`, `run_all`, `list_environments`, `analyze`. The safety model is written ([mcp-safety-model.md](mcp-safety-model.md): file roots, host allow-list, read-only by default, private values never returned); the module is open | F22 | M | – |
 | T35 | **Bruno import, rest:** `httpc convert-bruno` (with folder and collection settings) is done; still open: run a collection directly (`httpc run collection/`: a design for multi-file runs, reports and history first) and `.bru` files in the newer OpenCollection YAML format | F23 | S | – |
 | T36 | **Language server:** `.http` diagnostics, completion and go to declaration over LSP in a new module, reusing `VariableAnalysis`, `HttpLineLexer` and the `view-model` helpers of T22 | F24 | L | T22 |
 | T37 | **VS Code extension:** a thin client of T36 (TextMate grammar or LSP semantic tokens, run through `httpc`, environment picker); needs a Java runtime or a bundled one | F24 | L | T36 |
@@ -69,7 +69,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 | F20 | T25 (T21, T24 done) |
 | F21 | T29, T30, T31 (T28 done) |
 | F22 | T34 (T32, T33 done) |
-| F23 | T35 | **Bruno import, rest:** `httpc convert-bruno` (with folder and collection settings) is done; still open: run a collection directly (`httpc run collection/`: a design for multi-file runs, reports and history first) and `.bru` files in the newer OpenCollection YAML format | F23 | S | – |
+| F23 | T35 |
 | F24 | T36, T37 |
 
 Shared work, written once: T21 (F18, F19, F20). (T13 and T14 were shared as well and are done.)
