@@ -310,6 +310,16 @@ class McpServerTest {
         assertFalse(error, text); assertFalse("TOP" in text, text)
     }
 
+    @Test fun aBodyMadeOfNothingButASubstitutedValueIsBoundedByTheOutputLimit() {
+        http.createContext("/dense") { ex -> val b = "a".repeat(3_000_000).toByteArray(); ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) } }
+        write("http-client.env.json", """{"dev":{"base":"$base","key":"a"}}""")
+        write("a.http", "GET {{base}}/dense?k={{key}}\n")
+        val (text, error) = call(server("--max-body-bytes", "1000"), "run", "file" to "a.http", "request" to "1", "environment" to "dev")
+        assertFalse(error, text)
+        assertTrue(text.length < 20_000, "bounded output: ${text.length}")
+        assertTrue("bodyTruncated" in text); assertTrue("{{key}}" in text); assertFalse("aaa" in text.replace("\"status\"", ""), text.take(300))
+    }
+
     @Test fun aValueThatStartsBeforeTheKeptEdgeIsHiddenWholeAndNothingAfterItIsShown() {
         // the longest substituted value is the base URL; the kept part is the limit minus 12 times its length
         val keep = 400 - 12 * base.length

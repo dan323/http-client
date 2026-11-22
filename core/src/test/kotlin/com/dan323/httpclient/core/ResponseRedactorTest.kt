@@ -130,4 +130,24 @@ class ResponseRedactorTest {
         assertEquals("", r.redactPrefix("xTOPSECRET", 0))
         assertEquals("ab{{short}}{{key}}", r.redactPrefix("abxTOPSECRETcd", 4))
     }
+
+    @Test fun aHugeTextFullOfMatchesIsProcessedOnlyUpToTheOutputLimit() {
+        // one million matches would be a million groups and a five-million-character result; with a limit the work stops early
+        val text = "a".repeat(8 * 1024 * 1024)
+        val shown = ResponseRedactor(mapOf("a" to "v")).redactPrefix(text, text.length, limit = 1000)
+        assertTrue(shown.length in 1000..1010, "stops soon after the limit: ${shown.length}")
+        assertTrue(shown.startsWith("{{v}}{{v}}"))
+    }
+
+    @Test fun aLongStretchOfPlainTextIsNotCopiedBeyondTheLimit() {
+        val text = "b".repeat(5_000_000) + "TOPSECRET"
+        val shown = ResponseRedactor(mapOf("TOPSECRET" to "k")).redactPrefix(text, text.length, limit = 100)
+        assertEquals("b".repeat(100), shown)
+    }
+
+    @Test fun theLimitDoesNotChangeWhatIsShownWhenTheOutputIsShorterThanIt() {
+        val r = ResponseRedactor(mapOf("xT" to "short", "TOPSECRET" to "key"))
+        assertEquals(r.redactPrefix("ab xTOPSECRET cd", 16), r.redactPrefix("ab xTOPSECRET cd", 16, limit = 1000))
+        assertEquals("ab {{short}}{{key}} c", r.redactPrefix("ab xTOPSECRET cd", 16, limit = 21))
+    }
 }

@@ -29,17 +29,21 @@ internal object FailureScrubber {
      * holds a piece of a value cut by the edge, and, unlike scrubbing and then cutting, does not depend on how long the
      * placeholders are.
      */
-    fun scrubPrefix(text: String, substituted: Map<String, String>, keep: Int, minLength: Int = MIN_LENGTH): String {
+    fun scrubPrefix(text: String, substituted: Map<String, String>, keep: Int, minLength: Int = MIN_LENGTH, limit: Int = Int.MAX_VALUE): String {
         val end = keep.coerceIn(0, text.length)
-        val c = compile(substituted, minLength) ?: return text.substring(0, end)
+        val c = compile(substituted, minLength) ?: return text.substring(0, if (end <= limit) end else limit)
         val out = StringBuilder()
         var at = 0
         for (g in groups(text, c)) {
             if (g.start >= end) break
+            // enough output for the caller (who cuts it anyway): stop before the rest of a large text is scanned
+            val room = limit - out.length
+            if (g.start - at >= room) return out.append(text, at, at + room).toString()
             out.append(text, at, g.start).append(g.placeholder())
             at = g.end
+            if (out.length >= limit) return out.toString()
         }
-        if (at < end) out.append(text, at, end)
+        if (at < end) out.append(text, at, if (end - at <= limit - out.length) end else at + (limit - out.length))
         return out.toString()
     }
 
@@ -55,20 +59,22 @@ internal object FailureScrubber {
      * consumes text that another occurrence needs), merged into groups. An occurrence inside the stretch already hidden adds
      * no name, so a value found inside a longer one is reported as the longer one, as before.
      */
-    private fun groups(text: String, c: Compiled): List<Group> {
-        val groups = ArrayList<Group>()
+    private fun groups(text: String, c: Compiled): Sequence<Group> = sequence {
+        // one group at a time: a long text full of matches is never held in memory as a list of them
+        var current: Group? = null
         for (m in c.regex.findAll(text)) {
             val start = m.range.first
             val form = m.groupValues[1]
             val end = start + form.length
-            val last = groups.lastOrNull()
-            if (last != null && start < last.end) {
-                if (end > last.end) { last.end = end; last.names += c.names.getValue(form).trim() }
+            val open = current
+            if (open != null && start < open.end) {
+                if (end > open.end) { open.end = end; open.names += c.names.getValue(form).trim() }
             } else {
-                groups += Group(start, end, mutableListOf(c.names.getValue(form).trim()))
+                if (open != null) yield(open)
+                current = Group(start, end, mutableListOf(c.names.getValue(form).trim()))
             }
         }
-        return groups
+        current?.let { yield(it) }
     }
 
     private fun compile(substituted: Map<String, String>, minLength: Int): Compiled? {

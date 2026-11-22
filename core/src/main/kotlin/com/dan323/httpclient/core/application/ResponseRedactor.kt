@@ -21,9 +21,11 @@ class ResponseRedactor(values: Map<String, String>) {
     /**
      * For a text that was cut at its end, so that its last characters may be the start of a value this cannot recognise:
      * the first [keep] characters, redacted, and nothing more (see [FailureScrubber.scrubPrefix]). Choose [keep] so that the
-     * dropped end is longer than any piece of a value, for example `text.length - 12 * longestValue`.
+     * dropped end is longer than any piece of a value, for example `text.length - 12 * longestValue`. With a [limit] the
+     * work stops once that many characters of output exist (the result may be a little longer): for a caller that cuts the
+     * output anyway, so a huge text full of matches costs memory and time only up to the limit.
      */
-    fun redactPrefix(text: String, keep: Int): String = FailureScrubber.scrubPrefix(text, values, keep, minLength = 1)
+    fun redactPrefix(text: String, keep: Int, limit: Int = Int.MAX_VALUE): String = FailureScrubber.scrubPrefix(text, values, keep, minLength = 1, limit = limit)
 
     fun redact(text: String): String = FailureScrubber.scrub(text, values, minLength = 1)
 

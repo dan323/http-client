@@ -292,7 +292,9 @@ class Tools(
                                     // depend on how long the placeholders are, as measuring the tail on the redacted text would.
                                     val executorCut = r.body.size >= options.maxResponseBytes
                                     val raw = r.bodyAsString()
-                                    val hidden = if (executorCut) redactor.redactPrefix(raw, raw.length - redactor.longestValue * 12) else redactor.redact(raw)
+                                    val keep = if (executorCut) raw.length - redactor.longestValue * 12 else raw.length
+                                    // output is cut at maxBodyBytes anyway: do not build more than that (a body of one repeated value would give millions of placeholders)
+                                    val hidden = redactor.redactPrefix(raw, keep, limit = options.maxBodyBytes + 1)
                                     val (body, cut) = limited(hidden, executorCut)
                                     put("body", body)
                                     if (cut) put("bodyTruncated", "cut at ${options.maxBodyBytes} bytes (--max-body-bytes)")
