@@ -55,7 +55,7 @@ Each remaining task is listed once even when it serves several features. Size: S
 | T29 | **Guide screenshots:** desktop images generated headless from the real composables, CLI transcripts from real runs, plugin images by checklist | F21 | M | – |
 | T30 | **`user-guide` build module:** Gradle tasks that generate the assets and assemble the site for the PR check and the deploy | F21 | M | T29 |
 | T31 | **Links to the guide from the interfaces:** desktop Help, plugin Help link, one line in `httpc --help` | F21 | S | T29 (guide stable) |
-| T34 | **MCP server** (`mcp-server` module over `SessionFactory`/`RunController`): `list_requests`, `run`, `run_all`, `list_environments`, `analyze`. The safety model is written ([mcp-safety-model.md](mcp-safety-model.md): file roots, host allow-list, read-only by default, private values never returned); the guards (host allow-list, guarded executor, no-persistence option) are done; response redaction (`ResponseRedactor`, `RequestSession.substitutedValues()`) is done; the `mcp-server` module is done (stdio, the five tools; no elicitation: see the safety model); the user-guide page ([agents.md](guide/agents.md)) and the agent skill know the tools; `release.yml` attaches the `httpc-mcp` zip and tar (first release that has them follows 0.5.0) | F22 | M | – |
+| T34 | **MCP server** (`mcp-server` module over `SessionFactory`/`RunController`): `list_requests`, `run`, `run_all`, `list_environments`, `analyze`. The safety model is written ([mcp-safety-model.md](mcp-safety-model.md): file roots, host allow-list, read-only by default, private values never returned); the guards (host allow-list, guarded executor, no-persistence option) are done; response redaction (`ResponseRedactor`, `RequestSession.substitutedValues()`) is done; the `mcp-server` module is done (stdio, the five tools; no elicitation: see the safety model); the user-guide page ([agents.md](guide/agents.md)) and the agent skill know the tools; `release.yml` attaches the `httpc-mcp` zip and tar (from 0.6.0) | F22 | M | – |
 | T35 | **Bruno import, rest:** `httpc convert-bruno` (with folder and collection settings) is done; still open: run a collection directly (`httpc run collection/`: a design for multi-file runs, reports and history first) and `.bru` files in the newer OpenCollection YAML format | F23 | S | – |
 | T36 | **Language server:** `.http` diagnostics, completion and go to declaration over LSP in a new module, reusing `VariableAnalysis`, `HttpLineLexer` and the `view-model` helpers of T22 | F24 | L | T22 |
 | T37 | **VS Code extension:** a thin client of T36 (TextMate grammar or LSP semantic tokens, run through `httpc`, environment picker); needs a Java runtime or a bundled one | F24 | L | T36 |
@@ -103,3 +103,13 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 - **T21 first on purpose:** the plugin was first used in a real IDE (Ultimate 2026.3) for 0.5.0-rc1; a Community install and the 2026.1 baseline are still unchecked. The findings may reshape T22/T23.
 - **Windows packaging:** the MSI is built by the release workflow (windows-2022, WiX 3) and was installed and run by hand on 0.5.0-rc1; macOS and Linux installers are untested.
 - **T26 writes files (done):** `>>` is the first feature that writes next to user data, so T26 must confine paths like reads do and never overwrite without `>>!`.
+
+## Before 1.0.0
+
+1.0.0 tells users that the options, file format and output formats stay compatible. Not yet true (decided after 0.6.0):
+
+- [ ] The plugin is verified by hand on a Community install and on the 2026.1 baseline, including the `Ctrl+Alt+R` shortcut, run all and the remembered environment (T21, T23).
+- [ ] The macOS DMG and the Linux DEB are installed and run by hand (T25).
+- [ ] The MCP server has been used with real agents for some weeks; its flags, tool names and result shape are then fixed.
+- [ ] One short page says what is stable: the CLI options and exit codes, the report schemas (JSON, JUnit), the MCP tool arguments and results, and the `.http` dialect.
+- [ ] The gaps in [known-limitations.md](known-limitations.md) that a user can hit are fixed or documented as final (for example the silently dropped headers).

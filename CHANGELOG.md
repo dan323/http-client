@@ -5,11 +5,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
+## [0.6.0] - 2026-11-22
 
-- Redaction (`FailureScrubber`, `ResponseRedactor`) no longer leaves part of a value showing when two substituted values overlap (`xT` and `TOPSECRET` in `xTOPSECRET` left `OPSECRET`): every occurrence is found, overlapping ones are hidden as one stretch. The search is one Aho-Corasick pass (cost grows with the text, not with the number or length of the values), matches are streamed, and `redactPrefix(limit)` stops once enough output exists. `ResponseRedactor.redact(HttpResponse)` is gone (the server redacts text); `redactHeaderName` hides a value in a header name in any case, which the MCP results now use (the JDK client lower-cases names, so a server could name a header after a secret). The pre-check of the MCP server also refuses, before a write, a URL whose authority (host or userinfo) depends on a response.
-- A `<>` link lookup (`HistoryStore.latestLinked`) now throws an `IOException` when the history folder cannot be listed, instead of returning null with only a warning on stderr, so the plugin's **Show Linked HTTP Response** and the desktop **Linked response** report `Could not read the linked response: cannot list ...` and not "Run it first". Other history reads stay lenient. Tested with the production `FileHistoryStore` (POSIX only).
-- The lexer left a gap in `@name = value` lines (the space before `=` belonged to no token), which IntelliJ rejects (`Discontinuous sequence of tokens`) in any `.http` file with a file variable. Found by the first editor-level plugin test; `HttpLineLexerTest` now checks that every character of a line is covered, for sample files too.
+Highlights:
+
+- **For coding agents:** the MCP server `httpc-mcp` (stdio only, read-only by default, with file roots, a host allow-list and redaction of secrets; its zip and tar are attached to the release), the Claude Code skill in `agent-skill/`, and `httpc FILE --check` (look for problems without sending anything).
+- **Desktop app:** tabs that are restored on start, a folder view, response search, image preview, history and compare, editor problems, completion and find and replace, a Cancel button.
+- **IntelliJ plugin:** problems underlined in the editor, completion and go to declaration, **Show Linked HTTP Response**, the environment picker in the editor header, the environment remembered per project, assertion results in the response window.
+- **Language and files:** multipart bodies, the `QUERY` method, `$shared` environment variables, warnings for settings that are ignored, `httpc convert-bruno` for Bruno collections.
+- **Docs:** the user guide is built and its links checked on every pull request that changes it; the README is short and its detail lives in `docs/architecture.md`, `docs/cli-reference.md` and `docs/quality.md`.
+
+Several changes are not covered by tests in a real IDE (the plugin) or an installer (macOS and Linux); `docs/known-limitations.md` lists them. Before 1.0.0, see the checklist in `docs/PLAN.md`.
 
 ### Added
 
@@ -55,10 +61,8 @@ All notable changes to this project are documented here. The format follows
 - Cancel button (T19, F16): the desktop app has **Cancel** next to **Send** and the plugin's "HTTP Response" tool window has a **Cancel** button and a title-bar action, both enabled only while a request runs. Cancelling interrupts the running thread, so the executor cancels the in-flight request; the UI shows `Cancelled` (with how many requests had finished, whose results stay) instead of an error. `RunController` drops the session of a cancelled run, so the cancelled request is never remembered as a reused response (the chain is sent again next time). Shared logic in `view-model`: `RunCancellation` (cancel before or during the send, no leaked interrupt flag on pooled threads), `RunControls` (what is enabled while running, the "Running..." label) and `cancelledLabel`. The plugin part is unverified by hand in an IDE.
 - Assertion results in the desktop response pane and the plugin's "HTTP Response" tool window (T17, T22): a `Assertions: N passed, M failed` summary and a PASS/FAIL line per `# @assert`, and `K assertions not run` for a failed request. The formatting lives in `view-model` (`OutcomeDisplay.Response.assertions` / `assertionSummary`, `OutcomeDisplay.Error.assertionsNotRunLabel`) with unit tests; the desktop pane has a headless UI test. The plugin rendering was not checked by hand in an IDE.
 
-### Fixed
-- IntelliJ plugin run guard: a Cancel that arrives just after a run starts is no longer erased by the run's setup, a start listener that throws no longer leaves the guard set (later runs were refused), run notifications arrive in transition order, and the Cancel button subscribes before reading the run state so it cannot start stale. Covered by `ClientStateTest`; the tool window part is unverified by hand in an IDE.
-
 ### Changed
+
 - Desktop README: the "Not yet implemented" list no longer claims that persisting the window, last file and environment is missing (it has been implemented).
 - IntelliJ plugin: the "HTTP Response" tool window's empty state now says how to run a request (gutter icon, right-click *Run HTTP Request*, and the shortcut as bound in the keymap) instead of only naming `Ctrl+Alt+R`. **Reset chain** and **Cancel** have icons (`AllIcons.Actions.Refresh` and `Suspend`, the latter the same as the title-bar action). Unverified by hand in an IDE. The hint is plain text, not a clickable link.
 - Docs: `docs/features.md` is the user reference again (with a table of contents); implementation and security detail (class names, atomic-write mechanics, residual races, history layout, Public Suffix List update procedure) moved to the new `docs/design-notes.md`, same section names. Docs only; no behaviour change.
@@ -68,6 +72,11 @@ All notable changes to this project are documented here. The format follows
 - SonarCloud: `intellij-plugin/**` is excluded from the coverage requirement (its tests need an IDE and are not in the JaCoCo report); other analysis still covers it.
 
 ### Fixed
+
+- Redaction (`FailureScrubber`, `ResponseRedactor`) no longer leaves part of a value showing when two substituted values overlap (`xT` and `TOPSECRET` in `xTOPSECRET` left `OPSECRET`): every occurrence is found, overlapping ones are hidden as one stretch. The search is one Aho-Corasick pass (cost grows with the text, not with the number or length of the values), matches are streamed, and `redactPrefix(limit)` stops once enough output exists. `ResponseRedactor.redact(HttpResponse)` is gone (the server redacts text); `redactHeaderName` hides a value in a header name in any case, which the MCP results now use (the JDK client lower-cases names, so a server could name a header after a secret). The pre-check of the MCP server also refuses, before a write, a URL whose authority (host or userinfo) depends on a response.
+- A `<>` link lookup (`HistoryStore.latestLinked`) now throws an `IOException` when the history folder cannot be listed, instead of returning null with only a warning on stderr, so the plugin's **Show Linked HTTP Response** and the desktop **Linked response** report `Could not read the linked response: cannot list ...` and not "Run it first". Other history reads stay lenient. Tested with the production `FileHistoryStore` (POSIX only).
+- The lexer left a gap in `@name = value` lines (the space before `=` belonged to no token), which IntelliJ rejects (`Discontinuous sequence of tokens`) in any `.http` file with a file variable. Found by the first editor-level plugin test; `HttpLineLexerTest` now checks that every character of a line is covered, for sample files too.
+- IntelliJ plugin run guard: a Cancel that arrives just after a run starts is no longer erased by the run's setup, a start listener that throws no longer leaves the guard set (later runs were refused), run notifications arrive in transition order, and the Cancel button subscribes before reading the run state so it cannot start stale. Covered by `ClientStateTest`; the tool window part is unverified by hand in an IDE.
 - IntelliJ plugin: the default shortcut of **Run HTTP Request** is now `Ctrl+Alt+R`. `Ctrl+Alt+Enter` never ran the request in the default keymap because the built-in *Insert line above* (and *Quick action popup*) own it. Not yet tried in a running IDE.
 - Desktop: the environment dropdown (and the recent files menu) opens directly under its button instead of far from it.
 
