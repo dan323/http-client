@@ -201,9 +201,10 @@ class McpServerTest {
     }
 
     @Test fun processEnvironmentIsNotReadableByDefault() {
-        write("a.http", "GET BASE/echo?h={{\$env.HOME}}\n")
+        write("a.http", "GET BASE/echo?h={{\$env.PATH}}\n")
         val (text, _) = call(server(), "run", "file" to "a.http", "request" to "1")
-        assertFalse(System.getenv("HOME") in text)
+        assertFalse(System.getenv("PATH") in text)
+        assertEquals(0, hits.get(), "the request must fail before it is sent")
     }
 
     // ---- rule 7: bounds
