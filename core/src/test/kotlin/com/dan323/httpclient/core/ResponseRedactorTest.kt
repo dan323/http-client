@@ -80,4 +80,32 @@ class ResponseRedactorTest {
     @Test fun noValuesChangesNothing() {
         assertEquals("text", ResponseRedactor(emptyMap()).redact("text"))
     }
+
+    @Test fun aPrefixKeepsTheFirstCharactersAndHidesAValueThatStartsInsideThem() {
+        val r = ResponseRedactor(mapOf("TOPSECRET" to "key"))
+        assertEquals("ab{{key}}", r.redactPrefix("abTOPSECRETcd", 4)) // TOPSECRET starts at 2, before the edge: hidden whole, nothing after it
+        assertEquals("abc", r.redactPrefix("abcTOPSECRET", 3)) // starts at the edge: not shown at all
+        assertEquals("abTOP", ResponseRedactor(emptyMap()).redactPrefix("abTOPxx", 5)) // plain text is cut at the edge
+    }
+
+    @Test fun aPrefixEdgeNeverLeavesAPieceOfAValueAndDoesNotDependOnPlaceholderLength() {
+        val longName = "N".repeat(200)
+        val r = ResponseRedactor(mapOf("TOPSECRET" to "key", "E" to longName))
+        // the text ends in the start of a value; the placeholder for "E" would be 204 characters long
+        val text = "x".repeat(95) + "TOPSE"
+        // the caller keeps less than the text minus a margin longer than any piece of a value: the fragment at the end starts at 95
+        for (keep in 0..95) {
+            val shown = r.redactPrefix(text, keep)
+            assertFalse("TOPS" in shown, "keep=$keep: $shown")
+            assertFalse("{{" in shown.drop(keep), "the placeholder of E (204 characters) is not what ends the text: $shown")
+        }
+        assertEquals("x".repeat(95), r.redactPrefix(text, 95))
+    }
+
+    @Test fun aPrefixLongerThanTheTextIsTheWholeTextRedacted() {
+        val r = ResponseRedactor(mapOf("s3cret" to "k"))
+        assertEquals("a {{k}} b", r.redactPrefix("a s3cret b", 1000))
+        assertEquals("", r.redactPrefix("abc", -5))
+        assertEquals("abc", ResponseRedactor(emptyMap()).redactPrefix("abcdef", 3))
+    }
 }

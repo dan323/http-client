@@ -18,6 +18,13 @@ class ResponseRedactor(values: Map<String, String>) {
     /** Length of the longest value to hide, in characters (0 when there are none). */
     val longestValue: Int get() = values.keys.maxOfOrNull { it.length } ?: 0
 
+    /**
+     * For a text that was cut at its end, so that its last characters may be the start of a value this cannot recognise:
+     * the first [keep] characters, redacted, and nothing more (see [FailureScrubber.scrubPrefix]). Choose [keep] so that the
+     * dropped end is longer than any piece of a value, for example `text.length - 12 * longestValue`.
+     */
+    fun redactPrefix(text: String, keep: Int): String = FailureScrubber.scrubPrefix(text, values, keep, minLength = 1)
+
     fun redact(text: String): String = FailureScrubber.scrub(text, values, minLength = 1)
 
     fun redact(response: HttpResponse): HttpResponse {

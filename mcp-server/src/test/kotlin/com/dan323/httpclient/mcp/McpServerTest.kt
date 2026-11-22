@@ -310,6 +310,30 @@ class McpServerTest {
         assertFalse(error, text); assertFalse("TOP" in text, text)
     }
 
+    @Test fun aValueThatStartsBeforeTheKeptEdgeIsHiddenWholeAndNothingAfterItIsShown() {
+        // the longest substituted value is the base URL; the kept part is the limit minus 12 times its length
+        val keep = 400 - 12 * base.length
+        val start = keep - 4 // TOPSECRET starts 4 characters before the edge and runs past it
+        assertTrue(start > 0, "the test needs a limit that leaves something to keep")
+        http.createContext("/edge") { ex -> val b = ("x".repeat(start) + "TOPSECRET" + "y".repeat(400 - start - 9)).toByteArray(); ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) } }
+        write("http-client.env.json", """{"dev":{"base":"$base","key":"TOPSECRET"}}""")
+        write("a.http", "GET {{base}}/edge?k={{key}}\n")
+        val (text, error) = call(server { copy(maxResponseBytes = 400) }, "run", "file" to "a.http", "request" to "1", "environment" to "dev")
+        assertFalse(error, text)
+        val body = Json.parseToJsonElement(text).jsonObject["results"]!!.jsonArray.single().jsonObject["remote"]!!.jsonObject["body"]!!.jsonPrimitive.content
+        assertEquals("x".repeat(start) + "{{key}}", body)
+        assertFalse("TOP" in text, text); assertFalse("yyy" in text, text)
+    }
+
+    @Test fun overlappingValuesWithALongNameDoNotLetAFragmentThroughTheTailGuard() {
+        val longName = "N".repeat(200)
+        http.createContext("/overlap") { ex -> val b = ("x".repeat(95) + "TOPSE").toByteArray(); ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) } }
+        write("http-client.env.json", """{"dev":{"base":"$base","key":"TOPSECRET","$longName":"E"}}""")
+        write("a.http", "GET {{base}}/overlap?k={{key}}&e={{$longName}}\n")
+        val (text, error) = call(server { copy(maxResponseBytes = 100) }, "run", "file" to "a.http", "request" to "1", "environment" to "dev")
+        assertFalse(error, text); assertFalse("TOPS" in text, text)
+    }
+
     @Test fun aUrlEncodedNonAsciiValueCutByTheResponseLimitLeavesNoFragment() {
         val encoded = java.net.URLEncoder.encode("éééé", Charsets.UTF_8) // 24 characters for 4
         http.createContext("/enc") { ex -> val b = ("x".repeat(80) + encoded + "tail").toByteArray(); ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) } }

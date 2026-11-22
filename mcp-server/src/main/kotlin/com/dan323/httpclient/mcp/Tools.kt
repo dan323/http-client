@@ -286,13 +286,14 @@ class Tools(
                                     put("notice", NOTICE)
                                     putJsonArray("headers") { r.headers.forEach { add(JsonPrimitive("${it.name}: ${redactor.redact(it.value)}")) } }
                                     // the text that is emitted is the text that is redacted (the declared charset decides how the bytes read)
-                                    // A body the HTTP client cut can end in the middle of a value, which the redactor cannot match. Redact first (complete
-                                    // values are hidden wherever they are), then drop a tail longer than any partial value could be: a raw value, or its
-                                    // URL-encoded form (up to 12 characters for each character of a 4-byte symbol). Dropping first would cut complete
-                                    // values in two at a new edge.
+                                    // A body the HTTP client cut can end in the middle of a value, which the redactor cannot match. Keep only the part
+                                    // of the raw text before a tail longer than any piece of a value (a raw value, or its URL-encoded form: up to 12
+                                    // characters per character of a 4-byte symbol); a value that starts in the kept part is hidden whole. This does not
+                                    // depend on how long the placeholders are, as measuring the tail on the redacted text would.
                                     val executorCut = r.body.size >= options.maxResponseBytes
-                                    val hidden = redactor.redact(r.bodyAsString())
-                                    val (body, cut) = limited(if (executorCut) hidden.dropLast(redactor.longestValue * 12) else hidden, executorCut)
+                                    val raw = r.bodyAsString()
+                                    val hidden = if (executorCut) redactor.redactPrefix(raw, raw.length - redactor.longestValue * 12) else redactor.redact(raw)
+                                    val (body, cut) = limited(hidden, executorCut)
                                     put("body", body)
                                     if (cut) put("bodyTruncated", "cut at ${options.maxBodyBytes} bytes (--max-body-bytes)")
                                 }
