@@ -4,7 +4,7 @@ This project **implements a practical subset of the JetBrains `.http` format, wi
 It is not a drop-in replacement. This page lists only where we differ; everything else is described in [features.md](features.md).
 Positioning (from [competitive-gaps.md](competitive-gaps.md)): an IDE-native, Git-native client for the `.http` format, with one
 execution engine behind a CLI, a desktop app and an IntelliJ plugin. Features that exist only here (assertions, reports,
-`--fail-on-http-error`, ...) are documented in [features.md](features.md) and the [README](../README.md), not here.
+`--fail-on-http-error`, ...) are documented in [features.md](features.md) and the [command line reference](cli-reference.md), not here.
 
 ## What works the same
 
