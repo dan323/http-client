@@ -202,4 +202,13 @@ class ResponseRedactorTest {
         assertEquals("X-Request-Id", r.redactHeaderName("X-Request-Id")) // untouched, with its case
         assertEquals("X-Whatever", ResponseRedactor(emptyMap()).redactHeaderName("X-Whatever"))
     }
+
+    @Test fun aUrlEncodedHeaderNameIsRedactedInEitherCaseOfItsHexDigits() {
+        val r = ResponseRedactor(mapOf("é" to "key", "a b" to "sp"))
+        assertEquals("{{key}}", r.redactHeaderName("%c3%a9")) // as a lower-casing client returns it
+        assertEquals("{{key}}", r.redactHeaderName("%C3%A9"))
+        assertEquals("x-{{sp}}", r.redactHeaderName("X-A%20B"))
+        assertEquals("x-{{sp}}", r.redactHeaderName("x-a+b"))
+        assertEquals("{{key}}", r.redactHeaderName("é"))
+    }
 }

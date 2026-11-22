@@ -59,15 +59,20 @@ internal object FailureScrubber {
         return out.toString()
     }
 
-    /** The automaton for [substituted] (every value, its URL-encoded forms), or null when there is nothing to hide. */
-    fun automaton(substituted: Map<String, String>, minLength: Int = MIN_LENGTH): Automaton? {
+    /**
+     * The automaton for [substituted] (every value, its URL-encoded forms), or null when there is nothing to hide. With
+     * [lowerCase] every form is lower-cased after it was encoded, for a text that was lower-cased itself (the hex digits of
+     * `%C3%A9` become `%c3%a9`, as they are in a lower-cased header name).
+     */
+    fun automaton(substituted: Map<String, String>, minLength: Int = MIN_LENGTH, lowerCase: Boolean = false): Automaton? {
         val forms = LinkedHashMap<String, String>() // text to hide -> variable name
+        fun add(form: String, name: String) { forms.putIfAbsent(if (lowerCase) form.lowercase() else form, name) }
         for ((value, name) in substituted) {
             if (value.isEmpty() || value.length < minLength) continue
-            forms.putIfAbsent(value, name.trim())
+            add(value, name.trim())
             val enc = URLEncoder.encode(value, Charsets.UTF_8)
-            forms.putIfAbsent(enc, name.trim())
-            forms.putIfAbsent(enc.replace("+", "%20"), name.trim())
+            add(enc, name.trim())
+            add(enc.replace("+", "%20"), name.trim())
         }
         return if (forms.isEmpty()) null else Automaton(forms)
     }

@@ -402,6 +402,16 @@ class McpServerTest {
         assertFalse(error, text); assertFalse("Topsecret" in text, text); assertTrue("{{key}}: ok" in text, text)
     }
 
+    @Test fun aHeaderNamedWithTheUrlEncodedFormOfASecretIsRedactedToo() {
+        http.createContext("/hencoded") { ex ->
+            hits.incrementAndGet(); ex.responseHeaders.add("%C3%A9", "ok"); ex.sendResponseHeaders(204, -1); ex.close()
+        }
+        write("http-client.env.json", """{"dev":{"base":"$base","key":"é"}}""")
+        write("a.http", "GET {{base}}/hencoded?k={{key}}\n")
+        val (text, error) = call(server(), "run", "file" to "a.http", "request" to "1", "environment" to "dev")
+        assertFalse(error, text); assertFalse("%c3%a9" in text.lowercase(), text); assertTrue("{{key}}: ok" in text, text)
+    }
+
     @Test fun aHostTakenFromAResponseIsRefusedBeforeAWrite() {
         write("a.http", "# @name p\nPOST BASE/post\n\n###\nGET {{p.response.headers.X-Next}}\n")
         val (_, error) = call(server("--allow-write"), "run_all", "file" to "a.http")

@@ -28,7 +28,7 @@ class ResponseRedactor(values: Map<String, String>) {
 
     fun redact(text: String): String = automaton?.let { FailureScrubber.scrub(text, it) } ?: text
 
-    private val lowerCaseAutomaton = FailureScrubber.automaton(LinkedHashMap<String, String>().also { m -> values.forEach { (v, n) -> m.putIfAbsent(v.lowercase(), n) } }, minLength = 1)
+    private val lowerCaseAutomaton = FailureScrubber.automaton(values, minLength = 1, lowerCase = true)
 
     /**
      * A header name with every value in it hidden, whatever its case: names are case-insensitive and an HTTP client may
