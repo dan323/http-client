@@ -379,6 +379,29 @@ class McpServerTest {
         assertTrue(error); assertTrue("example.invalid" in text); assertEquals(0, hits.get(), "the POST must not go out")
     }
 
+    @Test fun aReferenceBeforeAnAtSignCannotChangeTheHostAfterAWrite() {
+        // http://{{p.response...}}@127.0.0.1:port/ passes the host check with a stand-in, but "u@blocked.invalid/" would move the host
+        write("a.http", "# @name p\nPOST BASE/post\n\n###\nGET http://{{p.response.headers.X-Next}}@127.0.0.1:${http.address.port}/echo\n")
+        val (text, error) = call(server("--allow-write", "--allow-unconfirmed-write"), "run_all", "file" to "a.http")
+        assertTrue(error); assertTrue("depends on an earlier response" in text, text); assertEquals(0, hits.get(), "the POST must not go out")
+    }
+
+    @Test fun aReferenceInThePathOfAnAllowedHostIsStillAllowedAfterAWrite() {
+        write("a.http", "# @name p\nPOST BASE/post\n\n###\nGET BASE/echo?s={{p.response.status}}\n")
+        val (text, error) = call(server("--allow-write", "--allow-unconfirmed-write"), "run_all", "file" to "a.http")
+        assertFalse(error, text); assertEquals(2, hits.get())
+    }
+
+    @Test fun aHeaderNamedAfterASecretIsRedactedToo() {
+        http.createContext("/hname") { ex ->
+            hits.incrementAndGet(); ex.responseHeaders.add("Topsecret", "ok"); ex.sendResponseHeaders(204, -1); ex.close()
+        }
+        write("http-client.env.json", """{"dev":{"base":"$base","key":"Topsecret"}}""")
+        write("a.http", "GET {{base}}/hname?k={{key}}\n")
+        val (text, error) = call(server(), "run", "file" to "a.http", "request" to "1", "environment" to "dev")
+        assertFalse(error, text); assertFalse("Topsecret" in text, text); assertTrue("{{key}}: ok" in text, text)
+    }
+
     @Test fun aHostTakenFromAResponseIsRefusedBeforeAWrite() {
         write("a.http", "# @name p\nPOST BASE/post\n\n###\nGET {{p.response.headers.X-Next}}\n")
         val (_, error) = call(server("--allow-write"), "run_all", "file" to "a.http")
