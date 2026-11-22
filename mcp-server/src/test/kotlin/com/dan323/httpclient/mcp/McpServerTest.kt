@@ -120,7 +120,7 @@ class McpServerTest {
     @Test fun anEnvironmentFileCannotBeEchoedAsABody() {
         write("http-client.private.env.json", """{"dev":{"k":"TOPSECRET"}}""")
         write("a.http", "POST BASE/echo\n\n< ./http-client.private.env.json\n")
-        val (text, error) = call(server("--allow-write"), "run", "file" to "a.http", "request" to "1")
+        val (text, error) = call(server("--allow-write", "--allow-unconfirmed-write"), "run", "file" to "a.http", "request" to "1")
         assertFalse("TOPSECRET" in text)
         assertTrue("environment file" in text || error)
     }
@@ -157,7 +157,7 @@ class McpServerTest {
 
     @Test fun aPostRunsWithAllowWrite() {
         write("a.http", "POST BASE/post\n")
-        val (text, error) = call(server("--allow-write"), "run", "file" to "a.http", "request" to "1")
+        val (text, error) = call(server("--allow-write", "--allow-unconfirmed-write"), "run", "file" to "a.http", "request" to "1")
         assertFalse(error); assertTrue("\"status\": 204" in text); assertEquals(1, hits.get())
     }
 
@@ -378,12 +378,21 @@ class McpServerTest {
         assertTrue(asked.isEmpty())
     }
 
-    @Test fun aClientThatCannotAskKeepsTheStartFlagBehaviour() {
-        write("a.http", "POST BASE/post\n")
-        val s = server("--allow-write")
-        s.peer = McpServer.Peer { _, _ -> error("must not be asked") }
-        assertFalse(call(s, "run", "file" to "a.http", "request" to "1").second)
-        assertEquals(1, hits.get())
+    @Test fun aClientThatCannotAskIsRefusedUnlessTheUserAllowedThat() {
+        write("a.http", "GET BASE/echo\n\n###\nPOST BASE/post\n")
+        val closed = server("--allow-write")
+        closed.peer = McpServer.Peer { _, _ -> error("must not be asked") }
+        val (text, error) = call(closed, "run_all", "file" to "a.http")
+        assertTrue(error); assertTrue("--allow-unconfirmed-write" in text); assertEquals(0, hits.get())
+        val open = server("--allow-write", "--allow-unconfirmed-write")
+        open.peer = McpServer.Peer { _, _ -> error("must not be asked") }
+        assertFalse(call(open, "run_all", "file" to "a.http").second)
+        assertEquals(2, hits.get())
+    }
+
+    @Test fun readsNeedNoConfirmationCapability() {
+        write("a.http", "GET BASE/echo\n")
+        assertFalse(call(server("--allow-write"), "run", "file" to "a.http", "request" to "1").second)
     }
 
     @Test fun overStdioTheServerAsksOnTheSameChannelAndReadsTheAnswer() {

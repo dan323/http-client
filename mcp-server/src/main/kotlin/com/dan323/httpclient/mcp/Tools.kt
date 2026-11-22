@@ -199,7 +199,12 @@ class Tools(
      */
     private fun confirmWrites(toSend: List<RequestTemplate>, confirm: ((String) -> Boolean)?) {
         val writes = toSend.filter { it.method.uppercase() !in READ_ONLY }
-        if (writes.isEmpty() || confirm == null) return
+        if (writes.isEmpty()) return
+        if (confirm == null) {
+            // nobody can be asked: fail closed unless the user started the server knowing that
+            if (options.allowUnconfirmedWrite) return
+            throw RequestRefusedException("Request refused: the client cannot ask the user to confirm requests that change data (start the server with --allow-unconfirmed-write to send them anyway)")
+        }
         val list = writes.joinToString("\n") { "- ${it.method} ${it.url}" }
         if (!confirm("The agent wants to send requests that change data:\n$list")) {
             throw RequestRefusedException("Request refused: the user did not allow these requests to be sent")

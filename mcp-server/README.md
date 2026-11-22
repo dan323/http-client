@@ -29,7 +29,8 @@ Client configuration (for example `.mcp.json`):
 |---|---|---|
 | `--root DIR` | folder the tools may read `.http` files from (absolute, repeatable, required) | none |
 | `--allow-host H` | where requests may go: a name, `*.suffix`, an IP or a CIDR (repeatable; replaces the default) | loopback |
-| `--allow-write` | also run POST, PUT, PATCH, DELETE; the client is asked to confirm each call that sends one (MCP elicitation), and without elicitation support they run without asking | off |
+| `--allow-write` | also run POST, PUT, PATCH, DELETE; the client is asked to confirm each call that sends one (MCP elicitation); a client that cannot ask is refused | off |
+| `--allow-unconfirmed-write` | with `--allow-write`, let those requests through without asking when the client cannot confirm | off |
 | `--allow-env NAME` | let `{{$env.NAME}}` read that OS variable | none |
 | `--max-requests N` | requests per call, redirect hops and chain dependencies included | 100 |
 | `--total-timeout D` / `--request-timeout D` | one deadline per call / limit for one request | 5m / 60s |

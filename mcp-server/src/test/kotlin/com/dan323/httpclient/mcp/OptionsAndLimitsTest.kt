@@ -25,7 +25,7 @@ class OptionsAndLimitsTest {
         for (args in listOf(
             emptyList(), listOf("--root"), listOf("--root", "relative"), listOf("--root", "$dir/missing"),
             listOf("--root", dir, "--bogus"), listOf("--root", dir, "--max-requests", "0"), listOf("--root", dir, "--allow-host", "a b"),
-            listOf("--root", dir, "--total-timeout", "soon"),
+            listOf("--root", dir, "--total-timeout", "soon"), listOf("--root", dir, "--allow-unconfirmed-write"),
         )) assertTrue(ServerOptions.parse(args).isFailure, args.toString())
     }
 
