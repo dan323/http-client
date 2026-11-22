@@ -12,7 +12,11 @@ The agent is not trusted with more than you allow. By default it can only read `
 
 ## 1. Build it
 
-`httpc-mcp` is not in the release downloads yet, so build it from a clone of the repository. You need Java 21 or newer.
+You need Java 21 or newer. Either download it or build it.
+
+**Download.** Each release (after 0.5.0) has `httpc-mcp-<version>.zip` (and a `.tar`) on the [Releases page](https://github.com/dan323/http-client/releases). Unpack it. The program is `httpc-mcp-<version>/bin/httpc-mcp` (`httpc-mcp.bat` on Windows). Use its full path below.
+
+**Build from source.**
 
 1. Clone the repository and enter it: `git clone https://github.com/dan323/http-client.git && cd http-client`.
 2. Build the server: `./gradlew :mcp-server:installDist` (on Windows `gradlew.bat`).

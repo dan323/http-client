@@ -26,15 +26,15 @@ jobs:
   api-smoke-test:
     runs-on: ubuntu-latest
     env:
-      HTTPC_VERSION: X.Y.Z   # a release that has the httpc-*.zip asset
+      HTTPC_VERSION: X.Y.Z   # a release that has the httpc-X.Y.Z.zip asset
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with: { distribution: temurin, java-version: 21 }
       - name: Install httpc
         run: |
-          gh release download "v$HTTPC_VERSION" --repo dan323/http-client --pattern 'httpc-*.zip'
-          unzip -q httpc-*.zip
+          gh release download "v$HTTPC_VERSION" --repo dan323/http-client --pattern 'httpc-[0-9]*.zip'
+          unzip -q httpc-[0-9]*.zip
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Run
