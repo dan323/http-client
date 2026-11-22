@@ -27,7 +27,7 @@ class SessionFactory(
      * A new, empty session for requests of [httpFile]: `< path` bodies are read, and `>> path` responses are written, in the file's folder plus the roots
      * of [policy]; `{{$env.NAME}}` reads the OS variables allowed by `-Dhttpclient.allowEnv` / `HTTPC_ALLOW_ENV` plus
      * [allowEnv] (the hint in the error message is [envHint]). A request without `# @timeout` gets [defaultTimeoutMillis]
-     * as its total timeout (headers and body). [maxTimeoutMillis] caps every request's total timeout, `# @timeout` included, for the whole redirect chain. With [persistence] false, `>>`, `>>!` and `<>` fail (nothing is written; for callers that must not write).
+     * as its total timeout (headers and body). [maxTimeoutMillis] caps every request's total timeout, `# @timeout` included, for the whole redirect chain. With [ambientEnvironment] false, only [allowEnv] is readable (`-Dhttpclient.allowEnv` and `HTTPC_ALLOW_ENV` are ignored: for callers whose user must grant each name). With [refuseEnvironmentFiles], `< path` never reads `http-client*.env.json`. With [persistence] false, `>>`, `>>!` and `<>` fail (nothing is written; for callers that must not write).
      */
     fun create(
         httpFile: Path,
@@ -37,11 +37,15 @@ class SessionFactory(
         defaultTimeoutMillis: Long = RequestTimeouts.DEFAULT_MILLIS,
         persistence: Boolean = true,
         maxTimeoutMillis: Long? = null,
+        refuseEnvironmentFiles: Boolean = false,
+        ambientEnvironment: Boolean = true,
     ): RequestSession {
         val dir = httpFile.toAbsolutePath().parent
-        val dynamic = DynamicVariables(env = SystemEnvironmentVariables.fromConfiguration(extra = allowEnv, hint = envHint))
+        val env = if (ambientEnvironment) SystemEnvironmentVariables.fromConfiguration(extra = allowEnv, hint = envHint)
+        else SystemEnvironmentVariables(allowEnv, envHint)
+        val dynamic = DynamicVariables(env = env)
         val session = RequestSession(
-            RequestRunner(executor, LocalFileReader(dir, policy), dynamic, defaultTimeoutMillis, maxTimeoutMillis), executor, KotlinxJsonExtractor(),
+            RequestRunner(executor, LocalFileReader(dir, policy, refuseEnvironmentFiles), dynamic, defaultTimeoutMillis, maxTimeoutMillis), executor, KotlinxJsonExtractor(),
         )
         return if (persistence) {
             session.withPersistence(LocalResponseSaver(httpFile, policy), history?.let { HistoryLinkRecorder(httpFile.toAbsolutePath(), it) })

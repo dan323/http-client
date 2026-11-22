@@ -9,9 +9,10 @@ import java.nio.file.Path
 /**
  * Reads JetBrains-style `http-client.env.json` (shared) and
  * `http-client.private.env.json` (secrets; overrides shared values).
- * Malformed files raise [EnvironmentFileException] naming the file.
+ * Malformed files raise [EnvironmentFileException] naming the file. A file for which [accept] says no is treated as absent
+ * (checked for each of the two files separately, so a caller can refuse one and keep the other).
  */
-class JsonEnvironmentRepository(private val dir: Path) : EnvironmentRepository {
+class JsonEnvironmentRepository(private val dir: Path, private val accept: (Path) -> Boolean = { true }) : EnvironmentRepository {
     override fun load(): List<Environment> {
         val shared = read(dir.resolve(SHARED_FILE))
         val private = read(dir.resolve(PRIVATE_FILE))
@@ -24,7 +25,7 @@ class JsonEnvironmentRepository(private val dir: Path) : EnvironmentRepository {
     }
 
     private fun read(file: Path): Map<String, Map<String, String>> {
-        if (!Files.exists(file)) return emptyMap()
+        if (!Files.exists(file) || !accept(file)) return emptyMap()
         return EnvironmentJson.variables(EnvironmentJson.parse(file, EnvironmentJson.readText(file)))
     }
 
