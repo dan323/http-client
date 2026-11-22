@@ -108,4 +108,26 @@ class ResponseRedactorTest {
         assertEquals("", r.redactPrefix("abc", -5))
         assertEquals("abc", ResponseRedactor(emptyMap()).redactPrefix("abcdef", 3))
     }
+
+    @Test fun overlappingValuesAreHiddenAsOneStretchWhateverTheOrder() {
+        val r = ResponseRedactor(mapOf("xT" to "short", "TOPSECRET" to "key"))
+        val shown = r.redact("a xTOPSECRET b")
+        assertFalse("OPS" in shown || "TOP" in shown || "ECRET" in shown, shown)
+        assertEquals("a {{short}}{{key}} b", shown)
+        // and the other way round: the value that starts first is the longer one
+        assertEquals("{{key}}", ResponseRedactor(mapOf("TOPSECRET" to "key", "ECRETxyz" to "tail")).redact("TOPSECRET"))
+        assertEquals("{{key}}{{tail}}", ResponseRedactor(mapOf("TOPSECRET" to "key", "ECRETxyz" to "tail")).redact("TOPSECRETxyz"))
+    }
+
+    @Test fun aValueInsideALongerOneStillShowsOnlyTheLongerName() {
+        assertEquals("{{long}}", ResponseRedactor(mapOf("secret" to "long", "cre" to "inner")).redact("secret"))
+    }
+
+    @Test fun aPrefixHandlesOverlappingValuesAtTheEdge() {
+        val r = ResponseRedactor(mapOf("xT" to "short", "TOPSECRET" to "key"))
+        // the edge falls after "xTOPS" of "xTOPSECRET": the whole stretch is hidden and nothing of it follows
+        assertEquals("{{short}}{{key}}", r.redactPrefix("xTOPSECRET", 5))
+        assertEquals("", r.redactPrefix("xTOPSECRET", 0))
+        assertEquals("ab{{short}}{{key}}", r.redactPrefix("abxTOPSECRETcd", 4))
+    }
 }
