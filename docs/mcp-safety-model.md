@@ -38,6 +38,6 @@ Written before the code, as [PLAN.md](PLAN.md) asks. The `mcp-server` module (st
 Step 1 is done (`HostAllowList`, `GuardedHttpExecutor`, `SessionFactory.create(persistence = false)` in `adapters`).
 
 1. In `adapters`: `HostAllowListExecutor` (resolve and check every address) and the method check, with tests (redirect hops, `*.nip.io`-style names, IPv4-mapped IPv6, userinfo), `@proxy` refusal, the `@timeout` clamp, and the `SessionFactory` option that leaves out the saver and the history recorder.
-2. Response redaction: `RequestSession` exposes the substituted values of the last run (names only for the agent), and a redactor replaces them in body, headers and errors, with tests for each source (private environment, `$env`, chained responses, short values, Basic header).
+2. (Done) Response redaction: `RequestSession` exposes the substituted values of the last run (names only for the agent), and a redactor replaces them in body, headers and errors, with tests for each source (private environment, `$env`, chained responses, short values, Basic header).
 3. The `mcp-server` module: stdio loop, the five tools, the start flags, tests that start it against `mock-server` and try to break each rule above (a path outside the roots, a redirect to a host not allowed, a private value echoed back by `/headers`, a `POST` without `--allow-write`).
 4. The user-guide page and the agent skill ([agent-skill](../agent-skill)) learn the tools.

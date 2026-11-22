@@ -53,18 +53,35 @@ class RequestSession(
 
     /** Substituted value to variable name for the request being run; guarded by [lock]. */
     private val substituted = LinkedHashMap<String, String>()
-    private fun record(name: String, value: String) { substituted.putIfAbsent(value, name) }
+    private fun record(name: String, value: String) {
+        substituted.putIfAbsent(value, name)
+        callValues.putIfAbsent(value, name)
+    }
+
+    /** Like [substituted] but kept across the whole outermost call (a chain or a file), cleared when the next one starts; guarded by [lock]. */
+    private val callValues = LinkedHashMap<String, String>()
+
+    /**
+     * Every substituted value of the last outermost call ([run], [runAll] or [runChained], chained dependencies
+     * included) mapped to the variable it came from (private environment values, `$env`, values of earlier
+     * responses, the Basic `Authorization` forms). Meant for [ResponseRedactor]; the values are secrets, so
+     * the caller must not show or log them. Waits for a running call to finish.
+     */
+    fun substitutedValues(): Map<String, String> = locked(readOnly = true) { LinkedHashMap(callValues) }
 
     private fun send(request: HttpRequest): HttpResponse = redirects.send(request)
 
-    private inline fun <T> locked(block: () -> T): T {
+    private inline fun <T> locked(readOnly: Boolean = false, block: () -> T): T {
         try {
             lock.lockInterruptibly()
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
             throw e
         }
-        try { return block() } finally { lock.unlock() }
+        try {
+            if (lock.holdCount == 1 && !readOnly) callValues.clear()
+            return block()
+        } finally { lock.unlock() }
     }
 
     /**

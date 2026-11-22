@@ -12,10 +12,10 @@ internal object FailureScrubber {
     const val MIN_LENGTH = 3
 
     /** [substituted] maps value to the variable name it came from. */
-    fun scrub(message: String, substituted: Map<String, String>): String {
+    fun scrub(message: String, substituted: Map<String, String>, minLength: Int = MIN_LENGTH): String {
         val forms = LinkedHashMap<String, String>() // text to hide -> variable name
         for ((value, name) in substituted) {
-            if (value.length < MIN_LENGTH) continue
+            if (value.isEmpty() || value.length < minLength) continue
             forms.putIfAbsent(value, name)
             val enc = URLEncoder.encode(value, Charsets.UTF_8)
             forms.putIfAbsent(enc, name)
