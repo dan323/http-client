@@ -82,7 +82,11 @@ class Tools(
         }
     }
 
-    fun call(name: String, args: JsonObject): ToolResult {
+    /**
+     * [confirm] asks the user (through the client) and answers yes or no; null when the client cannot ask. It is used
+     * once per call that would send a request changing data, after every check has passed and before the first request.
+     */
+    fun call(name: String, args: JsonObject, confirm: ((String) -> Boolean)? = null): ToolResult {
         if (name !in NAMES) throw UnknownToolException(name)
         // a fresh redactor for what is known before a session exists (environment values), so even a refusal hides them
         var redactor = ResponseRedactor(emptyMap())
@@ -97,7 +101,7 @@ class Tools(
                 else -> {
                     val vars = variables(path, args.string("environment"))
                     redactor = ResponseRedactor(vars.entries.associate { it.value to it.key })
-                    val (json, failed) = if (name == "run") run(path, parsed, args.string("request"), vars) else runAll(path, parsed, vars)
+                    val (json, failed) = if (name == "run") run(path, parsed, args.string("request"), vars, confirm) else runAll(path, parsed, vars, confirm)
                     ToolResult(render(json), isError = failed)
                 }
             }
@@ -170,19 +174,37 @@ class Tools(
             ?: throw ToolFailure("No such request: $selector")
     }
 
-    private fun run(path: Path, file: HttpFile, selector: String?, vars: Map<String, String>): Pair<JsonElement, Boolean> {
+    private fun run(path: Path, file: HttpFile, selector: String?, vars: Map<String, String>, confirm: ((String) -> Boolean)?): Pair<JsonElement, Boolean> {
         val current = select(file.requests, selector)
-        precheck(withDependencies(file.requests, listOf(current)), vars)
+        val chain = withDependencies(file.requests, listOf(current))
+        precheck(chain, vars)
+        confirmWrites(chain, confirm)
         val session = session(path)
         val outcomes = session.runChained(file.requests, current, vars)
         return outcomesJson(outcomes, ResponseRedactor(session.substitutedValues())) { it.request === current } to outcomes.any { it is RunOutcome.Failure }
     }
 
-    private fun runAll(path: Path, file: HttpFile, vars: Map<String, String>): Pair<JsonElement, Boolean> {
+    private fun runAll(path: Path, file: HttpFile, vars: Map<String, String>, confirm: ((String) -> Boolean)?): Pair<JsonElement, Boolean> {
         precheck(file.requests, vars)
+        confirmWrites(file.requests, confirm)
         val session = session(path)
         val outcomes = session.runAll(file.requests, vars)
         return outcomesJson(outcomes, ResponseRedactor(session.substitutedValues())) { true } to outcomes.any { it is RunOutcome.Failure }
+    }
+
+    /**
+     * With `--allow-write` and a client that can ask, the user sees every request of the call that changes data (method and
+     * URL as written: no body and no values) and must say yes before anything is sent. The call's deadline restarts after
+     * the answer, so the time spent deciding is not charged to it.
+     */
+    private fun confirmWrites(toSend: List<RequestTemplate>, confirm: ((String) -> Boolean)?) {
+        val writes = toSend.filter { it.method.uppercase() !in READ_ONLY }
+        if (writes.isEmpty() || confirm == null) return
+        val list = writes.joinToString("\n") { "- ${it.method} ${it.url}" }
+        if (!confirm("The agent wants to send requests that change data:\n$list")) {
+            throw RequestRefusedException("Request refused: the user did not allow these requests to be sent")
+        }
+        limits.begin()
     }
 
     private fun session(path: Path) = factory.create(

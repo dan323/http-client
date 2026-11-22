@@ -29,7 +29,7 @@ fun main(args: Array<String>) {
         exitProcess(2)
     }
     if (options.allowWrite) {
-        err.println("httpc-mcp: --allow-write: requests that change data (POST, PUT, PATCH, DELETE) run WITHOUT asking.")
+        err.println("httpc-mcp: --allow-write: requests that change data (POST, PUT, PATCH, DELETE) are allowed; a client that supports elicitation is asked to confirm each call, otherwise they run WITHOUT asking.")
     }
     err.println("httpc-mcp: roots ${options.roots.joinToString()}, hosts ${options.allowHosts?.joinToString() ?: "loopback only"}")
     val out = PrintStream(java.io.FileOutputStream(java.io.FileDescriptor.out), false, Charsets.UTF_8)

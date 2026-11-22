@@ -329,4 +329,75 @@ class McpServerTest {
             assertEquals(2, o.roots.size)
         } finally { second.toFile().deleteRecursively() }
     }
+
+    // ---- confirmation of writes (elicitation)
+
+    private fun elicitingServer(vararg extra: String, answer: (JsonObject) -> JsonObject?, asked: MutableList<JsonObject>): McpServer {
+        val s = server("--allow-write", *extra)
+        s.peer = McpServer.Peer { method, params -> assertEquals("elicitation/create", method); asked += params; answer(params) }
+        s.handle("""{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{"elicitation":{}}}}""")
+        return s
+    }
+
+    private fun yes() = Json.parseToJsonElement("""{"action":"accept","content":{"confirm":true}}""").jsonObject
+
+    @Test fun aWriteAsksFirstShowingMethodAndUrlAsWrittenAndRunsOnYes() {
+        write("http-client.env.json", """{"dev":{"base":"$base","key":"TOPSECRET"}}""")
+        write("a.http", "POST {{base}}/post?k={{key}}\n")
+        val asked = mutableListOf<JsonObject>()
+        val s = elicitingServer(answer = { yes() }, asked = asked)
+        val (text, error) = call(s, "run", "file" to "a.http", "request" to "1", "environment" to "dev")
+        assertFalse(error, text); assertEquals(1, hits.get())
+        val message = asked.single()["message"]!!.jsonPrimitive.content
+        assertTrue("POST {{base}}/post?k={{key}}" in message, message); assertFalse("TOPSECRET" in message)
+    }
+
+    @Test fun declineCancelOrNoAnswerSendsNothing() {
+        write("a.http", "### a\nGET BASE/echo\n\n###\nPOST BASE/post\n")
+        for (answer in listOf<JsonObject?>(
+            Json.parseToJsonElement("""{"action":"decline"}""").jsonObject, Json.parseToJsonElement("""{"action":"cancel"}""").jsonObject,
+            Json.parseToJsonElement("""{"action":"accept","content":{"confirm":false}}""").jsonObject,
+            Json.parseToJsonElement("""{"action":"accept"}""").jsonObject, null,
+        )) {
+            val s = elicitingServer(answer = { answer }, asked = mutableListOf())
+            val (text, error) = call(s, "run_all", "file" to "a.http")
+            assertTrue(error, answer.toString()); assertTrue("did not allow" in text)
+        }
+        assertEquals(0, hits.get(), "not even the GET before the POST goes out")
+    }
+
+    @Test fun readsAreNotAskedAbout() {
+        write("a.http", "GET BASE/echo\n")
+        val asked = mutableListOf<JsonObject>()
+        val s = elicitingServer(answer = { yes() }, asked = asked)
+        assertFalse(call(s, "run", "file" to "a.http", "request" to "1").second)
+        assertTrue(asked.isEmpty())
+    }
+
+    @Test fun aClientThatCannotAskKeepsTheStartFlagBehaviour() {
+        write("a.http", "POST BASE/post\n")
+        val s = server("--allow-write")
+        s.peer = McpServer.Peer { _, _ -> error("must not be asked") }
+        assertFalse(call(s, "run", "file" to "a.http", "request" to "1").second)
+        assertEquals(1, hits.get())
+    }
+
+    @Test fun overStdioTheServerAsksOnTheSameChannelAndReadsTheAnswer() {
+        write("a.http", "POST BASE/post\n")
+        val s = server("--allow-write")
+        val input = java.io.PipedWriter(); val reader = java.io.BufferedReader(java.io.PipedReader(input))
+        val bytes = java.io.ByteArrayOutputStream()
+        val thread = Thread { s.serve(reader, java.io.PrintStream(bytes, true)) }.also { it.start() }
+        fun send(line: String) { input.write(line + "\n"); input.flush() }
+        send("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"elicitation":{}}}}""")
+        send("""{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run","arguments":{"file":"a.http","request":"1"}}}""")
+        val deadline = System.currentTimeMillis() + 10_000
+        while ("elicitation/create" !in bytes.toString() && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        assertTrue("elicitation/create" in bytes.toString())
+        assertEquals(0, hits.get(), "nothing is sent while the question is open")
+        send("""{"jsonrpc":"2.0","id":"httpc-1","result":{"action":"accept","content":{"confirm":true}}}""")
+        while ("\"id\":2" !in bytes.toString() && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        input.close(); thread.join(5000)
+        assertEquals(1, hits.get()); assertTrue("\"id\":2" in bytes.toString())
+    }
 }
