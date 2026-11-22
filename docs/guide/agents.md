@@ -14,7 +14,7 @@ The agent is not trusted with more than you allow. By default it can only read `
 
 `httpc-mcp` is not in the release downloads yet, so build it from a clone of the repository. You need Java 21 or newer.
 
-1. Clone the repository: `git clone https://github.com/dan323/http-client.git`.
+1. Clone the repository and enter it: `git clone https://github.com/dan323/http-client.git && cd http-client`.
 2. Build the server: `./gradlew :mcp-server:installDist` (on Windows `gradlew.bat`).
 3. The program is `mcp-server/build/install/httpc-mcp/bin/httpc-mcp` (`httpc-mcp.bat` on Windows). Use its full path below.
 
@@ -61,9 +61,9 @@ A result lists, for each request, the status and the assertions that passed or f
 
 ## 4. What stays hidden
 
-- **Secrets.** Values from your environment files, from `$env` variables and from earlier responses are replaced by their variable name, for example `{{ "{{token}}" }}`, in the body, the headers and the error messages, even when the server echoes them back. This is best effort: a value the server changed (hashed, split or encoded another way) cannot be recognised.
+- **Secrets.** Values that the request uses (from your environment files, from `$env` variables and from earlier responses) are replaced by their variable name, for example `{{ "{{token}}" }}`, in the body, the headers and the error messages, even when the server echoes them back. This is best effort: a value the server changed (hashed, split or encoded another way) cannot be recognised.
 - **Environment files.** A request body can never be read from `http-client.env.json` or `http-client.private.env.json`.
-- **Your files and machine.** Requests with `# @proxy` are refused. Nothing is written: a `>>`, `>>!` or `<>` line in a file saves nothing (the request still runs, and its result carries an error saying that saving is not available here). `$env` is empty unless you pass `--allow-env`.
+- **Your files and machine.** Requests with `# @proxy` are refused. Nothing is written: a `>>` or `>>!` line in a file saves nothing (the request still runs, and its result carries a `saveError` saying that saving is not available here), and a `<>` line keeps no link (the request runs and the result carries no error). `$env` is empty unless you pass `--allow-env`.
 
 ## 5. Allow more
 
