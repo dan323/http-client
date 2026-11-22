@@ -103,3 +103,13 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 - **T21 first on purpose:** the plugin was first used in a real IDE (Ultimate 2026.3) for 0.5.0-rc1; a Community install and the 2026.1 baseline are still unchecked. The findings may reshape T22/T23.
 - **Windows packaging:** the MSI is built by the release workflow (windows-2022, WiX 3) and was installed and run by hand on 0.5.0-rc1; macOS and Linux installers are untested.
 - **T26 writes files (done):** `>>` is the first feature that writes next to user data, so T26 must confine paths like reads do and never overwrite without `>>!`.
+
+## Before 1.0.0
+
+1.0.0 tells users that the options, file format and output formats stay compatible. Not yet true (decided after 0.6.0):
+
+- [ ] The plugin is verified by hand on a Community install and on the 2026.1 baseline, including the `Ctrl+Alt+R` shortcut, run all and the remembered environment (T21, T23).
+- [ ] The macOS DMG and the Linux DEB are installed and run by hand (T25).
+- [ ] The MCP server has been used with real agents for some weeks; its flags, tool names and result shape are then fixed.
+- [ ] One short page says what is stable: the CLI options and exit codes, the report schemas (JSON, JUnit), the MCP tool arguments and results, and the `.http` dialect.
+- [ ] The gaps in [known-limitations.md](known-limitations.md) that a user can hit are fixed or documented as final (for example the silently dropped headers).
