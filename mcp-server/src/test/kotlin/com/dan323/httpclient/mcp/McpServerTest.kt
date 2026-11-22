@@ -213,7 +213,8 @@ class McpServerTest {
     @Test fun processEnvironmentIsNotReadableByDefault() {
         write("a.http", "GET BASE/echo?h={{\$env.PATH}}\n")
         val (text, _) = call(server(), "run", "file" to "a.http", "request" to "1")
-        assertFalse(System.getenv("PATH") in text)
+        val path = System.getenv("PATH") ?: error("PATH is not set in this environment; the test needs it to prove that \$env is closed")
+        assertFalse(path in text)
         assertEquals(0, hits.get(), "the request must fail before it is sent")
     }
 
@@ -299,6 +300,23 @@ class McpServerTest {
         write("a.http", "GET {{base}}/straddle?k={{key}}\n")
         val (text, error) = call(server { copy(maxResponseBytes = 100) }, "run", "file" to "a.http", "request" to "1", "environment" to "dev")
         assertFalse(error, text); assertFalse("TOPSE" in text, text)
+    }
+
+    @Test fun aValueInTheMiddleOfTheKeptTextIsHiddenWholeNotCutInTwoByTheTailDrop() {
+        http.createContext("/inside") { ex -> val b = ("x".repeat(70) + "TOPSECRET" + "x".repeat(30)).toByteArray(); ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) } }
+        write("http-client.env.json", """{"dev":{"base":"$base","key":"TOPSECRET"}}""")
+        write("a.http", "GET {{base}}/inside?k={{key}}\n")
+        val (text, error) = call(server { copy(maxResponseBytes = 100) }, "run", "file" to "a.http", "request" to "1", "environment" to "dev")
+        assertFalse(error, text); assertFalse("TOP" in text, text)
+    }
+
+    @Test fun aUrlEncodedNonAsciiValueCutByTheResponseLimitLeavesNoFragment() {
+        val encoded = java.net.URLEncoder.encode("éééé", Charsets.UTF_8) // 24 characters for 4
+        http.createContext("/enc") { ex -> val b = ("x".repeat(80) + encoded + "tail").toByteArray(); ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) } }
+        write("http-client.env.json", """{"dev":{"base":"$base","key":"éééé"}}""")
+        write("a.http", "GET {{base}}/enc?k={{key}}\n")
+        val (text, error) = call(server { copy(maxResponseBytes = 100) }, "run", "file" to "a.http", "request" to "1", "environment" to "dev")
+        assertFalse(error, text); assertTrue("\"status\": 200" in text, text); assertFalse("%C" in text, text)
     }
 
     @Test fun aRefusalDoesNotEchoAnAllowedProcessVariableTheHostCameFrom() {

@@ -286,10 +286,13 @@ class Tools(
                                     put("notice", NOTICE)
                                     putJsonArray("headers") { r.headers.forEach { add(JsonPrimitive("${it.name}: ${redactor.redact(it.value)}")) } }
                                     // the text that is emitted is the text that is redacted (the declared charset decides how the bytes read)
-                                    // a body the HTTP client cut ends in the middle of whatever was there, possibly of a value: drop that tail
+                                    // A body the HTTP client cut can end in the middle of a value, which the redactor cannot match. Redact first (complete
+                                    // values are hidden wherever they are), then drop a tail longer than any partial value could be: a raw value, or its
+                                    // URL-encoded form (up to 12 characters for each character of a 4-byte symbol). Dropping first would cut complete
+                                    // values in two at a new edge.
                                     val executorCut = r.body.size >= options.maxResponseBytes
-                                    val text = r.bodyAsString().let { if (executorCut) it.dropLast(redactor.longestValue * 3) else it }
-                                    val (body, cut) = limited(redactor.redact(text), executorCut)
+                                    val hidden = redactor.redact(r.bodyAsString())
+                                    val (body, cut) = limited(if (executorCut) hidden.dropLast(redactor.longestValue * 12) else hidden, executorCut)
                                     put("body", body)
                                     if (cut) put("bodyTruncated", "cut at ${options.maxBodyBytes} bytes (--max-body-bytes)")
                                 }
