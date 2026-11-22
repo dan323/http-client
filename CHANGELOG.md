@@ -13,7 +13,7 @@ Highlights:
 - **Desktop app:** tabs that are restored on start, a folder view, response search, image preview, history and compare, editor problems, completion and find and replace, a Cancel button.
 - **IntelliJ plugin:** problems underlined in the editor, completion and go to declaration, **Show Linked HTTP Response**, the environment picker in the editor header, the environment remembered per project, assertion results in the response window.
 - **Language and files:** multipart bodies, the `QUERY` method, `$shared` environment variables, warnings for settings that are ignored, `httpc convert-bruno` for Bruno collections.
-- **Docs:** the user guide is built and checked on every pull request; the README is short and its detail lives in `docs/architecture.md`, `docs/cli-reference.md` and `docs/quality.md`.
+- **Docs:** the user guide is built and its links checked on every pull request that changes it; the README is short and its detail lives in `docs/architecture.md`, `docs/cli-reference.md` and `docs/quality.md`.
 
 Several changes are not covered by tests in a real IDE (the plugin) or an installer (macOS and Linux); `docs/known-limitations.md` lists them. Before 1.0.0, see the checklist in `docs/PLAN.md`.
 
