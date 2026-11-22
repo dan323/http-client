@@ -21,6 +21,11 @@ class CallLimits(
 
     @Synchronized fun begin() { sent = 0; deadline = nanoTime() + totalMillis * 1_000_000 }
 
+    /** Refuses (nothing is sent) once the call's deadline has passed; used between the checks that precede the first request. */
+    @Synchronized fun ensureTime() {
+        if (deadline - nanoTime() <= 0) throw RequestRefusedException("Request refused: the call used its ${totalMillis / 1000} s (--total-timeout)")
+    }
+
     override fun execute(request: HttpRequest): HttpResponse {
         val left = synchronized(this) {
             if (++sent > maxRequests) throw RequestRefusedException("Request refused: more than $maxRequests requests in one call (--max-requests)")

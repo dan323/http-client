@@ -7,10 +7,14 @@ import com.dan323.httpclient.adapters.SessionFactory
 import java.io.PrintStream
 import kotlin.system.exitProcess
 
+private const val MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+
 /** Wires the server from the start flags: guard and limits around the JDK client, a factory without persistence. */
 fun buildServer(options: ServerOptions): Pair<McpServer, AutoCloseable> {
-    val jdk = JdkHttpExecutor()
-    val hosts = options.allowHosts?.let { HostAllowList(it) } ?: HostAllowList()
+    // a response is read at most up to MAX_RESPONSE_BYTES, whatever the server sends (the tool output is cut much sooner)
+    val jdk = JdkHttpExecutor(maxBodyBytes = MAX_RESPONSE_BYTES)
+    val resolver = BoundedResolver()
+    val hosts = HostAllowList(options.allowHosts ?: HostAllowList.DEFAULT, resolver)
     val limits = CallLimits(jdk, options.maxRequests, options.totalMillis)
     val guarded = GuardedHttpExecutor(limits, hosts, options.allowWrite, options.requestTimeoutMillis)
     val factory = SessionFactory(guarded)

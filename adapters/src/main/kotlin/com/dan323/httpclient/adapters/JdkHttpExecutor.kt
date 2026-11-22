@@ -31,13 +31,19 @@ import java.util.concurrent.TimeoutException
  * and reused. A derived client copies the injected client's connect timeout, SSL context/parameters, authenticator,
  * cookie handler, executor and HTTP version; only the request priority cannot be read back and is not copied.
  * Call [close] to release derived clients (the injected client is left to its owner).
+ *
+ * With [maxBodyBytes] a longer response body is cut there while it streams in (the rest is never read), so an untrusted
+ * server cannot fill the heap; null keeps the whole body.
  */
 class JdkHttpExecutor(
     private val client: HttpClient = HttpClient.newBuilder()
         .followRedirects(HttpClient.Redirect.NEVER)
         .connectTimeout(Duration.ofSeconds(30))
         .build(),
+    private val maxBodyBytes: Int? = null,
 ) : HttpExecutor, AutoCloseable {
+    init { require(maxBodyBytes == null || maxBodyBytes > 0) { "maxBodyBytes must be positive" } }
+
     private val derived = ConcurrentHashMap<Optional<ProxyAddress>, HttpClient>()
 
     private fun clientFor(o: RequestOptions): HttpClient {
@@ -91,7 +97,7 @@ class JdkHttpExecutor(
         // interruption cover it.
         val inner = AtomicReference<CompletableFuture<*>?>()
         val future = CompletableFuture.supplyAsync { clientFor(request.options) }.thenCompose { c ->
-            c.sendAsync(builder.build(), BodyHandlers.ofByteArray()).also { inner.set(it) }
+            c.sendAsync(builder.build(), maxBodyBytes?.let { LimitedBodyHandler(it) } ?: BodyHandlers.ofByteArray()).also { inner.set(it) }
         }
         fun cancelAll() { future.cancel(true); inner.get()?.cancel(true) }
         val resp = try {

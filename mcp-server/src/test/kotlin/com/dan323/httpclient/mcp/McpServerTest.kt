@@ -37,6 +37,13 @@ class McpServerTest {
         http.createContext("/big") { ex -> hits.incrementAndGet(); val b = "x".repeat(5000).toByteArray(); ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) } }
         http.createContext("/redir") { ex -> ex.responseHeaders.add("Location", "http://example.invalid/steal"); ex.sendResponseHeaders(302, -1); ex.close() }
         http.createContext("/post") { ex -> hits.incrementAndGet(); ex.sendResponseHeaders(204, -1); ex.close() }
+        http.createContext("/utf16") { ex ->
+            hits.incrementAndGet()
+            // declares UTF-16LE but carries the UTF-8 bytes of the secret, which the charset-aware redaction does not see
+            ex.responseHeaders.add("Content-Type", "text/plain; charset=UTF-16LE")
+            val b = "TOPSECRET and more".toByteArray(); ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) }
+        }
+        http.createContext("/next") { ex -> hits.incrementAndGet(); ex.responseHeaders.add("X-Next", "http://example.invalid/x"); ex.sendResponseHeaders(204, -1); ex.close() }
         http.start()
     }
 
@@ -124,6 +131,7 @@ class McpServerTest {
         write("a.http", "GET BASE/redir\n")
         val (text, _) = call(server(), "run", "file" to "a.http", "request" to "1")
         assertTrue("example.invalid" in text && "not an allowed host" in text, text)
+        assertTrue(call(server(), "run", "file" to "a.http", "request" to "1").second, "a failed request is an error result")
     }
 
     @Test fun aRequestToAHostThatIsNotAllowedSendsNothing() {
@@ -235,5 +243,90 @@ class McpServerTest {
         assertTrue(call(server(), "run", "file" to "a.http", "request" to "9").second)
         assertTrue(call(server(), "run", "file" to "a.http").second)
         assertNotNull(call(server(), "run_all", "file" to "a.http").first)
+    }
+
+    // ---- review fixes
+
+    @Test fun anUnreadableFileIsAnErrorAndTheServerKeepsServing() {
+        Files.write(root.resolve("bad.http"), byteArrayOf(0x47, 0x45, 0x54, 0x20, -1, -2, -3, 10))
+        write("good.http", "GET BASE/echo\n")
+        val s = server()
+        val (text, error) = call(s, "list_requests", "file" to "bad.http")
+        assertTrue(error); assertTrue("cannot be read" in text)
+        assertFalse(call(s, "list_requests", "file" to "good.http").second)
+    }
+
+    @Test fun environmentFilesAboveTheRootAreNotUsed() {
+        val sub = Files.createDirectory(root.resolve("requests"))
+        write("http-client.private.env.json", """{"dev":{"key":"TOPSECRET"}}""")
+        Files.writeString(sub.resolve("a.http"), "GET $base/echo?k={{key}}\n")
+        val (options, close) = ServerOptions.parse(listOf("--root", sub.toString())).getOrThrow().let { it to buildServer(it) }
+        closers += close.second
+        val s = close.first
+        assertTrue("TOPSECRET" !in call(s, "list_environments", "file" to "a.http").first)
+        assertEquals("""{
+    "environments": []
+}""", call(s, "list_environments", "file" to "a.http").first)
+        assertTrue(call(s, "run", "file" to "a.http", "request" to "1", "environment" to "dev").second)
+        assertEquals(sub.toRealPath(), options.roots.single())
+    }
+
+    @Test fun anEnvironmentFileInTheSameRootStillWorks() {
+        val sub = Files.createDirectory(root.resolve("requests"))
+        write("http-client.env.json", """{"dev":{"k":"v"}}""")
+        Files.writeString(sub.resolve("a.http"), "GET $base/echo\n")
+        assertTrue("dev" in call(server(), "list_environments", "file" to "requests/a.http").first)
+    }
+
+    @Test fun aBodyDeclaringAnotherCharsetDoesNotSmuggleAValueOut() {
+        write("http-client.env.json", """{"dev":{"base":"$base"}}""")
+        write("http-client.private.env.json", """{"dev":{"key":"TOPSECRET"}}""")
+        write("a.http", "GET {{base}}/utf16?k={{key}}\n")
+        val (text, _) = call(server(), "run", "file" to "a.http", "request" to "1", "environment" to "dev")
+        assertFalse("TOPSECRET" in text, text)
+    }
+
+    @Test fun aHostWrittenOutIsCheckedBeforeAWriteEvenWhenTheUrlHasAResponseReference() {
+        write("a.http", "# @name p\nPOST BASE/post\n\n###\nGET http://example.invalid/{{p.response.status}}\n")
+        val (text, error) = call(server("--allow-write"), "run_all", "file" to "a.http")
+        assertTrue(error); assertTrue("example.invalid" in text); assertEquals(0, hits.get(), "the POST must not go out")
+    }
+
+    @Test fun aHostTakenFromAResponseIsRefusedBeforeAWrite() {
+        write("a.http", "# @name p\nPOST BASE/post\n\n###\nGET {{p.response.headers.X-Next}}\n")
+        val (_, error) = call(server("--allow-write"), "run_all", "file" to "a.http")
+        assertTrue(error); assertEquals(0, hits.get(), "the POST could not be undone")
+    }
+
+    @Test fun aHostTakenFromAResponseIsCheckedWhenSentIfOnlyReadsCameBefore() {
+        write("a.http", "# @name n\nGET BASE/next\n\n###\nGET {{n.response.headers.X-Next}}\n")
+        val (text, error) = call(server(), "run_all", "file" to "a.http")
+        assertTrue(error); assertTrue("not an allowed host" in text, text); assertEquals(1, hits.get())
+    }
+
+    @Test fun aHostFromAnAllowedProcessVariableIsCheckedBeforeAWrite() {
+        write("a.http", "POST BASE/post\n\n###\nGET http://{{\$env.PATH}}/\n")
+        val (_, error) = call(server("--allow-write", "--allow-env", "PATH"), "run_all", "file" to "a.http")
+        assertTrue(error); assertEquals(0, hits.get())
+    }
+
+    @Test fun oneAnswerWhetherAFileIsMissingOrOutsideTheRoots() {
+        Files.writeString(outside.resolve("o.http"), "GET $base/echo\n")
+        val s = server()
+        val existing = call(s, "list_requests", "file" to outside.resolve("o.http").toString())
+        val missing = call(s, "list_requests", "file" to outside.resolve("nope.http").toString())
+        assertEquals(existing, missing)
+    }
+
+    @Test fun aRelativePathTriesEveryRoot() {
+        val second = Files.createTempDirectory("mcp-second").toRealPath()
+        try {
+            Files.writeString(second.resolve("b.http"), "GET $base/echo\n")
+            Files.createSymbolicLink(root.resolve("b.http"), outside) // a first candidate that leads out of its root
+            val (o, c) = ServerOptions.parse(listOf("--root", root.toString(), "--root", second.toString())).getOrThrow().let { it to buildServer(it) }
+            closers += c.second
+            assertFalse(call(c.first, "list_requests", "file" to "b.http").second)
+            assertEquals(2, o.roots.size)
+        } finally { second.toFile().deleteRecursively() }
     }
 }

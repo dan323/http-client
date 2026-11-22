@@ -50,6 +50,10 @@ class McpServer(private val tools: Tools) {
             error(id, -32602, e.message ?: "Unknown tool")
         } catch (e: IllegalArgumentException) {
             error(id, -32602, "Invalid params")
+        } catch (e: Exception) {
+            // the loop must outlive any one message: the text of the failure may hold a secret, so only its kind is logged
+            System.err.println("httpc-mcp: internal ${e::class.simpleName} handling $method")
+            error(id, -32603, "Internal error")
         }
     }
 
