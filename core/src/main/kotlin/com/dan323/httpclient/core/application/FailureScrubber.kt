@@ -50,8 +50,11 @@ internal object FailureScrubber {
     private class Compiled(val names: Map<String, String>, val regex: Regex)
 
     /** A stretch of text to hide: occurrences that overlap are one group, so no piece of any of them is left showing. */
-    private class Group(val start: Int, var end: Int, val names: MutableList<String>) {
-        fun placeholder(): String = names.distinct().joinToString("") { "{{$it}}" }
+    private class Group(val start: Int, var end: Int, firstName: String) {
+        /** The names in the order they were first seen, each once: a group that grows by a million overlapping matches of one value stays one name. */
+        val names = LinkedHashSet<String>().apply { add(firstName) }
+
+        fun placeholder(): String = names.joinToString("") { "{{$it}}" }
     }
 
     /**
@@ -68,10 +71,10 @@ internal object FailureScrubber {
             val end = start + form.length
             val open = current
             if (open != null && start < open.end) {
-                if (end > open.end) { open.end = end; open.names += c.names.getValue(form).trim() }
+                if (end > open.end) { open.end = end; open.names.add(c.names.getValue(form).trim()) }
             } else {
                 if (open != null) yield(open)
-                current = Group(start, end, mutableListOf(c.names.getValue(form).trim()))
+                current = Group(start, end, c.names.getValue(form).trim())
             }
         }
         current?.let { yield(it) }

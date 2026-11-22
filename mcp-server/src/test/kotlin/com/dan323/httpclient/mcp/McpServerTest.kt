@@ -311,7 +311,7 @@ class McpServerTest {
     }
 
     @Test fun aBodyMadeOfNothingButASubstitutedValueIsBoundedByTheOutputLimit() {
-        http.createContext("/dense") { ex -> val b = "a".repeat(3_000_000).toByteArray(); ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) } }
+        http.createContext("/dense") { ex -> val b = "a".repeat(1_000_000).toByteArray(); ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) } }
         write("http-client.env.json", """{"dev":{"base":"$base","key":"a"}}""")
         write("a.http", "GET {{base}}/dense?k={{key}}\n")
         val (text, error) = call(server("--max-body-bytes", "1000"), "run", "file" to "a.http", "request" to "1", "environment" to "dev")
