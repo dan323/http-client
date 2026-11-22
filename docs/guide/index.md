@@ -5,13 +5,14 @@ title: Home
 
 # HTTP Client
 
-A client for `.http` files (a practical subset of the JetBrains HTTP Client format) with three front ends. They read the same files and give the same results, so pick the one that fits how you work.
+A client for `.http` files (a practical subset of the JetBrains HTTP Client format) with three front ends and a server for coding agents. They read the same files and give the same results, so pick the one that fits how you work.
 
 | You want to | Use | Guide |
 |---|---|---|
 | run requests from a terminal, a script or CI, and get JUnit/JSON reports | the command line, `httpc` | [Command line]({{ '/cli/' | relative_url }}) |
 | edit a file and click through requests in a window, with no IDE | the desktop app | [Desktop app]({{ '/desktop/' | relative_url }}) |
 | run requests next to your code in an IDE | the IntelliJ plugin | [IntelliJ plugin]({{ '/plugin/' | relative_url }}) |
+| let a coding agent list, check and run your requests | the MCP server, `httpc-mcp` | [Coding agents]({{ '/agents/' | relative_url }}) |
 
 ## Install
 
