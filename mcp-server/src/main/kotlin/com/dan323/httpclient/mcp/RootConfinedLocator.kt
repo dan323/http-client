@@ -22,7 +22,8 @@ class RootConfinedLocator(roots: List<Path>) : EnvironmentLocator {
         var dir = file.parent
         while (dir != null && dir.startsWith(root)) {
             if (listOf(JsonEnvironmentRepository.SHARED_FILE, JsonEnvironmentRepository.PRIVATE_FILE).any { inside(dir!!.resolve(it), root) }) {
-                return JsonEnvironmentRepository(dir)
+                // each of the two files is vetted when it is read: one that is a link out of the root is ignored, the other stays usable
+                return JsonEnvironmentRepository(dir) { inside(it, root) }
             }
             dir = dir.parent
         }

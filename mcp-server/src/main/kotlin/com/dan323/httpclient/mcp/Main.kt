@@ -4,21 +4,21 @@ import com.dan323.httpclient.adapters.GuardedHttpExecutor
 import com.dan323.httpclient.adapters.HostAllowList
 import com.dan323.httpclient.adapters.JdkHttpExecutor
 import com.dan323.httpclient.adapters.SessionFactory
+import com.dan323.httpclient.adapters.SystemEnvironmentVariables
+import com.dan323.httpclient.core.port.out.EnvironmentVariables
 import java.io.PrintStream
 import kotlin.system.exitProcess
 
-private const val MAX_RESPONSE_BYTES = 8 * 1024 * 1024
-
 /** Wires the server from the start flags: guard and limits around the JDK client, a factory without persistence. */
-fun buildServer(options: ServerOptions): Pair<McpServer, AutoCloseable> {
-    // a response is read at most up to MAX_RESPONSE_BYTES, whatever the server sends (the tool output is cut much sooner)
-    val jdk = JdkHttpExecutor(maxBodyBytes = MAX_RESPONSE_BYTES)
-    val resolver = BoundedResolver()
-    val hosts = HostAllowList(options.allowHosts ?: HostAllowList.DEFAULT, resolver)
+fun buildServer(options: ServerOptions, processEnv: EnvironmentVariables = SystemEnvironmentVariables(options.allowEnv)): Pair<McpServer, AutoCloseable> {
+    // a response is read at most up to maxResponseBytes, whatever the server sends (the tool output is cut much sooner)
+    val jdk = JdkHttpExecutor(maxBodyBytes = options.maxResponseBytes)
     val limits = CallLimits(jdk, options.maxRequests, options.totalMillis)
+    val resolver = BoundedResolver(remaining = limits::remainingMillis)
+    val hosts = HostAllowList(options.allowHosts ?: HostAllowList.DEFAULT, resolver)
     val guarded = GuardedHttpExecutor(limits, hosts, options.allowWrite, options.requestTimeoutMillis)
     val factory = SessionFactory(guarded)
-    return McpServer(Tools(options, factory, limits, hosts)) to AutoCloseable { factory.close(); jdk.close() }
+    return McpServer(Tools(options, factory, limits, hosts, processEnv)) to AutoCloseable { factory.close(); jdk.close(); resolver.close() }
 }
 
 fun main(args: Array<String>) {

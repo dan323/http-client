@@ -52,6 +52,8 @@ class McpServerTest {
         root.toFile().deleteRecursively(); outside.toFile().deleteRecursively()
     }
 
+    private fun server(configure: ServerOptions.() -> ServerOptions): McpServer = server(*emptyArray<String>(), configure = configure)
+
     private fun server(vararg extra: String, configure: ServerOptions.() -> ServerOptions = { this }): McpServer {
         val options = ServerOptions.parse(listOf("--root", root.toString()) + extra).getOrThrow().configure()
         val (s, c) = buildServer(options); closers += c; return s
@@ -286,8 +288,37 @@ class McpServerTest {
         write("http-client.env.json", """{"dev":{"base":"$base"}}""")
         write("http-client.private.env.json", """{"dev":{"key":"TOPSECRET"}}""")
         write("a.http", "GET {{base}}/utf16?k={{key}}\n")
-        val (text, _) = call(server(), "run", "file" to "a.http", "request" to "1", "environment" to "dev")
+        val (text, error) = call(server(), "run", "file" to "a.http", "request" to "1", "environment" to "dev")
+        assertFalse(error, text); assertTrue("\"status\": 200" in text, text) // a real response came back
         assertFalse("TOPSECRET" in text, text)
+    }
+
+    @Test fun aSecretCutInTwoByTheResponseLimitIsNotLeftBehindAsAFragment() {
+        http.createContext("/straddle") { ex -> val b = ("x".repeat(95) + "TOPSECRET and the rest").toByteArray(); ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) } }
+        write("http-client.env.json", """{"dev":{"base":"$base","key":"TOPSECRET"}}""")
+        write("a.http", "GET {{base}}/straddle?k={{key}}\n")
+        val (text, error) = call(server { copy(maxResponseBytes = 100) }, "run", "file" to "a.http", "request" to "1", "environment" to "dev")
+        assertFalse(error, text); assertFalse("TOPSE" in text, text)
+    }
+
+    @Test fun aRefusalDoesNotEchoAnAllowedProcessVariableTheHostCameFrom() {
+        write("a.http", "GET http://{{\$env.TARGET}}/\n")
+        val options = ServerOptions.parse(listOf("--root", root.toString(), "--allow-env", "TARGET")).getOrThrow()
+        val env = com.dan323.httpclient.adapters.SystemEnvironmentVariables(setOf("TARGET"), source = { mapOf("TARGET" to "Secret-Host.example.com") })
+        val (s, c) = buildServer(options, env); closers += c
+        val (text, error) = call(s, "run", "file" to "a.http", "request" to "1")
+        assertTrue(error); assertFalse("secret-host" in text.lowercase(), text); assertTrue("{{\$env.TARGET}}" in text, text)
+    }
+
+    @Test fun anEnvironmentFileThatIsALinkOutOfTheRootIsIgnoredAndItsSiblingStaysUsable() {
+        Files.writeString(outside.resolve("p.json"), """{"dev":{"key":"TOPSECRET","extra":"1"}}""")
+        write("http-client.env.json", """{"dev":{"base":"$base"}}""")
+        Files.createSymbolicLink(root.resolve("http-client.private.env.json"), outside.resolve("p.json"))
+        write("a.http", "GET {{base}}/echo?k={{key}}\n")
+        val s = server()
+        assertTrue("dev" in call(s, "list_environments", "file" to "a.http").first)
+        val (text, error) = call(s, "run", "file" to "a.http", "request" to "1", "environment" to "dev")
+        assertTrue(error); assertFalse("TOPSECRET" in text); assertEquals(0, hits.get()) // {{key}} is undefined: the outside file was not read
     }
 
     @Test fun aHostWrittenOutIsCheckedBeforeAWriteEvenWhenTheUrlHasAResponseReference() {
@@ -361,7 +392,8 @@ class McpServerTest {
         for (answer in listOf<JsonObject?>(
             Json.parseToJsonElement("""{"action":"decline"}""").jsonObject, Json.parseToJsonElement("""{"action":"cancel"}""").jsonObject,
             Json.parseToJsonElement("""{"action":"accept","content":{"confirm":false}}""").jsonObject,
-            Json.parseToJsonElement("""{"action":"accept"}""").jsonObject, null,
+            Json.parseToJsonElement("""{"action":"accept"}""").jsonObject,
+            Json.parseToJsonElement("""{"action":"accept","content":{"confirm":"true"}}""").jsonObject, null,
         )) {
             val s = elicitingServer(answer = { answer }, asked = mutableListOf())
             val (text, error) = call(s, "run_all", "file" to "a.http")
@@ -395,22 +427,29 @@ class McpServerTest {
         assertFalse(call(server("--allow-write"), "run", "file" to "a.http", "request" to "1").second)
     }
 
-    @Test fun overStdioTheServerAsksOnTheSameChannelAndReadsTheAnswer() {
+    @Test fun overStdioTheServerAsksOnTheSameChannelAnswersAPingMeanwhileAndReadsTheAnswer() {
         write("a.http", "POST BASE/post\n")
         val s = server("--allow-write")
         val input = java.io.PipedWriter(); val reader = java.io.BufferedReader(java.io.PipedReader(input))
         val bytes = java.io.ByteArrayOutputStream()
         val thread = Thread { s.serve(reader, java.io.PrintStream(bytes, true)) }.also { it.start() }
         fun send(line: String) { input.write(line + "\n"); input.flush() }
-        send("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"elicitation":{}}}}""")
-        send("""{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run","arguments":{"file":"a.http","request":"1"}}}""")
-        val deadline = System.currentTimeMillis() + 10_000
-        while ("elicitation/create" !in bytes.toString() && System.currentTimeMillis() < deadline) Thread.sleep(20)
-        assertTrue("elicitation/create" in bytes.toString())
-        assertEquals(0, hits.get(), "nothing is sent while the question is open")
-        send("""{"jsonrpc":"2.0","id":"httpc-1","result":{"action":"accept","content":{"confirm":true}}}""")
-        while ("\"id\":2" !in bytes.toString() && System.currentTimeMillis() < deadline) Thread.sleep(20)
-        input.close(); thread.join(5000)
-        assertEquals(1, hits.get()); assertTrue("\"id\":2" in bytes.toString())
+        fun waitFor(text: String) { val end = System.currentTimeMillis() + 10_000; while (text !in bytes.toString() && System.currentTimeMillis() < end) Thread.sleep(20) }
+        try {
+            send("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"elicitation":{}}}}""")
+            send("""{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run","arguments":{"file":"a.http","request":"1"}}}""")
+            waitFor("elicitation/create")
+            assertTrue("elicitation/create" in bytes.toString())
+            assertEquals(0, hits.get(), "nothing is sent while the question is open")
+            send("""{"jsonrpc":"2.0","id":77,"method":"ping"}""")
+            waitFor("\"id\":77")
+            assertTrue("\"id\":77,\"result\":{}" in bytes.toString(), "a ping is answered while the user is deciding")
+            send("""{"jsonrpc":"2.0","id":"httpc-1","result":{"action":"accept","content":{"confirm":true}}}""")
+            waitFor("\"id\":2,")
+            assertEquals(1, hits.get()); assertTrue("\"id\":2," in bytes.toString())
+        } finally {
+            input.close(); thread.join(5000)
+            assertFalse(thread.isAlive, "the serve loop ends when its input does")
+        }
     }
 }

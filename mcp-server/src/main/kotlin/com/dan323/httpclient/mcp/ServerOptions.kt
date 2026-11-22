@@ -18,6 +18,8 @@ data class ServerOptions(
     val totalMillis: Long = 5 * 60_000,
     val requestTimeoutMillis: Long = 60_000,
     val maxBodyBytes: Int = 64 * 1024,
+    /** The HTTP client stops reading a response here, whatever the server sends. */
+    val maxResponseBytes: Int = 8 * 1024 * 1024,
 ) {
     companion object {
         const val USAGE = """Usage: httpc-mcp --root DIR [--root DIR ...] [--allow-host H ...] [--allow-write [--allow-unconfirmed-write]] [--allow-env NAME[,NAME]]

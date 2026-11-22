@@ -18,6 +18,7 @@ import com.dan323.httpclient.core.application.withDependencies
 import com.dan323.httpclient.core.domain.HttpFile
 import com.dan323.httpclient.core.domain.RequestTemplate
 import com.dan323.httpclient.core.port.out.EnvironmentLocator
+import com.dan323.httpclient.core.port.out.EnvironmentVariables
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -49,10 +50,10 @@ class Tools(
     private val factory: SessionFactory,
     private val limits: CallLimits,
     private val hosts: HostAllowList,
+    private val envVariables: EnvironmentVariables = SystemEnvironmentVariables(options.allowEnv),
     private val locator: EnvironmentLocator = RootConfinedLocator(options.roots),
 ) {
     private val paths = PathGuard(options.roots)
-    private val envVariables = SystemEnvironmentVariables(options.allowEnv)
     private val pretty = Json { prettyPrint = true }
 
     fun definitions(): JsonArray = buildJsonArray {
@@ -100,7 +101,7 @@ class Tools(
                 "analyze" -> ToolResult(render(analyze(path, args.string("environment"))))
                 else -> {
                     val vars = variables(path, args.string("environment"))
-                    redactor = ResponseRedactor(vars.entries.associate { it.value to it.key })
+                    redactor = ResponseRedactor(knownValues(vars))
                     val (json, failed) = if (name == "run") run(path, parsed, args.string("request"), vars, confirm) else runAll(path, parsed, vars, confirm)
                     ToolResult(render(json), isError = failed)
                 }
@@ -120,6 +121,23 @@ class Tools(
             ToolResult("The tool failed (${e::class.simpleName})", isError = true)
         }
     }
+
+    /**
+     * Every value a refusal before the session starts could echo: the environment's variables and the allowed process
+     * variables, each also in the lower-cased, trimmed form `HostAllowList` quotes a host in.
+     */
+    private fun knownValues(vars: Map<String, String>): Map<String, String> {
+        val known = LinkedHashMap<String, String>()
+        val named = vars.entries.map { it.key to it.value } +
+            options.allowEnv.mapNotNull { n -> envVariables.get(n)?.let { "\$env.$n" to it } }
+        for ((name, value) in named) {
+            known.putIfAbsent(value, name)
+            known.putIfAbsent(value.trim().lowercase().trimEnd('.'), name)
+        }
+        return known
+    }
+
+    private fun redactorFor(substituted: Map<String, String>) = ResponseRedactor(substituted)
 
     private class ToolFailure(message: String) : RuntimeException(message)
 
@@ -181,7 +199,7 @@ class Tools(
         confirmWrites(chain, confirm)
         val session = session(path)
         val outcomes = session.runChained(file.requests, current, vars)
-        return outcomesJson(outcomes, ResponseRedactor(session.substitutedValues())) { it.request === current } to outcomes.any { it is RunOutcome.Failure }
+        return outcomesJson(outcomes, redactorFor(session.substitutedValues())) { it.request === current } to outcomes.any { it is RunOutcome.Failure }
     }
 
     private fun runAll(path: Path, file: HttpFile, vars: Map<String, String>, confirm: ((String) -> Boolean)?): Pair<JsonElement, Boolean> {
@@ -189,7 +207,7 @@ class Tools(
         confirmWrites(file.requests, confirm)
         val session = session(path)
         val outcomes = session.runAll(file.requests, vars)
-        return outcomesJson(outcomes, ResponseRedactor(session.substitutedValues())) { true } to outcomes.any { it is RunOutcome.Failure }
+        return outcomesJson(outcomes, redactorFor(session.substitutedValues())) { true } to outcomes.any { it is RunOutcome.Failure }
     }
 
     /**
@@ -268,7 +286,10 @@ class Tools(
                                     put("notice", NOTICE)
                                     putJsonArray("headers") { r.headers.forEach { add(JsonPrimitive("${it.name}: ${redactor.redact(it.value)}")) } }
                                     // the text that is emitted is the text that is redacted (the declared charset decides how the bytes read)
-                                    val (body, cut) = limited(redactor.redact(r.bodyAsString()))
+                                    // a body the HTTP client cut ends in the middle of whatever was there, possibly of a value: drop that tail
+                                    val executorCut = r.body.size >= options.maxResponseBytes
+                                    val text = r.bodyAsString().let { if (executorCut) it.dropLast(redactor.longestValue * 3) else it }
+                                    val (body, cut) = limited(redactor.redact(text), executorCut)
                                     put("body", body)
                                     if (cut) put("bodyTruncated", "cut at ${options.maxBodyBytes} bytes (--max-body-bytes)")
                                 }
@@ -287,9 +308,9 @@ class Tools(
     }
 
     /** At most [ServerOptions.maxBodyBytes] bytes of [text] (UTF-8); a character cut in the middle is dropped. */
-    private fun limited(text: String): Pair<String, Boolean> {
+    private fun limited(text: String, alreadyCut: Boolean = false): Pair<String, Boolean> {
         val bytes = text.toByteArray(Charsets.UTF_8)
-        if (bytes.size <= options.maxBodyBytes) return text to false
+        if (bytes.size <= options.maxBodyBytes) return text to alreadyCut
         val decoder = Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.IGNORE).onUnmappableCharacter(CodingErrorAction.IGNORE)
         return decoder.decode(ByteBuffer.wrap(bytes, 0, options.maxBodyBytes)).toString() to true
     }

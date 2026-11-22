@@ -15,6 +15,9 @@ import com.dan323.httpclient.core.domain.HttpResponse
 class ResponseRedactor(values: Map<String, String>) {
     private val values: Map<String, String> = LinkedHashMap(values)
 
+    /** Length of the longest value to hide, in characters (0 when there are none). */
+    val longestValue: Int get() = values.keys.maxOfOrNull { it.length } ?: 0
+
     fun redact(text: String): String = FailureScrubber.scrub(text, values, minLength = 1)
 
     fun redact(response: HttpResponse): HttpResponse {

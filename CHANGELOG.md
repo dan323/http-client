@@ -12,6 +12,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- MCP server review fixes, round 3: a body cut by the 8 MB client limit loses its tail before redaction (a value split by the cut leaves no fragment); `$env` values are redacted from refusals raised before the session starts; each of the two environment files is checked against the root on its own (`JsonEnvironmentRepository(dir, accept)`); host lookups wait at most the call's remaining time and run on a fixed set of 4 workers with no queue; a ping is answered while a confirmation is pending; only a JSON boolean `true` confirms.
 - MCP server fails closed: with `--allow-write`, a call that sends a request changing data is refused when the client cannot ask the user to confirm; the new `--allow-unconfirmed-write` (only with `--allow-write`) lets such calls through.
 - MCP server results keep everything that came from the remote server (headers, body, truncation note) under one `remote` object marked `"untrusted": true`, apart from the fields the server computed (status, duration, assertions).
 - MCP server: with `--allow-write`, a client that supports elicitation is asked to confirm each call that would send a request changing data (method and URL as written, no values); decline, cancel or no answer sends nothing. `McpServer.Peer` carries the question over the same stdio channel.

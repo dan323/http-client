@@ -43,6 +43,10 @@ class McpServer(private val tools: Tools, var peer: Peer? = null) {
                 if ((m["id"] as? JsonPrimitive)?.contentOrNull == id && m["method"] == null) {
                     return@Peer m["result"] as? JsonObject
                 }
+                // a ping must be answered promptly even while the user is deciding, or the client may drop the connection
+                if ((m["method"] as? JsonPrimitive)?.contentOrNull == "ping" && m["id"] != null) {
+                    out.println(result(m["id"]!!, JsonObject(emptyMap()))); out.flush()
+                }
             }
             null
         }
@@ -113,7 +117,9 @@ class McpServer(private val tools: Tools, var peer: Peer? = null) {
                 putJsonArray("required") { add(JsonPrimitive("confirm")) }
             }
         }) ?: return false
-        val confirmed = ((answer["content"] as? JsonObject)?.get("confirm") as? JsonPrimitive)?.contentOrNull == "true"
+        // a real boolean true: the string "true" does not count
+        val flag = (answer["content"] as? JsonObject)?.get("confirm") as? JsonPrimitive
+        val confirmed = flag != null && !flag.isString && flag.content == "true"
         return (answer["action"] as? JsonPrimitive)?.contentOrNull == "accept" && confirmed
     }
 
