@@ -234,7 +234,11 @@ class McpServerTest {
     @Test fun responsesAreLabelledAsUntrusted() {
         write("a.http", "GET BASE/echo\n")
         val (text, _) = call(server(), "run", "file" to "a.http", "request" to "1")
-        assertTrue("untrusted" in text)
+        val result = Json.parseToJsonElement(text).jsonObject["results"]!!.jsonArray.single().jsonObject
+        val remote = result["remote"]!!.jsonObject
+        assertEquals("true", remote["untrusted"]!!.jsonPrimitive.content)
+        assertTrue(remote.keys.containsAll(setOf("notice", "headers", "body")))
+        assertTrue(result.keys.none { it == "body" || it == "headers" }, "remote text only lives under \"remote\"")
     }
 
     @Test fun runSelectsByNameOrIndexAndReportsAMissingOne() {

@@ -256,13 +256,17 @@ class Tools(
                             val r = o.response
                             put("status", r.statusCode)
                             if (full(o)) {
-                                put("notice", NOTICE)
                                 put("durationMillis", r.durationMillis)
-                                putJsonArray("headers") { r.headers.forEach { add(JsonPrimitive("${it.name}: ${redactor.redact(it.value)}")) } }
-                                // the text that is emitted is the text that is redacted (the declared charset decides how the bytes read)
-                                val (body, cut) = limited(redactor.redact(r.bodyAsString()))
-                                put("body", body)
-                                if (cut) put("bodyTruncated", "cut at ${options.maxBodyBytes} bytes (--max-body-bytes)")
+                                // everything that came from the remote server sits under one key that says so, apart from what this server computed
+                                putJsonObject("remote") {
+                                    put("untrusted", true)
+                                    put("notice", NOTICE)
+                                    putJsonArray("headers") { r.headers.forEach { add(JsonPrimitive("${it.name}: ${redactor.redact(it.value)}")) } }
+                                    // the text that is emitted is the text that is redacted (the declared charset decides how the bytes read)
+                                    val (body, cut) = limited(redactor.redact(r.bodyAsString()))
+                                    put("body", body)
+                                    if (cut) put("bodyTruncated", "cut at ${options.maxBodyBytes} bytes (--max-body-bytes)")
+                                }
                                 putJsonArray("assertions") {
                                     o.assertions.forEach {
                                         add(buildJsonObject { put("assertion", it.assertion); put("passed", it.passed); put("message", redactor.redact(it.message)) })
