@@ -8,6 +8,7 @@ A Postman-style HTTP client that implements a practical subset of the JetBrains 
 - `adapters`: implementations of the ports `core` needs (HTTP via the JDK, files, environments, reports). Depends on `core`.
 - `view-model`: UI-toolkit-free logic shared by `desktop` and `intellij-plugin`. Depends on `core` only.
 - Front ends: `cli`, `desktop` (Compose Desktop), `intellij-plugin`.
+- `mcp-server`: MCP server over stdio (`httpc-mcp`) for coding agents; depends on `adapters`, bound by `docs/mcp-safety-model.md`.
 - `mock-server` (httpbin-style server for `samples/`) and `quality-reports` (build-only, not shipped).
 
 ## Architecture rules

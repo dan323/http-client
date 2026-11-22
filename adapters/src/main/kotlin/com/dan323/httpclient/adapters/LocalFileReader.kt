@@ -16,10 +16,15 @@ class FileAccessDeniedException(message: String) : IOException(message)
 class LocalFileReader(
     private val baseDir: Path,
     private val policy: FileAccessPolicy = FileAccessPolicy(),
+    /** Refuse `http-client.env.json` and `http-client.private.env.json` whatever the roots, so a body cannot echo a secret file back. */
+    private val refuseEnvironmentFiles: Boolean = false,
 ) : FileReader {
     override fun read(path: String): ByteArray {
         val target = baseDir.resolve(path).toAbsolutePath().normalize()
         val real = realPathOf(target)
+        if (refuseEnvironmentFiles && listOf(target, real).any { isEnvironmentFile(it) }) {
+            throw FileAccessDeniedException("File '$path' is an environment file and cannot be read as a body here")
+        }
         val roots = (listOf(baseDir) + policy.extraRoots).map { realPathOf(it.toAbsolutePath().normalize()) }
         if (roots.none { real.startsWith(it) }) {
             throw FileAccessDeniedException(
@@ -37,6 +42,9 @@ class LocalFileReader(
         }
     }
 }
+
+private fun isEnvironmentFile(p: Path): Boolean = p.fileName?.toString()?.lowercase() in
+    setOf(JsonEnvironmentRepository.SHARED_FILE, JsonEnvironmentRepository.PRIVATE_FILE)
 
 /** Real path with symlinks resolved; for a missing file, the nearest existing ancestor is resolved and the rest appended. */
 internal fun realPathOf(p: Path): Path = realPathOf(p, 0)

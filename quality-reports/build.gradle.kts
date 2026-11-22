@@ -10,7 +10,7 @@ plugins {
 // The aggregation resolves each module's classpath, including the Compose artifacts that live on Google's repository.
 repositories { google() }
 
-val measured = listOf(":core", ":adapters", ":view-model", ":cli", ":desktop", ":mock-server")
+val measured = listOf(":core", ":adapters", ":view-model", ":cli", ":desktop", ":mock-server", ":mcp-server")
 
 dependencies {
     measured.forEach {

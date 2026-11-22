@@ -66,10 +66,10 @@ jobs:
       # The desktop UI tests are headless but still want an X display on Linux (Windows and macOS have one).
       - name: Test (Linux)
         if: runner.os == 'Linux' && needs.changes.outputs.code == 'true'
-        run: xvfb-run -a ./gradlew :core:test :adapters:test :cli:test :mock-server:test :desktop:test :view-model:test --console=plain
+        run: xvfb-run -a ./gradlew :core:test :adapters:test :cli:test :mock-server:test :mcp-server:test :desktop:test :view-model:test --console=plain
       - name: Test (Windows, macOS)
         if: runner.os != 'Linux' && needs.changes.outputs.code == 'true'
-        run: ./gradlew :core:test :adapters:test :cli:test :mock-server:test :desktop:test :view-model:test --console=plain
+        run: ./gradlew :core:test :adapters:test :cli:test :mock-server:test :mcp-server:test :desktop:test :view-model:test --console=plain
       - name: Upload test reports
         if: failure() && needs.changes.outputs.code == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
