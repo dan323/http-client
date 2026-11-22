@@ -63,7 +63,7 @@ A result lists, for each request, the status and the assertions that passed or f
 
 - **Secrets.** Values from your environment files, from `$env` variables and from earlier responses are replaced by their variable name, for example `{{ "{{token}}" }}`, in the body, the headers and the error messages, even when the server echoes them back. This is best effort: a value the server changed (hashed, split or encoded another way) cannot be recognised.
 - **Environment files.** A request body can never be read from `http-client.env.json` or `http-client.private.env.json`.
-- **Your files and machine.** Requests with `# @proxy` are refused. Nothing is written: `>>`, `>>!` and `<>` in a file do nothing here. `$env` is empty unless you pass `--allow-env`.
+- **Your files and machine.** Requests with `# @proxy` are refused. Nothing is written: a `>>`, `>>!` or `<>` line in a file saves nothing (the request still runs, and its result carries an error saying that saving is not available here). `$env` is empty unless you pass `--allow-env`.
 
 ## 5. Allow more
 
@@ -97,7 +97,9 @@ The result is marked as an error and says why. The usual ones:
 | `'host' is not an allowed host (allowed hosts are set with --allow-host)` | add `--allow-host` for it, or check the URL (the check also applies to a redirect) |
 | `... changes data (allow it with --allow-write)` | start the server with `--allow-write` if the agent should send it |
 | `the client cannot ask the user to confirm ...` | the client does not support elicitation; see above |
-| `more than N requests in one call` | split the file, or raise `--max-requests` |
+| `This call would send N requests; the limit is M (--max-requests)` | the call needs more requests than allowed, chained ones included; split the file or raise `--max-requests` |
+| `more than N requests in one call` | the limit was reached while sending (redirects count too); raise `--max-requests` or check where the redirects lead |
+| `the user did not allow these requests to be sent` | you declined the question (or closed it); nothing was sent |
 | `the host of ... depends on an earlier response, and an earlier request changes data` | a later request would take its host from a response after a write; write the host in the file |
 | `# @proxy is not allowed here` | remove the setting from the file |
 
