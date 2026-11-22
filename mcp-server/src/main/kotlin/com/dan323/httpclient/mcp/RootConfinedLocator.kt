@@ -19,13 +19,14 @@ class RootConfinedLocator(roots: List<Path>) : EnvironmentLocator {
     override fun find(httpFile: Path): EnvironmentRepository? {
         val file = try { httpFile.toRealPath() } catch (_: IOException) { return null }
         val root = roots.firstOrNull { file.startsWith(it) } ?: return null
-        var dir = file.parent
+        var dir: Path? = file.parent
         while (dir != null && dir.startsWith(root)) {
-            if (listOf(JsonEnvironmentRepository.SHARED_FILE, JsonEnvironmentRepository.PRIVATE_FILE).any { inside(dir!!.resolve(it), root) }) {
+            val here: Path = dir
+            if (listOf(JsonEnvironmentRepository.SHARED_FILE, JsonEnvironmentRepository.PRIVATE_FILE).any { inside(here.resolve(it), root) }) {
                 // each of the two files is vetted when it is read: one that is a link out of the root is ignored, the other stays usable
-                return JsonEnvironmentRepository(dir) { inside(it, root) }
+                return JsonEnvironmentRepository(here) { inside(it, root) }
             }
-            dir = dir.parent
+            dir = here.parent
         }
         return null
     }

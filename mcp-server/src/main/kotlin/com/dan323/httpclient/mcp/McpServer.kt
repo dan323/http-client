@@ -35,25 +35,29 @@ class McpServer(private val tools: Tools, var peer: Peer? = null) {
             val id = "httpc-${++next}"
             out.println(buildJsonObject { put("jsonrpc", "2.0"); put("id", id); put("method", method); put("params", params) }.toString())
             out.flush()
-            // the answer is the next message that carries our id; anything else that arrives meanwhile is dropped
-            var answer: JsonObject? = null
-            while (answer == null) {
-                val line = input.readLine() ?: return@Peer null
-                val m = try { json.parseToJsonElement(line) as? JsonObject } catch (_: Exception) { null } ?: continue
-                if ((m["id"] as? JsonPrimitive)?.contentOrNull == id && m["method"] == null) {
-                    return@Peer m["result"] as? JsonObject
-                }
-                // a ping must be answered promptly even while the user is deciding, or the client may drop the connection
-                if ((m["method"] as? JsonPrimitive)?.contentOrNull == "ping" && m["id"] != null) {
-                    out.println(result(m["id"]!!, JsonObject(emptyMap()))); out.flush()
-                }
-            }
-            null
+            awaitAnswer(input, out, id)
         }
         while (true) {
             val line = input.readLine() ?: return
             if (line.isBlank()) continue
             handle(line)?.let { out.println(it); out.flush() }
+        }
+    }
+
+    /**
+     * The `result` of the client's answer to our request [id]: the next message that carries that id. Anything else that
+     * arrives meanwhile is dropped, except a ping, which is answered at once (a client may drop a connection that does not
+     * answer, and the user can take a while to decide). Null when the answer is an error or the input ends.
+     */
+    private fun awaitAnswer(input: BufferedReader, out: PrintStream, id: String): JsonObject? {
+        while (true) {
+            val line = input.readLine() ?: return null
+            val m = try { json.parseToJsonElement(line) as? JsonObject } catch (_: Exception) { null } ?: continue
+            if ((m["id"] as? JsonPrimitive)?.contentOrNull == id && m["method"] == null) return m["result"] as? JsonObject
+            val pingId = m["id"]
+            if (pingId != null && (m["method"] as? JsonPrimitive)?.contentOrNull == "ping") {
+                out.println(result(pingId, JsonObject(emptyMap()))); out.flush()
+            }
         }
     }
 
