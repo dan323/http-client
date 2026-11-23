@@ -1,8 +1,6 @@
 # What is stable
 
-**Draft for 1.0.0.** From 1.0.0 on, the things listed under "Stable" do not change in a way that breaks a script, a CI job or an agent that uses them, except in a new major version. A new option, a new field, a new tool or a new `.http` feature may be added in a minor version. Before 1.0.0 (every `0.x` release) any of it may change; the [changelog](../CHANGELOG.md) says when it did.
-
-Items marked **decide** are my proposal and need a yes or no before the page is final.
+**For 1.0.0.** From 1.0.0 on, the things listed under "Stable" do not change in a way that breaks a script, a CI job or an agent that uses them, except in a new major version. A new option, a new field, a new tool or a new `.http` feature may be added in a minor version. Before 1.0.0 (every `0.x` release) any of it may change; the [changelog](../CHANGELOG.md) says when it did.
 
 ## Stable
 
@@ -27,22 +25,20 @@ Items marked **decide** are my proposal and need a yes or no before the page is 
 ### MCP server (`httpc-mcp`)
 
 - The start flags in the [guide](guide/agents.md#5-allow-more) and their defaults. The server stays read-only, local and confined to `--root` unless a flag says otherwise; no flag will be silently loosened.
-- The tools `list_requests`, `list_environments`, `analyze`, `run` and `run_all`, with their argument names (`file`, `request`, `environment`).
+- The tools `list_requests`, `list_environments`, `analyze`, `run` and `run_all`, with their argument names (`file`, `request`, `environment`) and the result of each as structured content, described by the tool's `outputSchema` (the same JSON is in the text part). Fields may be added; none is removed or changes type.
 - In a result: everything from the remote server stays under `remote` with `"untrusted": true`; secrets stay replaced by their variable name; `isError` is true when a request failed or was refused.
 - The safety rules in [mcp-safety-model.md](mcp-safety-model.md).
 
 ## Not stable
 
 - The wording of messages (errors, refusals, warnings). Match on exit codes, `code` values and JSON fields, not on text.
-- The exact layout of the text in an MCP result (it is JSON as pretty-printed text today); fields in it may be added.
+- The formatting of the JSON text part of an MCP result (indentation, key order). Read the structured content.
 - Anything in `core`, `adapters`, `view-model` and the other modules as a library: they are not published, and their classes are not an API.
 - The desktop app and the IntelliJ plugin: buttons, layout, shortcuts and settings may change in any release. What they run and report follows the rules above.
-- The run history folder (`.http-history`) layout and the desktop settings file.
+- The run history folder (`.http-history`) layout and the desktop settings file. They are read back by the desktop app and the plugin, not by scripts.
+- The exact `.http` files and environment files that `httpc convert-bruno` writes (its mapping from Bruno is still partial, see [PLAN](PLAN.md), T35). The command and its options are stable.
 - Performance and the exact timing of requests.
 
-## Decide
+## Deprecation
 
-1. **MCP result shape.** Today the `run` result is pretty-printed JSON inside a text block. Do we freeze that, or move to MCP's structured content before 1.0.0? Freezing the text form is the less work; structured content is the better long-term shape for clients.
-2. **`.http-history` layout.** It holds raw responses and is read back by the desktop app and the plugin. Freeze it, or leave it out (as above)?
-3. **`convert-bruno` output.** Its mapping from Bruno is partial (see [PLAN](PLAN.md), T35). Freeze the command and flags now but not the exact `.http` it writes?
-4. **Deprecation.** Proposal: a stable thing is deprecated in a minor release (documented, warns where it can) and removed no sooner than the next major release.
+A stable thing is deprecated in a minor release (documented in the changelog and, where it can, with a warning) and removed no sooner than the next major release.

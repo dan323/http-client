@@ -111,5 +111,5 @@ the previous one is merged. Dependencies not listed in a wave are already satisf
 - [ ] The plugin is verified by hand on a Community install and on the 2026.1 baseline, including the `Ctrl+Alt+R` shortcut, run all and the remembered environment (T21, T23).
 - [x] The macOS DMG and the Linux DEB are installed and run by hand (T25; release 0.6.0).
 - [ ] The MCP server has been used with real agents for some weeks; its flags, tool names and result shape are then fixed.
-- [ ] [stability.md](stability.md) (a draft, with open decisions) says what is stable, and is final: the CLI options and exit codes, the report schemas (JSON, JUnit), the MCP tool arguments and results, and the `.http` dialect.
+- [x] [stability.md](stability.md) says what is stable (decided; MCP results as structured content): the CLI options and exit codes, the report schemas (JSON, JUnit), the MCP tool arguments and results, and the `.http` dialect.
 - [ ] The gaps in [known-limitations.md](known-limitations.md) that a user can hit are fixed or documented as final (for example the silently dropped headers).
