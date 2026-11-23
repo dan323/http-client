@@ -4,11 +4,11 @@ How to install each piece of the client. What you can write in a `.http` file an
 
 Every tagged release (`v*`) has these files on the project's GitHub Releases page; the [release workflow](../.github/workflows/release.yml) builds and attaches them.
 
-| Asset | For | Needs |
-|---|---|---|
-| `httpc-<version>.zip` / `.tar` | the command line (`httpc`) | Java 21 or newer on `PATH` (or `JAVA_HOME`) |
-| `http-client-intellij-plugin-<version>.zip` | IntelliJ IDEA (Community or Ultimate) and other IntelliJ-based IDEs | the IDE |
-| `http-client-desktop-<version>-macos.dmg`, `-windows.msi`, `-linux.deb` | the desktop app | nothing (the installer bundles a runtime) |
+| Asset                                                                   | For                                                                 | Needs                                       |
+|-------------------------------------------------------------------------|---------------------------------------------------------------------|---------------------------------------------|
+| `httpc-<version>.zip` / `.tar`                                          | the command line (`httpc`)                                          | Java 21 or newer on `PATH` (or `JAVA_HOME`) |
+| `http-client-intellij-plugin-<version>.zip`                             | IntelliJ IDEA (Community or Ultimate) and other IntelliJ-based IDEs | the IDE                                     |
+| `http-client-desktop-<version>-macos.dmg`, `-windows.msi`, `-linux.deb` | the desktop app                                                     | nothing (the installer bundles a runtime)   |
 
 ## Command line
 

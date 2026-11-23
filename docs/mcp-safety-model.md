@@ -4,12 +4,12 @@ Written before the code, as [PLAN.md](PLAN.md) asks. The `mcp-server` module let
 
 ## Who is trusted
 
-| Party | Trust |
-|---|---|
-| The user who starts the server and its flags | Trusted. Every permission below is granted by a start flag, never by a tool call. |
-| The agent calling the tools | Not trusted. It can be steered by text it reads (prompt injection), so it gets only what a flag allows. |
-| `.http` files | Not trusted: a downloaded file can aim a request anywhere or read a file. The existing rules apply (`FileAccessPolicy`, opt-in `$env`). |
-| Response bodies and headers | Not trusted. They go back to the agent as data, and may carry instructions aimed at it. |
+| Party                                        | Trust                                                                                                                                   |
+|----------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|
+| The user who starts the server and its flags | Trusted. Every permission below is granted by a start flag, never by a tool call.                                                       |
+| The agent calling the tools                  | Not trusted. It can be steered by text it reads (prompt injection), so it gets only what a flag allows.                                 |
+| `.http` files                                | Not trusted: a downloaded file can aim a request anywhere or read a file. The existing rules apply (`FileAccessPolicy`, opt-in `$env`). |
+| Response bodies and headers                  | Not trusted. They go back to the agent as data, and may carry instructions aimed at it.                                                 |
 
 ## Rules
 
@@ -25,13 +25,13 @@ Written before the code, as [PLAN.md](PLAN.md) asks. The `mcp-server` module let
 
 ## Tools
 
-| Tool | Does | Safety notes |
-|---|---|---|
-| `list_requests(file)` | Names, methods and URLs as written | Reads inside the roots only |
-| `list_environments(file)` | Environment names | Rule 4: no values |
-| `analyze(file, environment?)` | `VariableAnalysis` diagnostics | Like `httpc --check`: sends nothing |
-| `run(file, request, environment?)` | Runs one request (and the ones it chains on) | Rules 2, 3, 4, 7 |
-| `run_all(file, environment?)` | Runs the file in order | Pre-checks every request first (rule 3) |
+| Tool                               | Does                                         | Safety notes                            |
+|------------------------------------|----------------------------------------------|-----------------------------------------|
+| `list_requests(file)`              | Names, methods and URLs as written           | Reads inside the roots only             |
+| `list_environments(file)`          | Environment names                            | Rule 4: no values                       |
+| `analyze(file, environment?)`      | `VariableAnalysis` diagnostics               | Like `httpc --check`: sends nothing     |
+| `run(file, request, environment?)` | Runs one request (and the ones it chains on) | Rules 2, 3, 4, 7                        |
+| `run_all(file, environment?)`      | Runs the file in order                       | Pre-checks every request first (rule 3) |
 
 ## Build order
 

@@ -49,13 +49,13 @@ Give `--root` more than once to allow several folders. The server refuses to sta
 
 ## 3. What the agent can do
 
-| Tool | What it does |
-|---|---|
-| `list_requests` | the requests of a file: name, method and URL as written (with variables not filled in) |
-| `list_environments` | the environment names for a file, never their values |
-| `analyze` | finds undefined variables, bad references and lines that do not parse, and sends nothing |
-| `run` | runs one request (by `@name` or position) and the requests it depends on |
-| `run_all` | runs the whole file in order |
+| Tool                | What it does                                                                             |
+|---------------------|------------------------------------------------------------------------------------------|
+| `list_requests`     | the requests of a file: name, method and URL as written (with variables not filled in)   |
+| `list_environments` | the environment names for a file, never their values                                     |
+| `analyze`           | finds undefined variables, bad references and lines that do not parse, and sends nothing |
+| `run`               | runs one request (by `@name` or position) and the requests it depends on                 |
+| `run_all`           | runs the whole file in order                                                             |
 
 The agent gives file paths relative to a root, for example `api/orders.http`. Only `.http` and `.rest` files inside a root can be used; an environment file is looked up beside the file or in a parent folder, but never above the root.
 
@@ -75,15 +75,15 @@ Each result is also sent as MCP structured content, with a JSON Schema in the to
 
 Each switch is part of the command that starts the server, so the agent cannot turn any of them on.
 
-| Flag | Allows | Default |
-|---|---|---|
-| `--allow-host HOST` | requests to a host: a name, `*.example.com` (any depth below it, not the bare domain), an IP address or a range such as `10.0.0.0/8`. Repeat it for several. Naming a host replaces the default. | `localhost` and the loopback addresses |
-| `--allow-write` | `POST`, `PUT`, `PATCH` and `DELETE` | only `GET`, `HEAD` and `OPTIONS` |
-| `--allow-unconfirmed-write` | with `--allow-write`, sending them even when the client cannot ask you first | off |
-| `--allow-env NAME` | `{{ "{{$env.NAME}}" }}` to read that variable from the process environment (repeatable) | none |
-| `--max-requests N` | requests in one call, redirects and requests a request depends on included | 100 |
-| `--total-timeout`, `--request-timeout` | time for one call, and for one request (for example `5m`, `60s`) | 5m, 60s |
-| `--max-body-bytes N` | how much of a response body is returned | 65536 |
+| Flag                                   | Allows                                                                                                                                                                                           | Default                                |
+|----------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------|
+| `--allow-host HOST`                    | requests to a host: a name, `*.example.com` (any depth below it, not the bare domain), an IP address or a range such as `10.0.0.0/8`. Repeat it for several. Naming a host replaces the default. | `localhost` and the loopback addresses |
+| `--allow-write`                        | `POST`, `PUT`, `PATCH` and `DELETE`                                                                                                                                                              | only `GET`, `HEAD` and `OPTIONS`       |
+| `--allow-unconfirmed-write`            | with `--allow-write`, sending them even when the client cannot ask you first                                                                                                                     | off                                    |
+| `--allow-env NAME`                     | `{{ "{{$env.NAME}}" }}` to read that variable from the process environment (repeatable)                                                                                                          | none                                   |
+| `--max-requests N`                     | requests in one call, redirects and requests a request depends on included                                                                                                                       | 100                                    |
+| `--total-timeout`, `--request-timeout` | time for one call, and for one request (for example `5m`, `60s`)                                                                                                                                 | 5m, 60s                                |
+| `--max-body-bytes N`                   | how much of a response body is returned                                                                                                                                                          | 65536                                  |
 
 A name does not prove where a request goes (a name such as `x.nip.io` can lead anywhere), so the server looks up every name itself and refuses addresses on your own network (private, link-local and similar ranges) unless you list that address or range. A redirect is checked like a request: it cannot lead to a host you did not allow.
 
@@ -97,17 +97,17 @@ A client that cannot ask would leave the server with no way to get your answer, 
 
 The result is marked as an error and says why. The usual ones:
 
-| Message | What to do |
-|---|---|
-| `No such .http or .rest file under the allowed roots` | the path is wrong, or outside every `--root` (the server answers the same for a missing file and a file it may not use) |
-| `'host' is not an allowed host (allowed hosts are set with --allow-host)` | add `--allow-host` for it, or check the URL (the check also applies to a redirect) |
-| `... changes data (allow it with --allow-write)` | start the server with `--allow-write` if the agent should send it |
-| `the client cannot ask the user to confirm ...` | the client does not support elicitation; see above |
-| `This call would send N requests; the limit is M (--max-requests)` | the call needs more requests than allowed, chained ones included; split the file or raise `--max-requests` |
-| `more than N requests in one call` | the limit was reached while sending (redirects count too); raise `--max-requests` or check where the redirects lead |
-| `the user did not allow these requests to be sent` | you declined the question (or closed it); nothing was sent |
-| `the host of ... depends on an earlier response, and an earlier request changes data` | a later request would take its host from a response after a write; write the host in the file |
-| `# @proxy is not allowed here` | remove the setting from the file |
+| Message                                                                               | What to do                                                                                                              |
+|---------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| `No such .http or .rest file under the allowed roots`                                 | the path is wrong, or outside every `--root` (the server answers the same for a missing file and a file it may not use) |
+| `'host' is not an allowed host (allowed hosts are set with --allow-host)`             | add `--allow-host` for it, or check the URL (the check also applies to a redirect)                                      |
+| `... changes data (allow it with --allow-write)`                                      | start the server with `--allow-write` if the agent should send it                                                       |
+| `the client cannot ask the user to confirm ...`                                       | the client does not support elicitation; see above                                                                      |
+| `This call would send N requests; the limit is M (--max-requests)`                    | the call needs more requests than allowed, chained ones included; split the file or raise `--max-requests`              |
+| `more than N requests in one call`                                                    | the limit was reached while sending (redirects count too); raise `--max-requests` or check where the redirects lead     |
+| `the user did not allow these requests to be sent`                                    | you declined the question (or closed it); nothing was sent                                                              |
+| `the host of ... depends on an earlier response, and an earlier request changes data` | a later request would take its host from a response after a write; write the host in the file                           |
+| `# @proxy is not allowed here`                                                        | remove the setting from the file                                                                                        |
 
 ## More
 
