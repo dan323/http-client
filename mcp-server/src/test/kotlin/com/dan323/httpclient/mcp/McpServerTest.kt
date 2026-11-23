@@ -73,6 +73,13 @@ class McpServerTest {
 
     // ---- protocol
 
+    @Test fun initializeReportsTheProjectVersion() {
+        val s = server()
+        val reply = Json.parseToJsonElement(s.handle("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}""")!!).jsonObject
+        val version = reply["result"]!!.jsonObject["serverInfo"]!!.jsonObject["version"]!!.jsonPrimitive.content
+        assertEquals(System.getProperty("httpc.expectedVersion"), version)
+    }
+
     @Test fun initializeListsToolsAndNotificationsGetNoReply() {
         val s = server()
         val init = Json.parseToJsonElement(s.handle("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}""")!!).jsonObject
