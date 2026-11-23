@@ -108,6 +108,7 @@ class McpServer(private val tools: Tools, var peer: Peer? = null) {
         val r = tools.call(name, args, confirm)
         return buildJsonObject {
             put("content", buildJsonArray { add(buildJsonObject { put("type", "text"); put("text", r.text) }) })
+            r.structured?.let { put("structuredContent", it) }
             put("isError", r.isError)
         }
     }

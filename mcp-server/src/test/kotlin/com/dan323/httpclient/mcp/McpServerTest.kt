@@ -86,6 +86,48 @@ class McpServerTest {
         assertEquals(System.getProperty("httpc.expectedVersion"), version)
     }
 
+    private fun rawResult(s: McpServer, tool: String, vararg args: Pair<String, String>): JsonObject {
+        val params = JsonObject(mapOf("name" to kotlinx.serialization.json.JsonPrimitive(tool),
+            "arguments" to JsonObject(args.associate { it.first to kotlinx.serialization.json.JsonPrimitive(it.second) })))
+        val request = JsonObject(mapOf("jsonrpc" to kotlinx.serialization.json.JsonPrimitive("2.0"), "id" to kotlinx.serialization.json.JsonPrimitive(++id),
+            "method" to kotlinx.serialization.json.JsonPrimitive("tools/call"), "params" to params))
+        return Json.parseToJsonElement(s.handle(request.toString())!!).jsonObject["result"]!!.jsonObject
+    }
+
+    @Test fun everyToolDeclaresAnOutputSchema() {
+        val reply = Json.parseToJsonElement(server().handle("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}""")!!).jsonObject
+        val tools = reply["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(listOf("list_requests", "list_environments", "analyze", "run", "run_all"), tools.map { it["name"]!!.jsonPrimitive.content })
+        tools.forEach { assertEquals("object", it["outputSchema"]!!.jsonObject["type"]!!.jsonPrimitive.content) }
+    }
+
+    @Test fun resultsCarryStructuredContentEqualToTheText() {
+        write("a.http", "### one\nGET BASE/echo\n")
+        val s = server()
+        for ((tool, key) in listOf("list_requests" to "requests", "list_environments" to "environments", "analyze" to "diagnostics", "run" to "results", "run_all" to "results")) {
+            val args = if (tool == "run") arrayOf("file" to "a.http", "request" to "1") else arrayOf("file" to "a.http")
+            val r = rawResult(s, tool, *args)
+            val structured = r["structuredContent"]!!.jsonObject
+            assertTrue(key in structured, "$tool has $key")
+            assertEquals(structured, Json.parseToJsonElement(r["content"]!!.jsonArray[0].jsonObject["text"]!!.jsonPrimitive.content), "$tool: text is the same JSON")
+        }
+        val run = rawResult(s, "run_all", "file" to "a.http")["structuredContent"]!!.jsonObject["results"]!!.jsonArray[0].jsonObject
+        assertEquals("200", run["status"]!!.jsonPrimitive.content)
+        assertEquals("true", run["remote"]!!.jsonObject["untrusted"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun refusalsAndFailuresHaveTextOnly() {
+        write("a.http", "### one\nGET BASE/echo\n")
+        val s = server()
+        val outsidePath = rawResult(s, "list_requests", "file" to "../nope.http")
+        assertEquals("true", outsidePath["isError"]!!.jsonPrimitive.content)
+        assertNull(outsidePath["structuredContent"])
+        write("w.http", "### w\nDELETE BASE/echo\n")
+        val refused = rawResult(s, "run_all", "file" to "w.http")
+        assertEquals("true", refused["isError"]!!.jsonPrimitive.content)
+        assertNull(refused["structuredContent"])
+    }
+
     @Test fun initializeListsToolsAndNotificationsGetNoReply() {
         val s = server()
         val init = Json.parseToJsonElement(s.handle("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}""")!!).jsonObject
