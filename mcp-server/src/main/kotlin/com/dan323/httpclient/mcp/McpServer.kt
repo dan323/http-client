@@ -136,10 +136,14 @@ class McpServer(private val tools: Tools, var peer: Peer? = null) {
         putJsonObject("error") { put("code", code); put("message", message) }
     }.toString()
 
-    private companion object {
+    internal companion object {
         val SUPPORTED = listOf("2025-06-18", "2025-03-26", "2024-11-05")
 
         /** The project version, from `httpc-mcp.properties` (filled in by the build); "unknown" when the file is missing. */
-        val VERSION: String = McpServer::class.java.getResourceAsStream("/httpc-mcp.properties")?.use { Properties().apply { load(it) }.getProperty("version") } ?: "unknown"
+        val VERSION: String = versionFrom(McpServer::class.java.getResourceAsStream("/httpc-mcp.properties"))
+
+        /** The `version` of a properties stream; "unknown" when there is no stream or no such key. */
+        internal fun versionFrom(stream: java.io.InputStream?): String =
+            stream?.use { Properties().apply { load(it) }.getProperty("version") } ?: "unknown"
     }
 }

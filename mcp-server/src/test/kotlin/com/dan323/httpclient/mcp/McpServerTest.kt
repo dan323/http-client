@@ -73,6 +73,12 @@ class McpServerTest {
 
     // ---- protocol
 
+    @Test fun versionFallsBackToUnknown() {
+        assertEquals("unknown", McpServer.versionFrom(null))
+        assertEquals("unknown", McpServer.versionFrom("other=1\n".byteInputStream()))
+        assertEquals("9.9.9", McpServer.versionFrom("version=9.9.9\n".byteInputStream()))
+    }
+
     @Test fun initializeReportsTheProjectVersion() {
         val s = server()
         val reply = Json.parseToJsonElement(s.handle("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}""")!!).jsonObject
