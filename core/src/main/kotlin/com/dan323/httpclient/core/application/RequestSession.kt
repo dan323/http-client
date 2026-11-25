@@ -53,8 +53,11 @@ class RequestSession(
 
     /** Substituted value to variable name for the request being run; guarded by [lock]. */
     private val substituted = LinkedHashMap<String, String>()
+    /** The last value [reference] returned for a plain part of an earlier response; an environment or file value of the same name is not it. */
+    private var plainReference: Pair<String, String>? = null
+
     private fun record(name: String, value: String) {
-        if (isPlainResponsePart(name)) return
+        if (plainReference == name to value) return
         substituted.putIfAbsent(value, name)
         callValues.putIfAbsent(value, name)
     }
@@ -253,7 +256,9 @@ class RequestSession(
         if (split <= 0) return null
         val response = responses[name.substring(0, split)] ?: return null
         val what = name.substring(split + ".response.".length)
-        return extractor.extract(response, what)
+        val value = extractor.extract(response, what)
+        plainReference = if (value != null && isPlainResponsePart(name)) name to value else null
+        return value
     }
 
     private companion object {
