@@ -67,7 +67,7 @@ Each result is also sent as MCP structured content, with a JSON Schema in the to
 
 ## 4. What stays hidden
 
-- **Secrets.** Values that the request uses (from your environment files, from `$env` variables and from earlier responses) are replaced by their variable name, for example `{{ "{{token}}" }}`, in the body, the headers and the error messages, even when the server echoes them back. This is best effort: a value the server changed (hashed, split or encoded another way) cannot be recognised.
+- **Secrets.** Values that the request uses (from your environment files, from `$env` variables, and values taken out of an earlier response's body or from its headers) are replaced by their variable name, for example `{{ "{{token}}" }}`, in the body, the headers and the error messages, even when the server echoes them back. The status of an earlier response, its whole body and its plain headers (`content-type`, `date` and similar) are shown as they are. This is best effort: a value the server changed (hashed, split or encoded another way) cannot be recognised.
 - **Environment files.** A request body can never be read from `http-client.env.json` or `http-client.private.env.json`.
 - **Your files and machine.** Requests with `# @proxy` are refused. Nothing is written: a `>>` or `>>!` line in a file saves nothing (the request still runs, and its result carries a `saveError` saying that saving is not available here; for a request that only ran because the one you asked for depends on it, nothing is reported), and a `<>` line keeps no link (the request runs and the result carries no error). `$env` is empty unless you pass `--allow-env`.
 

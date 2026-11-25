@@ -54,6 +54,7 @@ class RequestSession(
     /** Substituted value to variable name for the request being run; guarded by [lock]. */
     private val substituted = LinkedHashMap<String, String>()
     private fun record(name: String, value: String) {
+        if (isPlainResponsePart(name)) return
         substituted.putIfAbsent(value, name)
         callValues.putIfAbsent(value, name)
     }
@@ -70,6 +71,23 @@ class RequestSession(
     fun substitutedValues(): Map<String, String> = locked(readOnly = true) { LinkedHashMap(callValues) }
 
     private fun send(request: HttpRequest): HttpResponse = redirects.send(request)
+
+    /**
+     * `{{name.response.status}}`, `{{name.response.body.*}}` (the whole body) and a header from [PLAIN_HEADERS] of an
+     * earlier response are not hidden like a secret: showing them hides nothing the caller was not shown anyway, and
+     * hiding them would blank every `200` and `application/json` in a result. A value picked out of a body
+     * (`body.$.token`, an XPath) and any other header (a name cannot tell a credential from the rest) stay hidden.
+     */
+    private fun isPlainResponsePart(name: String): Boolean {
+        val split = name.indexOf(RESPONSE_PART)
+        if (split <= 0) return false
+        val what = name.substring(split + RESPONSE_PART.length)
+        return when {
+            what == "status" || what == "body.*" -> true
+            what.startsWith("headers.") -> what.substring("headers.".length).lowercase() in PLAIN_HEADERS
+            else -> false
+        }
+    }
 
     private inline fun <T> locked(readOnly: Boolean = false, block: () -> T): T {
         try {
@@ -236,5 +254,15 @@ class RequestSession(
         val response = responses[name.substring(0, split)] ?: return null
         val what = name.substring(split + ".response.".length)
         return extractor.extract(response, what)
+    }
+
+    private companion object {
+        const val RESPONSE_PART = ".response."
+
+        /** Response headers that never carry a credential and are only descriptive. Everything else is treated as a secret. */
+        val PLAIN_HEADERS = setOf(
+            "content-type", "content-length", "content-encoding", "content-language", "date", "server", "etag",
+            "last-modified", "cache-control", "vary", "accept-ranges", "connection", "allow", "age", "expires",
+        )
     }
 }
