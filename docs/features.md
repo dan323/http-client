@@ -112,20 +112,20 @@ GET {{host}}/users/{{user}}
 
 The `{{...}}` of a `.http` text can be checked without running anything, for the editors (the desktop app and the plugin underline and complete with it) and for `httpc --check`. Messages name variables and requests, never values.
 
-| Code | Severity | Meaning |
-|---|---|---|
-| `undefined-variable` | error | not a file variable, environment variable or known dynamic variable |
-| `unknown-request` | error | `{{x.response...}}` and no request is named `x` |
-| `request-not-run-yet` | warning | the request `x` first appears later in the file (works at run time only if it already ran in the same session) |
-| `self-reference` | warning | a request reads its own response (works on a later run in the same session, e.g. a polling request) |
-| `malformed-reference` | error | `x.response` with nothing after it, an unknown part (not `status`, `headers.Name`, `body...`) or an empty `headers.`/`body.` |
-| `invalid-dynamic-variable` | error | bad arguments, e.g. `$random.integer(5, 1)` |
-| `circular-variable` | error | file variables that refer to each other |
-| `unterminated-reference` | warning | `{{` with no `}}` after it |
-| `invalid-reference-text` | warning | `{{ a b }}`: not a reference, sent as written |
-| `duplicate-request-name` | warning | the later `# @name` repeats an earlier one |
-| `variable-defined-later` | warning | an `@a = {{b}}` value uses a file variable defined below it |
-| `parse-error` | error | the parser rejected a line (its message, on that line); one per `###` block |
+| Code                       | Severity | Meaning                                                                                                                      |
+|----------------------------|----------|------------------------------------------------------------------------------------------------------------------------------|
+| `undefined-variable`       | error    | not a file variable, environment variable or known dynamic variable                                                          |
+| `unknown-request`          | error    | `{{x.response...}}` and no request is named `x`                                                                              |
+| `request-not-run-yet`      | warning  | the request `x` first appears later in the file (works at run time only if it already ran in the same session)               |
+| `self-reference`           | warning  | a request's text reads its own response, which is cleared before the request is resolved (a `>>` path or `# @assert` can)    |
+| `malformed-reference`      | error    | `x.response` with nothing after it, an unknown part (not `status`, `headers.Name`, `body...`) or an empty `headers.`/`body.` |
+| `invalid-dynamic-variable` | error    | bad arguments, e.g. `$random.integer(5, 1)`                                                                                  |
+| `circular-variable`        | error    | file variables that refer to each other                                                                                      |
+| `unterminated-reference`   | warning  | `{{` with no `}}` after it                                                                                                   |
+| `invalid-reference-text`   | warning  | `{{ a b }}`: not a reference, sent as written                                                                                |
+| `duplicate-request-name`   | warning  | the later `# @name` repeats an earlier one                                                                                   |
+| `variable-defined-later`   | warning  | an `@a = {{b}}` value uses a file variable defined below it                                                                  |
+| `parse-error`              | error    | the parser rejected a line (its message, on that line); one per `###` block                                                  |
 
 A file that does not parse is still analysed: each rejected line is a `parse-error` and left out, so the other diagnostics keep working while a request is half typed. The rules are the run-time ones. Scanned: request and query lines, header values, body text, the path of a `< path` body or `>> path` / `>>! path` save, file variable values, `# @assert` expressions and the values of `@timeout`, `@no-redirect`, `@no-cookie-jar`, `@proxy`. Not scanned: comments, `# @name`, other settings. Never flagged, because they depend on run time: whether `body.$.x` finds anything, and `$env.X` / `$processEnv X`.
 
@@ -265,16 +265,16 @@ More (names modelled on the JetBrains HTTP Client and Postman):
 
 Requests run in file order. Once a **named** request has run, later requests can use its response:
 
-| Reference                         | Value                                |
-|-----------------------------------|--------------------------------------|
-| `{{login.response.body.$.token}}` | value at a JSONPath in the JSON body |
-| `{{login.response.body.*}}`       | whole body                           |
-| `{{login.response.headers.X-Id}}` | header value (case-insensitive); the first one if repeated |
+| Reference                                  | Value                                                                      |
+|--------------------------------------------|----------------------------------------------------------------------------|
+| `{{login.response.body.$.token}}`          | value at a JSONPath in the JSON body                                       |
+| `{{login.response.body.*}}`                | whole body                                                                 |
+| `{{login.response.headers.X-Id}}`          | header value (case-insensitive); the first one if repeated                 |
 | `{{login.response.headers.Set-Cookie[1]}}` | the second value of a repeated header (0-based; missing when out of range) |
-| `{{login.response.headers.Set-Cookie[*]}}` | all values of the header, joined with a newline |
-| `{{login.response.status}}`       | status code                          |
-| `{{page.response.body.//a/@href}}` | XPath over an XML body (also `body.xpath:count(//a)`) |
-| `{{page.response.body.regex:id=(\d+)}}` | regex over the body: group 1 if present, else the whole match |
+| `{{login.response.headers.Set-Cookie[*]}}` | all values of the header, joined with a newline                            |
+| `{{login.response.status}}`                | status code                                                                |
+| `{{page.response.body.//a/@href}}`         | XPath over an XML body (also `body.xpath:count(//a)`)                      |
+| `{{page.response.body.regex:id=(\d+)}}`    | regex over the body: group 1 if present, else the whole match              |
 
 The same expressions are what assertions use. The body is decoded with the `charset` of the response's `Content-Type` (UTF-8 when absent or unknown). JSONPath supports a subset: `$`, `.key`, `['key']`, `[index]`; objects and arrays are returned as JSON text. XPath runs with secure processing (no DOCTYPE, no external access, no extension functions); XPath and regex stop after 2 seconds and find nothing, and at most 4 XPath evaluations run at a time in the whole process (a fifth fails fast and finds nothing). Referencing a request that has not run, or a path that does not exist, is an error.
 
@@ -290,20 +290,20 @@ httpc <file.http> --check [--env NAME] [--var NAME=VALUE]
 httpc convert-bruno <collection-dir> --out <new-dir>
 ```
 
-| Option        | Effect                                               |
-|---------------|------------------------------------------------------|
-| `--env NAME`  | use variables from `NAME` in the nearest `http-client.env.json` (see Environments); without it no environment is used |
-| `--request X` | run the request named `X`, or the Nth (1-based), plus the named requests it reads responses from (transitively), in file order |
-| `--allow-env N` | let `{{$env.N}}` read these OS environment variables (repeatable) |
-| `--allow-file-root DIR` | also let `< path` bodies be read from `DIR` (repeatable) |
-| `--list`      | list requests and exit (cannot be combined with `--report-*`, `--quiet`, `--var`, `--timeout`, `--fail-on-http-error`, `--output`, `--check`) |
-| `--check`     | look for problems without sending anything (see below); only `--env` and `--var` may be added |
-| `--report-json FILE` / `--report-junit FILE` | write a run report (see Run reports) |
-| `--quiet`     | no per-request output on stdout (see below) |
-| `--output FILE` | write the raw response body of the single selected request to `FILE` |
-| `--var NAME=VALUE` | set a variable, overriding file and environment variables (repeatable) |
-| `--timeout DURATION` | total time limit for requests without `# @timeout`: `30`, `500ms`, `45s`, `2m` (default 60 s) |
-| `--fail-on-http-error` | exit 1 when a selected request gets a response with status >= 400 |
+| Option                                       | Effect                                                                                                                                        |
+|----------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
+| `--env NAME`                                 | use variables from `NAME` in the nearest `http-client.env.json` (see Environments); without it no environment is used                         |
+| `--request X`                                | run the request named `X`, or the Nth (1-based), plus the named requests it reads responses from (transitively), in file order                |
+| `--allow-env N`                              | let `{{$env.N}}` read these OS environment variables (repeatable)                                                                             |
+| `--allow-file-root DIR`                      | also let `< path` bodies be read from `DIR` (repeatable)                                                                                      |
+| `--list`                                     | list requests and exit (cannot be combined with `--report-*`, `--quiet`, `--var`, `--timeout`, `--fail-on-http-error`, `--output`, `--check`) |
+| `--check`                                    | look for problems without sending anything (see below); only `--env` and `--var` may be added                                                 |
+| `--report-json FILE` / `--report-junit FILE` | write a run report (see Run reports)                                                                                                          |
+| `--quiet`                                    | no per-request output on stdout (see below)                                                                                                   |
+| `--output FILE`                              | write the raw response body of the single selected request to `FILE`                                                                          |
+| `--var NAME=VALUE`                           | set a variable, overriding file and environment variables (repeatable)                                                                        |
+| `--timeout DURATION`                         | total time limit for requests without `# @timeout`: `30`, `500ms`, `45s`, `2m` (default 60 s)                                                 |
+| `--fail-on-http-error`                       | exit 1 when a selected request gets a response with status >= 400                                                                             |
 
 For each request the output is the status line with timing, the response headers, then the body. After a response, each assertion is printed as `PASS ...` or `FAIL ... -- message` (`NOT RUN ...` when the request failed), and a total line `Assertions: N passed, M failed, K not run` follows the run. After a run the CLI prints a summary such as `3 requests, 2 passed, 1 failed in 1.2s` to **stderr** (so stdout stays the response data); it counts every request that ran, prerequisites included. It is not printed for `--list` or when the run cannot start.
 

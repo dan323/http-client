@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `httpc-mcp` reported the version `0.1.0` in its `initialize` reply whatever the release; it now reports the project version (read from `httpc-mcp.properties`, filled in by the build). 0.6.0 still reports `0.1.0`.
+
+### Changed
+
+- MCP server: tool results are sent as MCP structured content (`structuredContent`, with an `outputSchema` per tool; the same JSON stays in the text part). A refusal or failure still has text only.
+
 ## [0.6.0] - 2026-11-22
 
 Highlights:

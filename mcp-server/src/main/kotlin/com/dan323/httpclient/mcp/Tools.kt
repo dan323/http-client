@@ -35,8 +35,12 @@ import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.Path
 
-/** What a tool call hands back: [text] is shown to the agent; [isError] marks a refusal or a failure. */
-data class ToolResult(val text: String, val isError: Boolean = false)
+/**
+ * What a tool call hands back: [text] is shown to the agent; [isError] marks a refusal or a failure. A call that got as far
+ * as producing a result also carries it as [structured] (MCP `structuredContent`, described by the tool's `outputSchema`);
+ * [text] then holds the same JSON, for clients that read only text. A refusal or a failure has text only.
+ */
+data class ToolResult(val text: String, val isError: Boolean = false, val structured: JsonObject? = null)
 
 class UnknownToolException(name: String) : RuntimeException("Unknown tool: $name")
 
@@ -67,6 +71,7 @@ class Tools(
     private fun tool(name: String, description: String, vararg params: String) = buildJsonObject {
         put("name", name)
         put("description", description)
+        put("outputSchema", OutputSchemas.of(name))
         putJsonObject("inputSchema") {
             put("type", "object")
             putJsonObject("properties") {
@@ -96,14 +101,14 @@ class Tools(
             val path = paths.resolve(file)
             val parsed = HttpFileParser().parse(Files.readString(path))
             when (name) {
-                "list_requests" -> ToolResult(render(listRequests(parsed)))
-                "list_environments" -> ToolResult(render(listEnvironments(path)))
-                "analyze" -> ToolResult(render(analyze(path, args.string("environment"))))
+                "list_requests" -> result(listRequests(parsed))
+                "list_environments" -> result(listEnvironments(path))
+                "analyze" -> result(analyze(path, args.string("environment")))
                 else -> {
                     val vars = variables(path, args.string("environment"))
                     redactor = ResponseRedactor(knownValues(vars))
                     val (json, failed) = if (name == "run") run(path, parsed, args.string("request"), vars, confirm) else runAll(path, parsed, vars, confirm)
-                    ToolResult(render(json), isError = failed)
+                    result(json, isError = failed)
                 }
             }
         } catch (e: ToolFailure) {
@@ -142,6 +147,8 @@ class Tools(
     private class ToolFailure(message: String) : RuntimeException(message)
 
     private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+
+    private fun result(json: JsonObject, isError: Boolean = false) = ToolResult(render(json), isError, json)
 
     private fun render(e: JsonElement) = pretty.encodeToString(JsonElement.serializer(), e)
 
@@ -192,7 +199,7 @@ class Tools(
             ?: throw ToolFailure("No such request: $selector")
     }
 
-    private fun run(path: Path, file: HttpFile, selector: String?, vars: Map<String, String>, confirm: ((String) -> Boolean)?): Pair<JsonElement, Boolean> {
+    private fun run(path: Path, file: HttpFile, selector: String?, vars: Map<String, String>, confirm: ((String) -> Boolean)?): Pair<JsonObject, Boolean> {
         val current = select(file.requests, selector)
         val chain = withDependencies(file.requests, listOf(current))
         precheck(chain, vars)
@@ -202,7 +209,7 @@ class Tools(
         return outcomesJson(outcomes, redactorFor(session.substitutedValues())) { it.request === current } to outcomes.any { it is RunOutcome.Failure }
     }
 
-    private fun runAll(path: Path, file: HttpFile, vars: Map<String, String>, confirm: ((String) -> Boolean)?): Pair<JsonElement, Boolean> {
+    private fun runAll(path: Path, file: HttpFile, vars: Map<String, String>, confirm: ((String) -> Boolean)?): Pair<JsonObject, Boolean> {
         precheck(file.requests, vars)
         confirmWrites(file.requests, confirm)
         val session = session(path)

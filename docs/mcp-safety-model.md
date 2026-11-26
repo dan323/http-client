@@ -4,12 +4,12 @@ Written before the code, as [PLAN.md](PLAN.md) asks. The `mcp-server` module let
 
 ## Who is trusted
 
-| Party | Trust |
-|---|---|
-| The user who starts the server and its flags | Trusted. Every permission below is granted by a start flag, never by a tool call. |
-| The agent calling the tools | Not trusted. It can be steered by text it reads (prompt injection), so it gets only what a flag allows. |
-| `.http` files | Not trusted: a downloaded file can aim a request anywhere or read a file. The existing rules apply (`FileAccessPolicy`, opt-in `$env`). |
-| Response bodies and headers | Not trusted. They go back to the agent as data, and may carry instructions aimed at it. |
+| Party                                        | Trust                                                                                                                                   |
+|----------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|
+| The user who starts the server and its flags | Trusted. Every permission below is granted by a start flag, never by a tool call.                                                       |
+| The agent calling the tools                  | Not trusted. It can be steered by text it reads (prompt injection), so it gets only what a flag allows.                                 |
+| `.http` files                                | Not trusted: a downloaded file can aim a request anywhere or read a file. The existing rules apply (`FileAccessPolicy`, opt-in `$env`). |
+| Response bodies and headers                  | Not trusted. They go back to the agent as data, and may carry instructions aimed at it.                                                 |
 
 ## Rules
 
@@ -21,17 +21,17 @@ Written before the code, as [PLAN.md](PLAN.md) asks. The `mcp-server` module let
 5. **No writes by the server.** `>> path`, `>>!` and `<> path` report "not available here" and write nothing: `SessionFactory.create(persistence = false)` leaves the saver and the history recorder out, and the MCP server uses it. The server does not edit environments, convert collections or write reports. Its only side effect is the HTTP requests of rule 3.
 6. **No ambient authority.** `$env` is empty unless the user passes `--allow-env NAME`; the agent cannot extend it, and `HTTPC_ALLOW_ENV` / `-Dhttpclient.allowEnv` are ignored by this server. Stdio transport only, no listening port.
 7. **Bounded output and work.** A body is cut at 64 KB (with a note saying so); the HTTP client itself stops reading a response at 8 MB, so a server cannot fill the heap. The caps count every request sent, chain dependencies and redirect hops included: 100 requests per call and 5 minutes in total, enforced as one deadline for the call (the redirect deadline is per chain, so it is not enough). A `# @timeout` in the file is clamped to the per-request limit (default 60 s), so a file cannot ask for `60m`: `SessionFactory.create(maxTimeoutMillis = ...)` clamps it before the redirect follower builds its chain deadline (so the limit covers the whole chain), and `GuardedHttpExecutor` clamps each hop again as a backstop. The limits are start flags with these defaults.
-8. **Responses are labelled.** A result wraps the body as data from a remote server, so a client can show it as untrusted. The server never follows an instruction found in a response.
+8. **Responses are labelled.** A result wraps the body as data from a remote server, so a client can show it as untrusted. The one exception is the message of a failed assertion: it sits outside `remote` and can quote up to 200 characters of the response value it checked. The server never follows an instruction found in a response.
 
 ## Tools
 
-| Tool | Does | Safety notes |
-|---|---|---|
-| `list_requests(file)` | Names, methods and URLs as written | Reads inside the roots only |
-| `list_environments(file)` | Environment names | Rule 4: no values |
-| `analyze(file, environment?)` | `VariableAnalysis` diagnostics | Like `httpc --check`: sends nothing |
-| `run(file, request, environment?)` | Runs one request (and the ones it chains on) | Rules 2, 3, 4, 7 |
-| `run_all(file, environment?)` | Runs the file in order | Pre-checks every request first (rule 3) |
+| Tool                               | Does                                         | Safety notes                            |
+|------------------------------------|----------------------------------------------|-----------------------------------------|
+| `list_requests(file)`              | Names, methods and URLs as written           | Reads inside the roots only             |
+| `list_environments(file)`          | Environment names                            | Rule 4: no values                       |
+| `analyze(file, environment?)`      | `VariableAnalysis` diagnostics               | Like `httpc --check`: sends nothing     |
+| `run(file, request, environment?)` | Runs one request (and the ones it chains on) | Rules 2, 3, 4, 7                        |
+| `run_all(file, environment?)`      | Runs the file in order                       | Pre-checks every request first (rule 3) |
 
 ## Build order
 

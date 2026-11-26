@@ -21,11 +21,11 @@ The user guide is a small Jekyll site in [`guide/`](guide/) (home, command line,
 
 Principle: a screenshot is either generated from the code at every build, or it is dated and has a checklist. Never an undocumented hand-made image.
 
-| Interface | How | Why |
-|---|---|---|
-| Desktop app | Generated. A test in `desktop` renders the real composables (`App`, `ResponsePane`) headless to a PNG using the sample files and a fixed set of outcomes, as `AppUiTest` already does without capturing. A Gradle task `:user-guide:desktopScreenshots` copies the PNGs into the site. | The UI changes often (polish, env editor F17, history F13). Generated images cannot go stale. |
-| Command line | Not an image. Real output captured by running `httpc` against the mock server (`samples/`) and pasted as code blocks by a Gradle task. | Text is searchable, copyable and exact. |
-| IntelliJ plugin | Manual. A checklist file lists each shot (id, what to open, IDE version, theme, size); images live in `docs/guide/assets/plugin/` and each page states the IDE version they were taken with. | The plugin cannot run headless; this is the one manual part. |
+| Interface       | How                                                                                                                                                                                                                                                                                    | Why                                                                                           |
+|-----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
+| Desktop app     | Generated. A test in `desktop` renders the real composables (`App`, `ResponsePane`) headless to a PNG using the sample files and a fixed set of outcomes, as `AppUiTest` already does without capturing. A Gradle task `:user-guide:desktopScreenshots` copies the PNGs into the site. | The UI changes often (polish, env editor F17, history F13). Generated images cannot go stale. |
+| Command line    | Not an image. Real output captured by running `httpc` against the mock server (`samples/`) and pasted as code blocks by a Gradle task.                                                                                                                                                 | Text is searchable, copyable and exact.                                                       |
+| IntelliJ plugin | Manual. A checklist file lists each shot (id, what to open, IDE version, theme, size); images live in `docs/guide/assets/plugin/` and each page states the IDE version they were taken with.                                                                                           | The plugin cannot run headless; this is the one manual part.                                  |
 
 Decisions for T29:
 

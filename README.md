@@ -17,4 +17,4 @@ Kotlin (JVM 21), Gradle. `./gradlew test` runs the tests. Coverage and mutation 
 
 ## Documentation
 
-[getting started](docs/getting-started.md) · [features](docs/features.md) · [architecture](docs/architecture.md) · [design notes](docs/design-notes.md) · [differences from JetBrains](docs/jetbrains-compatibility.md) · [user guide](docs/user-guide-plan.md) · [plan](docs/PLAN.md) · [changelog](CHANGELOG.md)
+[getting started](docs/getting-started.md) · [features](docs/features.md) · [architecture](docs/architecture.md) · [what is stable](docs/stability.md) · [design notes](docs/design-notes.md) · [differences from JetBrains](docs/jetbrains-compatibility.md) · [user guide](docs/user-guide-plan.md) · [plan](docs/PLAN.md) · [changelog](CHANGELOG.md)

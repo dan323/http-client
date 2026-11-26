@@ -16,3 +16,11 @@ application {
     mainClass.set("com.dan323.httpclient.mcp.MainKt")
     applicationName = "httpc-mcp"
 }
+
+// the server reports the project version in `initialize` (httpc-mcp.properties is filled in here)
+tasks.processResources {
+    inputs.property("version", project.version.toString())
+    filesMatching("httpc-mcp.properties") { expand("version" to project.version.toString()) }
+}
+
+tasks.test { systemProperty("httpc.expectedVersion", project.version.toString()) }

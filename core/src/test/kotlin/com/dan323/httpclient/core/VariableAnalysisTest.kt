@@ -186,6 +186,12 @@ class VariableAnalysisTest {
         assertEquals(2, d.range.column)
     }
 
+    @Test fun aSavePathAndAnAssertionCanReadTheirOwnRequestsResponse() {
+        val text = "# @name foo\n# @assert status == {{foo.response.status}}\nGET http://h\n\n>> out/{{foo.response.status}}.txt"
+        assertEquals(emptyList(), analyze(text).diagnostics.map { it.code })
+        assertEquals(2, analyze(text).findRequestUsages("foo").count { it.kind == OccurrenceKind.REQUEST_REFERENCE })
+    }
+
     @Test fun parseErrorIsReported() {
         val d = analyze("GTE http://h").diagnostics.single()
         assertEquals(DiagnosticCodes.PARSE_ERROR, d.code)

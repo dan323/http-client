@@ -61,7 +61,7 @@ Modules loaded only through reflection or `ServiceLoader` may not be detected; a
 
 Verified: headless Compose UI tests (`AppUiTest`) click through opening requests, choosing an environment, Send with
 chained prerequisites, error display and the shortcuts. By hand (release `0.5.0-rc1`): the Windows MSI installs, starts
-and sends requests. The macOS DMG and Linux DEB are built by the release workflow but have not been installed or run.
+and sends requests. The macOS DMG and Linux DEB (release `0.6.0`) were installed and run by hand too.
 Known UI problems are listed in [../docs/known-limitations.md](../docs/known-limitations.md).
 
 ## Layout
