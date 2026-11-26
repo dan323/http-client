@@ -61,7 +61,7 @@ The agent gives file paths relative to a root, for example `api/orders.http`. On
 
 Ask in plain words, for example: *"Check `api/orders.http` and run the `create-order` request against the `dev` environment."*
 
-A result lists, for each request, the status and the assertions that passed or failed. What came from the server (headers and body) is grouped under `remote` and marked `untrusted`, because a response is data from someone else's server and may contain text that tries to give the agent instructions. A body is cut at 64 KB and says so when it is.
+A result lists, for each request, the status and the assertions that passed or failed. What came from the server (headers and body) is grouped under `remote` and marked `untrusted`, because a response is data from someone else's server and may contain text that tries to give the agent instructions. The message of a failed assertion is outside `remote` and can quote up to 200 characters of the value it checked (`..., but was <value>`), so treat it as data too. A body is cut at 64 KB and says so when it is.
 
 Each result is also sent as MCP structured content, with a JSON Schema in the tool's `outputSchema`, so a client can read the fields without parsing text (the same JSON is in the text part for clients that only read text). A refusal or a failure has text only.
 

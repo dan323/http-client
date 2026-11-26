@@ -117,7 +117,7 @@ The `{{...}}` of a `.http` text can be checked without running anything, for the
 | `undefined-variable`       | error    | not a file variable, environment variable or known dynamic variable                                                          |
 | `unknown-request`          | error    | `{{x.response...}}` and no request is named `x`                                                                              |
 | `request-not-run-yet`      | warning  | the request `x` first appears later in the file (works at run time only if it already ran in the same session)               |
-| `self-reference`           | warning  | a request reads its own response, which is cleared before the request is resolved, so this fails on every run                |
+| `self-reference`           | warning  | a request's text reads its own response, which is cleared before the request is resolved (a `>>` path or `# @assert` can)    |
 | `malformed-reference`      | error    | `x.response` with nothing after it, an unknown part (not `status`, `headers.Name`, `body...`) or an empty `headers.`/`body.` |
 | `invalid-dynamic-variable` | error    | bad arguments, e.g. `$random.integer(5, 1)`                                                                                  |
 | `circular-variable`        | error    | file variables that refer to each other                                                                                      |

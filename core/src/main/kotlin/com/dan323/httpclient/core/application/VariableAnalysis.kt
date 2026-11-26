@@ -251,8 +251,11 @@ class VariableAnalysis private constructor(
     }
 
     private sealed interface Context
-    /** Text of the request with this index in the file. */
-    private class InRequest(val index: Int, val request: RequestTemplate) : Context
+    /**
+     * Text of the request with this index in the file. [afterResponse] is true for a `>>` / `>>!` save path and a
+     * `# @assert` line, which are resolved after the request's response is stored, so they can read that response.
+     */
+    private class InRequest(val index: Int, val request: RequestTemplate, val afterResponse: Boolean = false) : Context
     /** The value of file variable [owner]. */
     private class InValue(val owner: String) : Context {
         /** True for the last definition of the name: the value requests at the end of the file see. */
@@ -344,7 +347,8 @@ class VariableAnalysis private constructor(
                         if (g != null && owner != null) {
                             if (key == "assert") {
                                 val expr = parser.stripTrailingComment(g.value)
-                                if (expr.contains("{{")) pending += Segment(base + g.range.first, expr, owner)
+                                // resolved after the response is stored, like a save path
+                                if (expr.contains("{{")) pending += Segment(base + g.range.first, expr, InRequest(owner.index, owner.request, afterResponse = true))
                             } else if (key.lowercase() in RESOLVED_SETTINGS) {
                                 val v = g.value.trim()
                                 if (v.contains("{{")) pending += Segment(base + g.range.first, v, owner)
@@ -403,7 +407,7 @@ class VariableAnalysis private constructor(
                         handler[j - bodyFrom] = true
                         if (!HttpLineSyntax.endsScript(t.substring(t.indexOf("{%") + 2))) inScript = true
                     }
-                    HttpLineSyntax.isResponseHandler(t) || HttpLineSyntax.isResponseRedirect(t) -> handler[j - bodyFrom] = true
+                    HttpLineSyntax.isResponseHandler(t) || HttpLineSyntax.isResponseRedirect(t) || HttpLineSyntax.isResponseSave(t) -> handler[j - bodyFrom] = true
                 }
             }
             var lastBody = -1
@@ -415,7 +419,7 @@ class VariableAnalysis private constructor(
                 val save = HttpLineSyntax.responseSave(raw.trim()) ?: continue
                 if (save.path.isEmpty()) continue
                 val marker = leadOf(j) + if (save.overwrite) 3 else 2
-                segment(lines.start(j) + raw.indexOf(save.path, marker), save.path, owner)
+                segment(lines.start(j) + raw.indexOf(save.path, marker), save.path, InRequest(owner.index, owner.request, afterResponse = true))
             }
             if (lastBody < 0) return
             val first = lines.text(bodyFrom).trim()
@@ -529,7 +533,7 @@ class VariableAnalysis private constructor(
             val first = firstIndexOfName[request]
             when {
                 first == null -> add(DiagnosticCodes.UNKNOWN_REQUEST, Severity.ERROR, "Unknown request '$request': no request in this file has that @name", prefix)
-                ctx is InRequest && first == ctx.index ->
+                ctx is InRequest && first == ctx.index && !ctx.afterResponse ->
                     add(DiagnosticCodes.SELF_REFERENCE, Severity.WARNING, "Request '$request' cannot read its own response: it is cleared before the request is resolved, on every run", prefix)
                 ctx is InRequest && first > ctx.index ->
                     add(DiagnosticCodes.REQUEST_NOT_RUN_YET, Severity.WARNING, "Request '$request' comes later in the file, so its response is only available here if it already ran in this session", prefix)

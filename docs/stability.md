@@ -25,8 +25,8 @@
 ### MCP server (`httpc-mcp`)
 
 - The start flags in the [guide](guide/agents.md#5-allow-more) and their defaults. The server stays read-only, local and confined to `--root` unless a flag says otherwise; no flag will be silently loosened.
-- The tools `list_requests`, `list_environments`, `analyze`, `run` and `run_all`, with their argument names (`file`, `request`, `environment`) and the result of each as structured content, described by the tool's `outputSchema` (the same JSON is in the text part). Fields may be added; none is removed or changes type.
-- In a result: everything from the remote server stays under `remote` with `"untrusted": true`; secrets stay replaced by their variable name; `isError` is true when a request failed or was refused.
+- The tools `list_requests`, `list_environments`, `analyze`, `run` and `run_all`, with their argument names (`file`, `request`, `environment`) and the result of each as structured content, described by the tool's `outputSchema` (the same JSON is in the text part). Fields may be added; none is removed or changes type. A refused call, or one the tool could not complete, has text only and no structured content.
+- In a result: the headers and body from the remote server stay under `remote` with `"untrusted": true` (the message of a failed assertion sits outside it and can quote up to 200 characters of the response value it checked); secrets stay replaced by their variable name; `isError` is true when a request failed or was refused.
 - The safety rules in [mcp-safety-model.md](mcp-safety-model.md).
 
 ## Not stable
