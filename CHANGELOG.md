@@ -7,6 +7,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- MCP server: a chained request no longer blanks the earlier responses it refers to. The status (`{{login.response.status}}`), the whole body (`{{login.response.body.*}}`) and the plain headers (`content-type`, `content-length`, `content-encoding`, `content-language`, `date`, `server`, `etag`, `last-modified`, `cache-control`, `vary`, `accept-ranges`, `connection`, `allow`, `age`, `expires`) of an earlier response are shown as they are; values picked out of a body (`body.$.token`, an XPath) and every other header are still replaced by their variable name. `RequestSession.substitutedValues()` no longer lists the shown ones. Before, a `whole-body` request made the whole `login` body show as `{{login.response.body.*}}` and every `application/json` as `{{login.response.headers.content-type}}`.
+
 - `httpc-mcp` reported the version `0.1.0` in its `initialize` reply whatever the release; it now reports the project version (read from `httpc-mcp.properties`, filled in by the build). 0.6.0 still reports `0.1.0`.
 
 ### Changed

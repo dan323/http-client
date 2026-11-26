@@ -116,6 +116,14 @@ class McpServerTest {
         assertEquals("true", run["remote"]!!.jsonObject["untrusted"]!!.jsonPrimitive.content)
     }
 
+    @Test fun theStatusOfAnEarlierResponseIsShownInTheEchoedBody() {
+        write("d.http", "# @name first\nGET BASE/echo\n\n###\nGET BASE/echo?s={{first.response.status}}\n")
+        val (text, failed) = call(server(), "run_all", "file" to "d.http")
+        assertFalse(failed, text)
+        assertTrue("s=200" in text, text)
+        // the label of an unnamed request is its URL as written, so the placeholder text is there; the echoed body must carry the value
+    }
+
     @Test fun refusalsAndFailuresHaveTextOnly() {
         write("a.http", "### one\nGET BASE/echo\n")
         val s = server()

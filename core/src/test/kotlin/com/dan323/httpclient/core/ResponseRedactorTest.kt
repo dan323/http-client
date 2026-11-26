@@ -61,6 +61,41 @@ class ResponseRedactorTest {
         assertFalse("tok-9" in ResponseRedactor(session.substitutedValues()).redact(response.header("X-T")!!))
     }
 
+    @Test fun statusWholeBodyAndPlainHeadersOfAChainedResponseAreNotHidden() {
+        val login = RequestTemplate("login", "POST", "http://h/login", listOf(Header("Content-Type", "application/json")))
+        val use = RequestTemplate(null, "GET", "http://h/me", listOf(
+            Header("X-S", "{{login.response.status}}"), Header("X-Type", "{{login.response.headers.content-type}}"), Header("X-B", "{{login.response.body.*}}"),
+        ))
+        session.runChained(listOf(login, use), use, emptyMap())
+        assertEquals(emptyMap(), session.substitutedValues())
+    }
+
+    @Test fun anEnvironmentValueNamedLikeAResponsePartIsStillHidden() {
+        val use = RequestTemplate(null, "GET", "http://h/me", listOf(Header("X-S", "{{login.response.status}}")))
+        session.run(use, mapOf("login.response.status" to "env-secret"))
+        assertEquals(mapOf("env-secret" to "login.response.status"), session.substitutedValues())
+    }
+
+    @Test fun anEnvironmentValueEqualToAnEarlierPlainResponsePartIsStillHiddenInTheSameSession() {
+        val login = RequestTemplate("login", "POST", "http://h/login")
+        val first = RequestTemplate(null, "GET", "http://h/me", listOf(Header("X-S", "{{login.response.status}}")))
+        session.runChained(listOf(login, first), first, emptyMap())
+        assertEquals(emptyMap(), session.substitutedValues())
+        val use = RequestTemplate(null, "GET", "http://h/me", listOf(Header("X-S", "{{login.response.status}}")))
+        session.run(use, mapOf("login.response.status" to "200"))
+        assertEquals(mapOf("200" to "login.response.status"), session.substitutedValues())
+    }
+
+    @Test fun otherHeadersAndPickedOutBodyValuesOfAChainedResponseAreStillHidden() {
+        val login = RequestTemplate("login", "POST", "http://h/login", listOf(Header("Set-Cookie", "sid=abc"), Header("X-Api-Key", "k-1"), Header("X-Req", "plain")))
+        val use = RequestTemplate(null, "GET", "http://h/me", listOf(
+            Header("A", "{{login.response.headers.set-cookie}}"), Header("B", "{{login.response.headers.x-api-key}}"),
+            Header("C", "{{login.response.body.$.token}}"), Header("D", "{{login.response.headers.x-req}}"),
+        ))
+        session.runChained(listOf(login, use), use, emptyMap())
+        assertEquals(mapOf("sid=abc" to "login.response.headers.set-cookie", "k-1" to "login.response.headers.x-api-key", "tok-9" to "login.response.body.$.token", "plain" to "login.response.headers.x-req"), session.substitutedValues())
+    }
+
     @Test fun valuesOfEveryRequestOfACallAreKeptAndTheNextCallStartsFresh() {
         val a = RequestTemplate(null, "GET", "http://h/{{one}}")
         val b = RequestTemplate(null, "GET", "http://h/{{two}}")
