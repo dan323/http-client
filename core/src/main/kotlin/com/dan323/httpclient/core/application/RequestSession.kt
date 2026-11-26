@@ -57,7 +57,10 @@ class RequestSession(
     private var plainReference: Pair<String, String>? = null
 
     private fun record(name: String, value: String) {
-        if (plainReference == name to value) return
+        // Consumed here: each lookup reports once, so a later environment value with the same name and value is still recorded.
+        val plain = plainReference
+        plainReference = null
+        if (plain == name to value) return
         substituted.putIfAbsent(value, name)
         callValues.putIfAbsent(value, name)
     }

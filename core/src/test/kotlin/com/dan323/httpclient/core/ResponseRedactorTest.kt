@@ -76,6 +76,16 @@ class ResponseRedactorTest {
         assertEquals(mapOf("env-secret" to "login.response.status"), session.substitutedValues())
     }
 
+    @Test fun anEnvironmentValueEqualToAnEarlierPlainResponsePartIsStillHiddenInTheSameSession() {
+        val login = RequestTemplate("login", "POST", "http://h/login")
+        val first = RequestTemplate(null, "GET", "http://h/me", listOf(Header("X-S", "{{login.response.status}}")))
+        session.runChained(listOf(login, first), first, emptyMap())
+        assertEquals(emptyMap(), session.substitutedValues())
+        val use = RequestTemplate(null, "GET", "http://h/me", listOf(Header("X-S", "{{login.response.status}}")))
+        session.run(use, mapOf("login.response.status" to "200"))
+        assertEquals(mapOf("200" to "login.response.status"), session.substitutedValues())
+    }
+
     @Test fun otherHeadersAndPickedOutBodyValuesOfAChainedResponseAreStillHidden() {
         val login = RequestTemplate("login", "POST", "http://h/login", listOf(Header("Set-Cookie", "sid=abc"), Header("X-Api-Key", "k-1"), Header("X-Req", "plain")))
         val use = RequestTemplate(null, "GET", "http://h/me", listOf(
