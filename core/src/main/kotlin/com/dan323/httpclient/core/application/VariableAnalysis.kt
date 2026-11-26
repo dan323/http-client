@@ -530,7 +530,7 @@ class VariableAnalysis private constructor(
             when {
                 first == null -> add(DiagnosticCodes.UNKNOWN_REQUEST, Severity.ERROR, "Unknown request '$request': no request in this file has that @name", prefix)
                 ctx is InRequest && first == ctx.index ->
-                    add(DiagnosticCodes.SELF_REFERENCE, Severity.WARNING, "Request '$request' cannot read its own response the first time it runs (it can on a later run in the same session)", prefix)
+                    add(DiagnosticCodes.SELF_REFERENCE, Severity.WARNING, "Request '$request' cannot read its own response: it is cleared before the request is resolved, on every run", prefix)
                 ctx is InRequest && first > ctx.index ->
                     add(DiagnosticCodes.REQUEST_NOT_RUN_YET, Severity.WARNING, "Request '$request' comes later in the file, so its response is only available here if it already ran in this session", prefix)
             }
