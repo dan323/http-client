@@ -125,6 +125,7 @@ The `{{...}}` of a `.http` text can be checked without running anything, for the
 | `invalid-reference-text`   | warning  | `{{ a b }}`: not a reference, sent as written                                                                                |
 | `duplicate-request-name`   | warning  | the later `# @name` repeats an earlier one                                                                                   |
 | `variable-defined-later`   | warning  | an `@a = {{b}}` value uses a file variable defined below it                                                                  |
+| `dropped-header`           | warning  | a `Host`, `Content-Length`, `Connection`, `Expect` or `Upgrade` header: the HTTP client sets it itself, so it is not sent    |
 | `parse-error`              | error    | the parser rejected a line (its message, on that line); one per `###` block                                                  |
 
 A file that does not parse is still analysed: each rejected line is a `parse-error` and left out, so the other diagnostics keep working while a request is half typed. The rules are the run-time ones. Scanned: request and query lines, header values, body text, the path of a `< path` body or `>> path` / `>>! path` save, file variable values, `# @assert` expressions and the values of `@timeout`, `@no-redirect`, `@no-cookie-jar`, `@proxy`. Not scanned: comments, `# @name`, other settings. Never flagged, because they depend on run time: whether `body.$.x` finds anything, and `$env.X` / `$processEnv X`.
@@ -138,7 +139,7 @@ A file that does not parse is still analysed: each rejected line is a `parse-err
 - `# @proxy host:port`: send the request through that HTTP proxy. Forms: `host`, `host:port`, `http://host:port`, IPv6 as `[::1]:8080`; the port defaults to 80. Other schemes (`https://`, `socks://`) and credentials (`user:pass@host`) are rejected.
 - `# @no-cookie-jar`: neither send nor store cookies for this request (see below). Same optional `true`/`false` value as `@no-redirect`.
 
-The JDK client controls `Host`, `Content-Length`, `Connection`, `Expect` and `Upgrade` itself, so user-set headers with these names are dropped silently.
+The JDK client controls `Host`, `Content-Length`, `Connection`, `Expect` and `Upgrade` itself, so a header with one of these names written in a request is not sent. It is not silent: the run prints a warning for each (the CLI on stderr, the MCP server in `warnings`), and `--check` and the editors report it as `dropped-header`.
 
 ### Cookie jar
 

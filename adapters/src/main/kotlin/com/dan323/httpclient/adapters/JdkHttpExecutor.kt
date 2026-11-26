@@ -1,6 +1,7 @@
 package com.dan323.httpclient.adapters
 
 import com.dan323.httpclient.core.application.CookieJar
+import com.dan323.httpclient.core.application.HttpLineSyntax
 import com.dan323.httpclient.core.application.RedirectFollower
 import com.dan323.httpclient.core.domain.Header
 import com.dan323.httpclient.core.domain.HttpRequest
@@ -74,10 +75,6 @@ class JdkHttpExecutor(
         derived.clear()
     }
 
-    // Restricted by java.net.http; the JDK sets these itself. A user-set header with one of these names is
-    // dropped (documented in docs/features.md).
-    private val restricted = setOf("host", "content-length", "connection", "expect", "upgrade")
-
     /**
      * Redirects are followed here by [RedirectFollower] (no cookie jar), not by the JDK client: an explicit
      * `Cookie`, `Authorization` or `Proxy-Authorization` header is dropped when a redirect leaves the origin,
@@ -90,7 +87,8 @@ class JdkHttpExecutor(
         val builder = java.net.http.HttpRequest.newBuilder(URI.create(request.url))
             .method(request.method, request.body?.let(BodyPublishers::ofByteArray) ?: BodyPublishers.noBody())
         request.options.timeoutMillis?.let { builder.timeout(Duration.ofMillis(it)) }
-        request.headers.filter { it.name.lowercase() !in restricted }.forEach { builder.header(it.name, it.value) }
+        // Restricted by java.net.http (the JDK sets them itself): dropped here; the parser and `--check` warn about them.
+        request.headers.filter { !HttpLineSyntax.isClientControlledHeader(it.name) }.forEach { builder.header(it.name, it.value) }
 
         val start = System.nanoTime()
         // Client set-up (it may resolve a slow @proxy host) runs inside the future too, so the deadline and

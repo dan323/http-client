@@ -166,6 +166,22 @@ class HttpFileParserTest {
     }
 
     @Test
+    fun `a header the HTTP client sets itself warns with its line, in any case, and is still parsed`() {
+        val file = parser.parse("GET http://x/\nhost: a\nX-A: 1\nCONTENT-LENGTH : 3\nConnection: close\nExpect: 100-continue\nUpgrade: h2c\n")
+        assertEquals(
+            listOf(
+                "Line 2: header 'host' is set by the HTTP client itself, so this one is not sent",
+                "Line 4: header 'CONTENT-LENGTH' is set by the HTTP client itself, so this one is not sent",
+                "Line 5: header 'Connection' is set by the HTTP client itself, so this one is not sent",
+                "Line 6: header 'Expect' is set by the HTTP client itself, so this one is not sent",
+                "Line 7: header 'Upgrade' is set by the HTTP client itself, so this one is not sent",
+            ),
+            file.warnings,
+        )
+        assertEquals(6, file.requests.single().headers.size)
+    }
+
+    @Test
     fun `an ignored setting in a block without a request does not warn`() {
         val file = parser.parse("GET http://x/\n\n###\n# @no-log\n")
         assertEquals(emptyList(), file.warnings)

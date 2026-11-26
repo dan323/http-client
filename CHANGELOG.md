@@ -5,6 +5,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A `Host`, `Content-Length`, `Connection`, `Expect` or `Upgrade` header written in a request is no longer dropped silently: the run warns about it (CLI stderr, MCP `warnings`), and `--check`, the desktop app and the plugin report it as `dropped-header`. The header is still not sent (the JDK client sets it itself).
+
 ### Fixed
 
 - `httpc-mcp` reported the version `0.1.0` in its `initialize` reply whatever the release; it now reports the project version (read from `httpc-mcp.properties`, filled in by the build). 0.6.0 still reports `0.1.0`.

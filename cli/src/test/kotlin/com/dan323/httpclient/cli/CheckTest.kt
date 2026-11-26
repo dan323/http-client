@@ -44,6 +44,15 @@ class CheckTest {
         assertContains(r.err, "1 error, 0 warnings")
     }
 
+    @Test fun `a header the HTTP client sets itself is a warning that does not fail`() {
+        val f = file("GET http://x/a\nHost: example.com\n")
+        val r = cli(f, "--check")
+        assertEquals(0, r.code, r.err)
+        assertContains(r.out, "$f:2:1: warning: ")
+        assertContains(r.out, "[dropped-header]")
+        assertContains(r.err, "0 errors, 1 warning")
+    }
+
     @Test fun `the chosen environment defines its variables, none does not`() {
         Files.writeString(dir.resolve("http-client.env.json"), """{"dev":{"base":"http://secret-host"}}""")
         val f = file("GET {{base}}/b\n")
