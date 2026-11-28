@@ -7,7 +7,7 @@ Related: [competitive-gaps.md](competitive-gaps.md) (what to add), [PLAN.md](PLA
 ## Execution and security
 
 - **File confinement can be raced.** Someone with write access inside an allowed folder can swap a parent directory for a symlink between the check and the read.
-- **Public Suffix List is a snapshot.** Cookie `Domain` checks use the list bundled in `core` (2026-11-06); suffixes added later are not recognised until the file is refreshed (procedure in [design-notes.md](design-notes.md#cookie-jar)). Internationalised (non-ASCII) host names are compared as written, not converted to punycode.
+- **Public Suffix List is a snapshot.** Cookie `Domain` checks use the list bundled in `core` (2026-11-06); suffixes added later are not recognised until the file is refreshed (procedure in [design-notes.md](design-notes.md#cookie-jar)).
 
 ## CLI
 

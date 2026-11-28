@@ -72,7 +72,7 @@ class CookieJar(private val clock: () -> Instant = Instant::now) {
             val k = attr.substringBefore('=').trim().lowercase()
             val v = attr.substringAfter('=', "").trim()
             when (k) {
-                "domain" -> domain = v.trimStart('.').lowercase().ifEmpty { null }
+                "domain" -> domain = PublicSuffixList.toAscii(v.trimStart('.')).lowercase().ifEmpty { null }
                 "path" -> path = v.takeIf { it.startsWith("/") }
                 "secure" -> secure = true
                 "max-age" -> maxAge = parseMaxAge(v) ?: maxAge
@@ -141,12 +141,15 @@ class CookieJar(private val clock: () -> Instant = Instant::now) {
         null
     }
 
-    /** `URI.host` is null for names such as `my_service`, so fall back to the authority; IPv6 brackets are removed. */
+    /**
+     * `URI.host` is null for names such as `my_service` or `bücher.de`, so fall back to the authority; IPv6 brackets are
+     * removed. Non-ASCII labels become punycode, so the host compares with a `Domain` written either way.
+     */
     private fun hostOf(uri: URI): String? {
         val h = uri.host ?: uri.rawAuthority?.substringAfterLast('@')?.let { a ->
             if (a.startsWith("[")) a.substringBefore(']') + "]" else a.substringBefore(':')
         }
-        return h?.removeSurrounding("[", "]")?.lowercase()?.takeIf { it.isNotEmpty() }
+        return h?.removeSurrounding("[", "]")?.let(PublicSuffixList::toAscii)?.lowercase()?.takeIf { it.isNotEmpty() }
     }
 
     private fun domainMatches(host: String, domain: String) = host == domain || (!isIpLiteral(host) && host.endsWith(".$domain"))
