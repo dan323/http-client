@@ -40,6 +40,9 @@ class JsonSettingsStore internal constructor(
     private val lock = Any()
     private var unusableFileSeen = false
     private var unreadable = false
+    // Allowlists read from a file that was unreadable at load: the app never saw them (its own are null, 'never set'),
+    // so every later save keeps them, not only the first one, until the app sets its own.
+    private var recoveredAllowlists: Allowlists? = null
 
     /** What reading the file gave: [settings] (null when it is unusable), a [warning], and whether it was a transient [ioError]. */
     private class Read(val settings: DesktopSettings?, val warning: String? = null, val ioError: Boolean = false)
@@ -79,8 +82,9 @@ class JsonSettingsStore internal constructor(
                 if (r.ioError) return "Could not save settings: the existing settings file cannot be read (${r.warning}); it was left untouched."
                 unreadable = false
                 unusableFileSeen = r.settings == null
-                r.settings?.let { toWrite = merge(it, settings) }
+                r.settings?.let { toWrite = merge(it, settings); recoveredAllowlists = it.allowlists }
             }
+            if (toWrite.allowlists == null) toWrite = toWrite.copy(allowlists = recoveredAllowlists)
             ensureDir()
             if (unusableFileSeen) {
                 backUp()

@@ -58,6 +58,49 @@ class RunControllerTest {
         assertEquals(5, sent.size)
     }
 
+    @Test fun invalidatingDropsEvenARunningSessionSoTheNextRunGetsANewOne() {
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val blocking = object : HttpExecutor {
+            override fun execute(request: HttpRequest): HttpResponse {
+                entered.countDown(); release.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                return HttpResponse(200, emptyList(), ByteArray(0), 1)
+            }
+        }
+        var created = 0
+        val gated = RunController(locator) { created++; Result.success(RequestSession(RequestRunner(blocking, FileReader { ByteArray(0) }), blocking, json)) }
+        fun runInBackground(): Thread = Thread { gated.run(file, "GET http://h/a\n", RunTarget.All, dev) }.also { it.start() }
+
+        // resetChain keeps a running session: it is cached again after the run, with what it was allowed when created
+        var t = runInBackground()
+        entered.await(10, java.util.concurrent.TimeUnit.SECONDS)
+        gated.resetChain()
+        release.countDown(); t.join(10_000)
+        assertEquals(1, gated.cachedSessions)
+
+        // invalidateSessions drops it although it is running: the run finishes, the next one gets a new session
+        val entered2 = java.util.concurrent.CountDownLatch(1)
+        val release2 = java.util.concurrent.CountDownLatch(1)
+        val blocking2 = object : HttpExecutor {
+            override fun execute(request: HttpRequest): HttpResponse {
+                entered2.countDown(); release2.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                return HttpResponse(200, emptyList(), ByteArray(0), 1)
+            }
+        }
+        val gated2 = RunController(locator) { created++; Result.success(RequestSession(RequestRunner(blocking2, FileReader { ByteArray(0) }), blocking2, json)) }
+        var outcome: RunResult? = null
+        t = Thread { outcome = gated2.run(file, "GET http://h/a\n", RunTarget.All, dev) }.also { it.start() }
+        entered2.await(10, java.util.concurrent.TimeUnit.SECONDS)
+        gated2.invalidateSessions()
+        assertEquals(0, gated2.cachedSessions)
+        release2.countDown(); t.join(10_000)
+        assertIs<RunResult.Completed>(outcome)          // the running request finished normally
+        assertEquals(0, gated2.cachedSessions)            // and its session was not cached again
+        val before = created
+        gated2.run(file, "GET http://h/a\n", RunTarget.All, dev)
+        assertEquals(before + 1, created)
+    }
+
     @Test fun changedVariablesStartAFreshSessionAndDropTheStaleOne() {
         controller.run(file, text, RunTarget.AtIndex(1), dev)
         vars = mapOf("base" to "http://other")

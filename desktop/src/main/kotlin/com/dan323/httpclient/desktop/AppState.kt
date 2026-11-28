@@ -60,9 +60,17 @@ class AppState(
     var settingsDraft by mutableStateOf<SettingsDraft?>(null)
         private set
 
-    /** Shows the Settings panel with what is saved, or closes it (discarding what was typed). */
+    /**
+     * Shows the Settings panel with what is saved, or closes it (discarding what was typed). One form at a time: it does
+     * not open over the environment editor (whose unsaved edits it would hide), and an editor still loading is dropped.
+     */
     fun showSettings(show: Boolean) {
-        settingsDraft = if (show) SettingsDraft(allowlists) else null
+        if (!show) { settingsDraft = null; return }
+        synchronized(envEditorLock) {
+            if (envEditor != null) return
+            envEditorGeneration++   // a load that started before cannot open the editor behind the panel
+            settingsDraft = SettingsDraft(allowlists)
+        }
     }
 
     /**
@@ -80,7 +88,7 @@ class AppState(
                 settings?.update { it.withAllowlists(checked.allowlists) }
                 settingsDraft = null
                 if (changed) {
-                    runner.resetChain()
+                    runner.invalidateSessions()   // running ones too: none made with the old lists is used again
                     notice = SETTINGS_SAVED_NOTICE
                     noticeId++
                 }
@@ -309,7 +317,10 @@ class AppState(
     fun showEnvironmentEditor(show: Boolean) {
         val folderFile = file?.toAbsolutePath()
         if (!show || folderFile == null) { closeEnvironmentEditor(); return }
-        val generation = synchronized(envEditorLock) { ++envEditorGeneration }
+        val generation = synchronized(envEditorLock) {
+            if (settingsDraft != null) return   // one form at a time (see showSettings)
+            ++envEditorGeneration
+        }
         val editor = try {
             EnvironmentEditorState(EnvironmentEditor(environmentStores.storeFor(folderFile))).also { it.load() }
         } catch (e: Exception) {

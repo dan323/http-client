@@ -257,6 +257,8 @@ class JsonSettingsStoreTest {
         st.load(); failing = false
         assertNull(st.save(DesktopSettings(window = WindowSettings(1, 2))))   // never set here: the stored lists stay
         assertEquals(granted, store().load().settings.allowlists)
+        assertNull(st.save(DesktopSettings(window = WindowSettings(3, 4))))   // and on every later save, not only the first
+        assertEquals(granted, store().load().settings.allowlists)
         failing = true
         val st2 = JsonSettingsStore(dir, AtomicReportWriter()) { if (failing) throw java.io.IOException("locked") else Files.readString(it) }
         st2.load(); failing = false

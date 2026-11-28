@@ -103,6 +103,22 @@ class ClientStateTest {
         assertEquals(5, sent.size)
     }
 
+    @Test fun aChangeOfAccessDuringARunLetsItFinishButNoLaterRunReusesItsSession() {
+        val s = state()
+        s.environmentChoice = dev
+        gate = CountDownLatch(1); entered = CountDownLatch(1)
+        val t = thread { s.run(file, text, 5) }
+        assertTrue(entered!!.await(10, TimeUnit.SECONDS))
+        s.accessChanged()
+        gate!!.countDown(); t.join(10_000)
+        assertFalse(s.lastReport.message?.startsWith("Chain reset") ?: false)   // quiet: the report of the run stays
+        assertEquals(1, created)
+        gate = null; entered = null
+        s.run(file, text, 5)
+        assertEquals(2, created)                                                // a new session, made with the new access
+        assertEquals(listOf("http://h/login", "http://h/me", "http://h/login", "http://h/me"), sent.toList())
+    }
+
     @Test fun secondRunWhileRunningIsRefusedAndKeepsTheReport() {
         val s = state()
         gate = CountDownLatch(1); entered = CountDownLatch(1)

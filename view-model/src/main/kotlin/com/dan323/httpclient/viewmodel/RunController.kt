@@ -69,6 +69,12 @@ class RunController(
     /** Forgets remembered responses, so the next run sends the chained requests again. */
     fun resetChain() = synchronized(acquireLock) { sessions.keys.removeAll { !running.containsKey(it) } }
 
+    /**
+     * Drops every session, running ones included: a run in progress finishes with its session, but no later run reuses
+     * it. For a change of what sessions may read (the allowlists), unlike [resetChain], which keeps running sessions.
+     */
+    fun invalidateSessions() = synchronized(acquireLock) { sessions.clear() }
+
     /** Drops the remembered responses of [file] (it changed on disk or in the editor). Sessions that are running stay. */
     fun forget(file: Path) {
         val abs = file.toAbsolutePath()

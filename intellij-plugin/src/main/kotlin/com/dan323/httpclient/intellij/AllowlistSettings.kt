@@ -38,9 +38,8 @@ class AllowlistSettings : PersistentStateComponent<AllowlistSettings.Saved> {
         it.fileRoots = allowlists.fileRoots.toMutableList()
     }
 
-    override fun loadState(saved: Saved) {
-        allowlists = Allowlists(saved.envNames.toList(), saved.fileRoots.toList())
-    }
+    // Also called when the file changes on disk while the IDE runs: through [update], so the projects drop their sessions.
+    override fun loadState(saved: Saved) = update(Allowlists(saved.envNames.toList(), saved.fileRoots.toList()))
 
     /** Saves [granted]; when it changed, the listeners are told (the projects forget their remembered responses). */
     fun update(granted: Allowlists) {

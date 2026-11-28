@@ -129,6 +129,59 @@ class SettingsTest {
         assertEquals(Allowlists(), store.stored.allowlists)
     }
 
+    @Test fun anEnvironmentEditorStillLoadingWhenSettingsOpenIsDroppedAndTheFormsNeverStack() {
+        val blocking = java.util.concurrent.atomic.AtomicBoolean(false)
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val stores = com.dan323.httpclient.core.port.out.EnvironmentFileStoreLocator { f ->
+            if (blocking.get()) { entered.countDown(); release.await(10, java.util.concurrent.TimeUnit.SECONDS) }
+            com.dan323.httpclient.adapters.UpwardEnvironmentLocator().storeFor(f)
+        }
+        AppState(environmentStores = stores).use { state ->
+            state.open(file())
+            blocking.set(true)
+            val loading = Thread { state.showEnvironmentEditor(true) }.also { it.start() }
+            assertTrue(entered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            state.showSettings(true)
+            release.countDown(); loading.join(10_000)
+            assertNull(state.envEditor)                    // the late load did not open behind the panel
+            assertTrue(state.settingsDraft != null)
+            blocking.set(false)
+            state.showEnvironmentEditor(true)              // refused while Settings is open
+            assertNull(state.envEditor)
+            state.showSettings(false)
+            state.showEnvironmentEditor(true)
+            assertTrue(state.envEditor != null)
+            state.showSettings(true)                       // refused while the editor is open: its edits stay
+            assertNull(state.settingsDraft)
+        }
+    }
+
+    @Test fun savingWhileARequestRunsLetsItFinishButTheNextRunUsesTheNewLists() {
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        server.createContext("/slow") { ex ->
+            entered.countDown(); release.await(10, java.util.concurrent.TimeUnit.SECONDS)
+            val b = "slow".toByteArray(); ex.sendResponseHeaders(200, b.size.toLong()); ex.responseBody.use { it.write(b) }
+        }
+        val store = MemoryStore(DesktopSettings(allowlists = Allowlists(fileRoots = listOf(outside.toString()))))
+        val f = dir.resolve("b.http").also {
+            Files.writeString(it, "GET http://127.0.0.1:${server.address.port}/slow\n\n###\nPOST http://127.0.0.1:${server.address.port}/\n\n< ${outside.resolve("body.txt")}\n")
+        }
+        AppState(settings = SettingsPersistence(store, debounceMillis = 0)).use { state ->
+            state.open(f)
+            val running = Thread { state.run(all = true) }.also { it.start() }
+            assertTrue(entered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            state.showSettings(true)
+            state.settingsDraft!!.rootsText = ""          // revoke while the first request is in flight
+            assertTrue(state.saveSettings())
+            release.countDown(); running.join(10_000)
+            state.selected = 1
+            state.run(all = false)
+            assertIs<RunOutcome.Failure>(state.outcomes.last())   // the session of the run in flight was not reused
+        }
+    }
+
     @Test fun thePanelIsOpenedEditedAndSavedThroughTheUi() = runComposeUiTest {
         val state = AppState()
         try {

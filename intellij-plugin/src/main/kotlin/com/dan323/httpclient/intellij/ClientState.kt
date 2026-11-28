@@ -130,6 +130,15 @@ class ClientState(
         if (!running.get()) publish(lastReport.copy(message = "Chain reset: the next run sends the requests it depends on again."))
     }
 
+    /**
+     * What sessions may read changed (the allowlists): drops every session, running ones included, so no later run uses
+     * one made before the change. The running request finishes; its report stays.
+     */
+    fun accessChanged() {
+        controller.invalidateSessions()
+        synchronized(lastTexts) { lastTexts.clear() }
+    }
+
     /** Drops everything remembered about [file] (it was deleted or closed). */
     fun forget(file: Path) {
         controller.forget(file)

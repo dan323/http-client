@@ -65,7 +65,7 @@ class HttpClientService(private val project: Project) : Disposable, PersistentSt
 
     init {
         // Sessions were made with the old allowlists: the next run creates new ones (and sends the chained requests again).
-        allowlists.onChange(this) { clientState.resetChain() }
+        allowlists.onChange(this) { clientState.accessChanged() }
     }
 
     init {

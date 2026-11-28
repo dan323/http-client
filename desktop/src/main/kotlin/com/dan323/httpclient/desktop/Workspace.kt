@@ -70,6 +70,9 @@ class DesktopRunner(
     /** Forgets remembered responses, so the next run sends the chained requests again. */
     fun resetChain() = controller.resetChain()
 
+    /** Drops every session, running ones included, after [allowlists] changed: no later run uses one made with the old lists. */
+    fun invalidateSessions() = controller.invalidateSessions()
+
     /**
      * Runs the request at [index] in [text] (with the requests it chains on, unless they already ran for this file
      * and environment), or every request when [index] is null. Blocking; [onOutcome] is called as each request
