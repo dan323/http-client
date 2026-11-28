@@ -1,11 +1,21 @@
 package com.dan323.httpclient.core
 
+import com.dan323.httpclient.core.port.out.Allowlists
 import com.dan323.httpclient.core.port.out.DesktopSettings
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class DesktopSettingsTest {
+    @Test fun allowlistsAreNeverSetUntilChosenAndAnEmptyChoiceIsKept() {
+        assertNull(DesktopSettings().allowlists)
+        val granted = DesktopSettings().withAllowlists(Allowlists(listOf("TOKEN"), listOf("/data")))
+        assertEquals(Allowlists(listOf("TOKEN"), listOf("/data")), granted.allowlists)
+        assertEquals(listOf("TOKEN"), granted.allowlists!!.envNames)
+        assertEquals(listOf("/data"), granted.allowlists!!.fileRoots)
+        assertEquals(Allowlists(), granted.withAllowlists(Allowlists()).allowlists)
+    }
+
     @Test fun openFilesAreKeptInOrderWithoutDuplicatesAndBounded() {
         val s = DesktopSettings().withOpenFiles(listOf("a", "b", "a"), "b")
         assertEquals(listOf("a", "b"), s.openFiles)

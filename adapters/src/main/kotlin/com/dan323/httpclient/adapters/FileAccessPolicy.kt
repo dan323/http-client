@@ -72,17 +72,33 @@ class FileAccessPolicy(
             return path
         }
 
-        /** Policy from [ALLOW_PROPERTY], else [ALLOW_ENV_VAR]. For front ends without command-line flags. Throws [FileAccessConfigException]. */
+        /** Why [entry] cannot be an allowed root of a front end's settings (as [validateRoot] with an absolute path required), or null when it can. */
+        fun rootProblem(entry: String): String? =
+            try { validateRoot(entry, requireAbsolute = true); null } catch (e: FileAccessConfigException) { e.message }
+
+        /**
+         * Policy from [ALLOW_PROPERTY], else [ALLOW_ENV_VAR], plus [settingsRoots] (the folders allowed in a front end's
+         * settings; each must be absolute, as in [parseRoots]). For front ends without command-line flags; [hint] is the
+         * advice shown when a path is refused. Throws [FileAccessConfigException].
+         */
         fun fromConfiguration(
             property: (String) -> String? = System::getProperty,
             env: (String) -> String? = System::getenv,
-        ): FileAccessPolicy = FileAccessPolicy(parseRoots(property(ALLOW_PROPERTY) ?: env(ALLOW_ENV_VAR)))
+            settingsRoots: List<String> = emptyList(),
+            hint: String = DEFAULT_HINT,
+        ): FileAccessPolicy = FileAccessPolicy(
+            parseRoots(property(ALLOW_PROPERTY) ?: env(ALLOW_ENV_VAR)) +
+                settingsRoots.filter { it.isNotBlank() }.map { validateRoot(it.trim(), requireAbsolute = true) },
+            hint,
+        )
 
         /** Like [fromConfiguration], but a bad setting is returned as a failure carrying the message to show the user. */
         fun load(
             property: (String) -> String? = System::getProperty,
             env: (String) -> String? = System::getenv,
+            settingsRoots: List<String> = emptyList(),
+            hint: String = DEFAULT_HINT,
         ): Result<FileAccessPolicy> =
-            try { Result.success(fromConfiguration(property, env)) } catch (e: FileAccessConfigException) { Result.failure(e) }
+            try { Result.success(fromConfiguration(property, env, settingsRoots, hint)) } catch (e: FileAccessConfigException) { Result.failure(e) }
     }
 }

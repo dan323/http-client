@@ -4,6 +4,7 @@ import com.dan323.httpclient.core.application.DynamicVariables
 import com.dan323.httpclient.core.application.RequestRunner
 import com.dan323.httpclient.core.application.RequestSession
 import com.dan323.httpclient.core.application.RequestTimeouts
+import com.dan323.httpclient.core.port.out.Allowlists
 import com.dan323.httpclient.core.port.out.HistoryStore
 import com.dan323.httpclient.core.port.out.HttpExecutor
 import java.nio.file.Path
@@ -54,11 +55,21 @@ class SessionFactory(
 
     /**
      * Like [create] with the policy and the default timeout from the system properties / environment variables
-     * ([FileAccessPolicy.load], [DefaultTimeout.load]); a bad setting comes back as a failure carrying the message for the user.
+     * ([FileAccessPolicy.load], [DefaultTimeout.load]), plus what the user allowed in the front end's settings
+     * ([allowlists]); [fileHint] and [envHint] say where to allow more. A bad setting comes back as a failure carrying
+     * the message for the user.
      */
-    fun createConfigured(httpFile: Path): Result<RequestSession> =
-        FileAccessPolicy.load().mapCatching { policy ->
-            create(httpFile, policy, defaultTimeoutMillis = DefaultTimeout.load().getOrThrow())
+    fun createConfigured(
+        httpFile: Path,
+        allowlists: Allowlists = Allowlists(),
+        fileHint: String = FileAccessPolicy.DEFAULT_HINT,
+        envHint: String = SystemEnvironmentVariables.DEFAULT_HINT,
+    ): Result<RequestSession> =
+        FileAccessPolicy.load(settingsRoots = allowlists.fileRoots, hint = fileHint).mapCatching { policy ->
+            create(
+                httpFile, policy, allowEnv = allowlists.envNames.map { it.trim() }.filter { it.isNotEmpty() }.toSet(), envHint = envHint,
+                defaultTimeoutMillis = DefaultTimeout.load().getOrThrow(),
+            )
         }
 
     override fun close() { (executor as? AutoCloseable)?.close() }

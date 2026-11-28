@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -119,12 +121,23 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
         if (state.file == null) Text("No file open", fontWeight = FontWeight.Bold)   // with a file open its tab shows the name
         RecentFilesMenu(state)
         EnvironmentPicker(state)
-        OutlinedButton(
-            enabled = state.file != null,
-            contentPadding = CompactButtonPadding,
-            onClick = { val show = state.envEditor == null; scope.launch(Dispatchers.IO) { state.showEnvironmentEditor(show) } },
-            modifier = Modifier.testTag("env-edit-toggle"),
-        ) { Text(when { state.envEditor == null -> "Edit environments"; state.envEditor?.dirty == true -> "Discard and close editor"; else -> "Close environment editor" }, maxLines = 1) }
+        // Wraps: the editor button's label grows while environments are edited.
+        @OptIn(ExperimentalLayoutApi::class)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // One form at a time: each would hide the other's unsaved edits.
+            OutlinedButton(
+                enabled = state.file != null && state.settingsDraft == null,
+                contentPadding = CompactButtonPadding,
+                onClick = { val show = state.envEditor == null; scope.launch(Dispatchers.IO) { state.showEnvironmentEditor(show) } },
+                modifier = Modifier.testTag("env-edit-toggle"),
+            ) { Text(when { state.envEditor == null -> "Edit environments"; state.envEditor?.dirty == true -> "Discard and close editor"; else -> "Close environment editor" }, maxLines = 1) }
+            OutlinedButton(
+                enabled = state.envEditor == null,
+                contentPadding = CompactButtonPadding,
+                onClick = { state.showSettings(state.settingsDraft == null) },
+                modifier = Modifier.testTag("settings-toggle"),
+            ) { Text(when { state.settingsDraft == null -> "Settings…"; state.settingsDraft?.dirty == true -> "Discard settings"; else -> "Close settings" }, maxLines = 1) }
+        }
         HorizontalDivider()
         state.parseError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         LazyColumn(Modifier.weight(1f)) {
@@ -279,6 +292,11 @@ fun RowScope.App(state: AppState, parent: Frame? = null) {
 
     // Right: responses.
     Column(Modifier.weight(1.2f).fillMaxHeight().padding(12.dp)) {
+        val settingsDraft = state.settingsDraft
+        if (settingsDraft != null) {
+            SettingsPanel(state, settingsDraft, Modifier.fillMaxSize())
+            return@Column
+        }
         val envEditor = state.envEditor
         if (envEditor != null) {
             EnvironmentPanel(state, envEditor, Modifier.fillMaxSize())

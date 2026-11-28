@@ -10,6 +10,14 @@ data class WindowSettings(
 )
 
 /**
+ * Access the user granted in the settings of the desktop app or the IDE plugin, on top of the system property and the
+ * environment variable: the OS variables `{{$env.NAME}}` may read ([envNames]) and the folders `< path` bodies and
+ * `>> path` saves may use besides the `.http` file's own ([fileRoots], as written; checked when a session is created).
+ * Kept only in the user's own settings, never in a file that comes with a project.
+ */
+data class Allowlists(val envNames: List<String> = emptyList(), val fileRoots: List<String> = emptyList())
+
+/**
  * What the desktop app remembers between runs. Only paths, names and window geometry: never variable values,
  * headers, bodies or any other secret. Paths are plain text (canonical absolute paths as written by the app).
  *
@@ -20,6 +28,7 @@ data class WindowSettings(
  * @property activeFile the one of [openFiles] that was on screen, or null
  * @property folder the folder shown in the folder view, or null (then the folder of the file on screen is shown)
  * @property folderOpen whether the folder view is shown
+ * @property allowlists the access granted in the Settings dialog; null when it was never set (then nothing is added)
  */
 data class DesktopSettings(
     val lastFile: String? = null,
@@ -31,6 +40,7 @@ data class DesktopSettings(
     val activeFile: String? = null,
     val folder: String? = null,
     val folderOpen: Boolean = false,
+    val allowlists: Allowlists? = null,
 ) {
     /** Marks [path] as the last opened file and moves it to the front of the recent files. */
     fun opened(path: String): DesktopSettings = copy(
@@ -53,6 +63,8 @@ data class DesktopSettings(
     fun withFolder(path: String?): DesktopSettings = copy(folder = path)
 
     fun withFolderOpen(on: Boolean): DesktopSettings = copy(folderOpen = on)
+
+    fun withAllowlists(allowlists: Allowlists): DesktopSettings = copy(allowlists = allowlists)
 
     /** Remembers the open tabs ([files] in tab order, at most [MAX_OPEN_FILES]) and which one is on screen. */
     fun withOpenFiles(files: List<String>, active: String?): DesktopSettings {

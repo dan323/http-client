@@ -22,6 +22,9 @@
         <editorNotificationProvider implementation="com.dan323.httpclient.intellij.EnvironmentEditorHeaderProvider"/>
         <toolWindow id="HTTP Response" anchor="bottom"
                     factoryClass="com.dan323.httpclient.intellij.ResponseToolWindowFactory"/>
+        <applicationConfigurable parentId="tools" id="com.dan323.httpclient.allowlists"
+                                 displayName="HTTP Client: Allowed Access"
+                                 instance="com.dan323.httpclient.intellij.AllowlistConfigurable"/>
     </extensions>
 
     <actions>

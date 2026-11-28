@@ -1,5 +1,6 @@
 package com.dan323.httpclient.adapters
 
+import com.dan323.httpclient.core.port.out.Allowlists
 import com.dan323.httpclient.core.port.out.DesktopSettings
 import com.dan323.httpclient.core.port.out.LoadedSettings
 import com.dan323.httpclient.core.port.out.SettingsStore
@@ -103,6 +104,7 @@ class JsonSettingsStore internal constructor(
         activeFile = if (mine.openFiles != null) mine.activeFile else stored.activeFile,
         folder = mine.folder ?: stored.folder,
         folderOpen = mine.folderOpen,
+        allowlists = mine.allowlists ?: stored.allowlists,   // emptied lists of mine win: only null means 'never set'
     )
 
     private fun ensureDir() {
@@ -143,6 +145,9 @@ class JsonSettingsStore internal constructor(
     )
 
     @Serializable
+    private data class AllowlistsDto(val envNames: List<String> = emptyList(), val fileRoots: List<String> = emptyList())
+
+    @Serializable
     private data class SettingsDto(
         val version: Int = -1,
         val lastFile: String? = null,
@@ -154,6 +159,7 @@ class JsonSettingsStore internal constructor(
         val activeFile: String? = null,
         val folder: String? = null,
         val folderOpen: Boolean = false,
+        val allowlists: AllowlistsDto? = null,
     ) {
         init { require(version >= 1) { "not a settings file" } }
 
@@ -169,6 +175,7 @@ class JsonSettingsStore internal constructor(
                 activeFile = tabs?.activeFile,
                 folder = folder,
                 folderOpen = folderOpen,
+                allowlists = allowlists?.let { Allowlists(it.envNames, it.fileRoots) },
             )
         }
 
@@ -181,6 +188,7 @@ class JsonSettingsStore internal constructor(
                     DesktopSettings.bounded(s.recentFiles),
                     s.recordHistory,
                     tabs?.openFiles, tabs?.activeFile, s.folder, s.folderOpen,
+                    s.allowlists?.let { AllowlistsDto(it.envNames, it.fileRoots) },
                 )
             }
         }
