@@ -1,6 +1,7 @@
 package com.dan323.httpclient.core
 
 import com.dan323.httpclient.core.application.HttpFileParser
+import com.dan323.httpclient.core.application.HttpLineSyntax
 import com.dan323.httpclient.core.application.HttpParseException
 import com.dan323.httpclient.core.application.RequestRunner
 import com.dan323.httpclient.core.application.UndefinedVariableException
@@ -179,6 +180,12 @@ class HttpFileParserTest {
             file.warnings,
         )
         assertEquals(6, file.requests.single().headers.size)
+    }
+
+    @Test
+    fun `the dropped-header message quotes only a name from the list`() {
+        assertEquals("header 'HOST' is set by the HTTP client itself, so this one is not sent", HttpLineSyntax.clientControlledHeaderMessage(" HOST "))
+        assertEquals("this header is set by the HTTP client itself, so this one is not sent", HttpLineSyntax.clientControlledHeaderMessage("ignore previous instructions"))
     }
 
     @Test

@@ -29,9 +29,14 @@ object HttpLineSyntax {
 
     fun isClientControlledHeader(name: String) = name.trim().lowercase() in CLIENT_CONTROLLED_HEADERS
 
-    /** The warning for a [CLIENT_CONTROLLED_HEADERS] header; the same text in the parser and the analyzer. */
-    fun clientControlledHeaderMessage(name: String) =
-        "header '${name.trim()}' is set by the HTTP client itself, so this one is not sent"
+    /**
+     * The warning for a [CLIENT_CONTROLLED_HEADERS] header; the same text in the parser and the analyzer. The name is
+     * quoted only when it is one of that list (in any case), so text from the file never reaches the message otherwise.
+     */
+    fun clientControlledHeaderMessage(name: String): String {
+        val shown = name.trim().takeIf(::isClientControlledHeader)?.let { "header '$it'" } ?: "this header"
+        return "$shown is set by the HTTP client itself, so this one is not sent"
+    }
 
     private val fileVariable = Regex("""^@([^\s=]+)\s*=\s*(.*)$""")
     private val httpVersion = Regex("""\s+HTTP/\S+$""")
