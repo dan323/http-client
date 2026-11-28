@@ -46,6 +46,42 @@ class SessionFactoryTest {
         }
     }
 
+    @Test fun createConfiguredAddsTheSettingsAllowlistsAndHints() {
+        val outside = Files.createTempDirectory("granted")
+        Files.writeString(outside.resolve("body.txt"), "granted-body")
+        val other = Files.createTempFile("other", ".txt")
+        val dir = Files.createTempDirectory("factory")
+        val file = dir.resolve("a.http")
+        val text = "POST http://h/\nX-Path: {{\$env.PATH}}\n\n< ${outside.resolve("body.txt")}\n\n###\nPOST http://h/\n\n< $other\n\n###\nGET http://h/{{\$env.NOT_GRANTED_X}}\n"
+        val sent = mutableListOf<com.dan323.httpclient.core.domain.HttpRequest>()
+        val executor = com.dan323.httpclient.core.port.out.HttpExecutor {
+            sent += it; com.dan323.httpclient.core.domain.HttpResponse(200, emptyList(), ByteArray(0), 0)
+        }
+        withoutAmbientRoots {
+            SessionFactory(executor).use { f ->
+                val granted = com.dan323.httpclient.core.port.out.Allowlists(listOf(" PATH ", ""), listOf(outside.toString(), " "))
+                val session = f.createConfigured(file, granted, fileHint = "FILE-HINT", envHint = "ENV-HINT").getOrThrow()
+                val out = session.runAll(HttpFileParser().parse(text).requests, emptyMap())
+                assertIs<RunOutcome.Success>(out[0])
+                assertEquals("granted-body", String(sent.single().body!!))
+                assertTrue(sent.single().headers.single { it.name == "X-Path" }.value.isNotEmpty())   // PATH was read
+                assertTrue("FILE-HINT" in assertIs<RunOutcome.Failure>(out[1]).message)
+                assertTrue("ENV-HINT" in assertIs<RunOutcome.Failure>(out[2]).message)
+                val bad = f.createConfigured(file, com.dan323.httpclient.core.port.out.Allowlists(fileRoots = listOf("relative/dir")))
+                assertTrue(bad.exceptionOrNull()!!.message!!.contains("'relative/dir' must be an absolute path"))
+            }
+        }
+    }
+
+    /** Runs [block] with the file-root system property set to nothing, so a value on the test machine cannot leak in. */
+    private fun withoutAmbientRoots(block: () -> Unit) {
+        val property = FileAccessPolicy.ALLOW_PROPERTY
+        val previous = System.getProperty(property)
+        try { System.setProperty(property, ""); block() } finally {
+            if (previous == null) System.clearProperty(property) else System.setProperty(property, previous)
+        }
+    }
+
     @Test fun badConfigurationComesBackAsFailure() {
         val r = FileAccessPolicy.load({ "relative" }, { null })
         assertTrue(r.isFailure)

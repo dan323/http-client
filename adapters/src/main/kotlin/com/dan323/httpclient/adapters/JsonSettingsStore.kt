@@ -1,5 +1,6 @@
 package com.dan323.httpclient.adapters
 
+import com.dan323.httpclient.core.port.out.Allowlists
 import com.dan323.httpclient.core.port.out.DesktopSettings
 import com.dan323.httpclient.core.port.out.LoadedSettings
 import com.dan323.httpclient.core.port.out.SettingsStore
@@ -39,6 +40,9 @@ class JsonSettingsStore internal constructor(
     private val lock = Any()
     private var unusableFileSeen = false
     private var unreadable = false
+    // Allowlists read from a file that was unreadable at load: the app never saw them (its own are null, 'never set'),
+    // so every later save keeps them, not only the first one, until the app sets its own.
+    private var recoveredAllowlists: Allowlists? = null
 
     /** What reading the file gave: [settings] (null when it is unusable), a [warning], and whether it was a transient [ioError]. */
     private class Read(val settings: DesktopSettings?, val warning: String? = null, val ioError: Boolean = false)
@@ -78,8 +82,9 @@ class JsonSettingsStore internal constructor(
                 if (r.ioError) return "Could not save settings: the existing settings file cannot be read (${r.warning}); it was left untouched."
                 unreadable = false
                 unusableFileSeen = r.settings == null
-                r.settings?.let { toWrite = merge(it, settings) }
+                r.settings?.let { toWrite = merge(it, settings); recoveredAllowlists = it.allowlists }
             }
+            if (toWrite.allowlists == null) toWrite = toWrite.copy(allowlists = recoveredAllowlists)
             ensureDir()
             if (unusableFileSeen) {
                 backUp()
@@ -103,6 +108,7 @@ class JsonSettingsStore internal constructor(
         activeFile = if (mine.openFiles != null) mine.activeFile else stored.activeFile,
         folder = mine.folder ?: stored.folder,
         folderOpen = mine.folderOpen,
+        allowlists = mine.allowlists ?: stored.allowlists,   // emptied lists of mine win: only null means 'never set'
     )
 
     private fun ensureDir() {
@@ -143,6 +149,9 @@ class JsonSettingsStore internal constructor(
     )
 
     @Serializable
+    private data class AllowlistsDto(val envNames: List<String> = emptyList(), val fileRoots: List<String> = emptyList())
+
+    @Serializable
     private data class SettingsDto(
         val version: Int = -1,
         val lastFile: String? = null,
@@ -154,6 +163,7 @@ class JsonSettingsStore internal constructor(
         val activeFile: String? = null,
         val folder: String? = null,
         val folderOpen: Boolean = false,
+        val allowlists: AllowlistsDto? = null,
     ) {
         init { require(version >= 1) { "not a settings file" } }
 
@@ -169,6 +179,7 @@ class JsonSettingsStore internal constructor(
                 activeFile = tabs?.activeFile,
                 folder = folder,
                 folderOpen = folderOpen,
+                allowlists = allowlists?.let { Allowlists(it.envNames, it.fileRoots) },
             )
         }
 
@@ -181,6 +192,7 @@ class JsonSettingsStore internal constructor(
                     DesktopSettings.bounded(s.recentFiles),
                     s.recordHistory,
                     tabs?.openFiles, tabs?.activeFile, s.folder, s.folderOpen,
+                    s.allowlists?.let { AllowlistsDto(it.envNames, it.fileRoots) },
                 )
             }
         }

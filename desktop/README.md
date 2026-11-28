@@ -80,6 +80,6 @@ because installers require a major version of at least 1; its major is the proje
 
 ## Environment and file access
 
-`{{$env.NAME}}` reads nothing by default: allow names with `-Dhttpclient.allowEnv=NAME,NAME` (JVM option) or the environment variable `HTTPC_ALLOW_ENV=NAME,NAME`; see [docs/features.md](../docs/features.md).
+`{{$env.NAME}}` reads nothing by default: allow names under **Settings…** (*Allowed environment variables*), or with `-Dhttpclient.allowEnv=NAME,NAME` (JVM option) or the environment variable `HTTPC_ALLOW_ENV=NAME,NAME`; all are merged. See [docs/features.md](../docs/features.md).
 
-`< path` bodies are confined to the `.http` file's folder; allow more with `-Dhttpclient.allowFileRoots=/abs/dir` or `HTTPC_ALLOW_FILE_ROOTS=/abs/dir` (absolute paths, `~` expanded). See [docs/features.md](../docs/features.md).
+`< path` bodies are confined to the `.http` file's folder; allow more under **Settings…** (*Allowed folders*), or with `-Dhttpclient.allowFileRoots=/abs/dir` or `HTTPC_ALLOW_FILE_ROOTS=/abs/dir` (absolute paths, `~` expanded). The Settings lists are kept in the app's `settings.json` (names and paths only) and apply from the next run. See [docs/features.md](../docs/features.md).

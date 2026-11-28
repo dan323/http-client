@@ -234,9 +234,36 @@ class JsonSettingsStoreTest {
 
     @Test fun `settings never contain more than paths, names, geometry and the record history flag`() {
         val a = realFile("a.http")
-        store().save(DesktopSettings(a, mapOf(a to "dev"), WindowSettings(1, 2), listOf(a), openFiles = listOf(a), activeFile = a, folder = root.toString(), folderOpen = true))
+        store().save(DesktopSettings(a, mapOf(a to "dev"), WindowSettings(1, 2), listOf(a), openFiles = listOf(a), activeFile = a, folder = root.toString(), folderOpen = true,
+            allowlists = com.dan323.httpclient.core.port.out.Allowlists(listOf("TOKEN"), listOf(root.toString()))))   // names and paths only, never a value
         val keys = Regex("\"(\\w+)\"\\s*:").findAll(Files.readString(dir.resolve("settings.json"))).map { it.groupValues[1] }.toSet()
-        assertEquals(setOf("version", "lastFile", "environments", "window", "width", "height", "x", "y", "maximized", "recentFiles", "recordHistory", "openFiles", "activeFile", "folder", "folderOpen"), keys)
+        assertEquals(setOf("version", "lastFile", "environments", "window", "width", "height", "x", "y", "maximized", "recentFiles", "recordHistory", "openFiles", "activeFile", "folder", "folderOpen", "allowlists", "envNames", "fileRoots"), keys)
+    }
+
+    @Test fun `the allowlists round trip and an older file means never set`() {
+        val granted = com.dan323.httpclient.core.port.out.Allowlists(listOf("TOKEN"), listOf("/data", "/b c"))
+        assertNull(store().save(DesktopSettings(allowlists = granted)))
+        assertEquals(granted, store().load().settings.allowlists)
+        assertTrue(Files.readString(dir.resolve("settings.json")).contains("\"envNames\""))
+        Files.writeString(dir.resolve("settings.json"), """{"version":1,"recentFiles":[]}""")
+        assertNull(store().load().settings.allowlists)
+    }
+
+    @Test fun `emptied allowlists of the running app win over the stored ones after an unreadable file`() {
+        val granted = com.dan323.httpclient.core.port.out.Allowlists(listOf("TOKEN"), listOf("/data"))
+        assertNull(store().save(DesktopSettings(allowlists = granted)))
+        var failing = true
+        val st = JsonSettingsStore(dir, AtomicReportWriter()) { if (failing) throw java.io.IOException("locked") else Files.readString(it) }
+        st.load(); failing = false
+        assertNull(st.save(DesktopSettings(window = WindowSettings(1, 2))))   // never set here: the stored lists stay
+        assertEquals(granted, store().load().settings.allowlists)
+        assertNull(st.save(DesktopSettings(window = WindowSettings(3, 4))))   // and on every later save, not only the first
+        assertEquals(granted, store().load().settings.allowlists)
+        failing = true
+        val st2 = JsonSettingsStore(dir, AtomicReportWriter()) { if (failing) throw java.io.IOException("locked") else Files.readString(it) }
+        st2.load(); failing = false
+        assertNull(st2.save(DesktopSettings(allowlists = com.dan323.httpclient.core.port.out.Allowlists())))   // revoked: nothing comes back
+        assertEquals(com.dan323.httpclient.core.port.out.Allowlists(), store().load().settings.allowlists)
     }
 
     @Test fun `the open tabs round trip and a file without them means not known, not none`() {

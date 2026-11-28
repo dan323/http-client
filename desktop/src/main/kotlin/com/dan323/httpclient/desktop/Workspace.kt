@@ -7,6 +7,8 @@ import com.dan323.httpclient.adapters.DefaultTimeout
 import com.dan323.httpclient.adapters.FileAccessPolicy
 import com.dan323.httpclient.adapters.FileHistoryStore
 import com.dan323.httpclient.adapters.SessionFactory
+import com.dan323.httpclient.adapters.SystemEnvironmentVariables
+import com.dan323.httpclient.core.port.out.Allowlists
 import com.dan323.httpclient.core.application.HttpFileParser
 import com.dan323.httpclient.core.application.HttpParseException
 import com.dan323.httpclient.core.application.RunOutcome
@@ -38,18 +40,38 @@ object Workspace {
 /**
  * Runs requests for the desktop app. Owns the HTTP executor (released by [close]) and keeps one session per
  * (file, environment, variables) in a [RunController], so a login request runs once and later sends reuse it.
+ * [policy] gets the folders of [allowlists] on top of the system property and environment variable.
  */
 class DesktopRunner(
-    private val policy: () -> Result<FileAccessPolicy> = { FileAccessPolicy.load() },
+    private val policy: (Allowlists) -> Result<FileAccessPolicy> = { FileAccessPolicy.load(settingsRoots = it.fileRoots, hint = FILE_HINT) },
     private val defaultTimeout: () -> Result<Long> = { DefaultTimeout.load() },
     history: com.dan323.httpclient.core.port.out.HistoryStore = FileHistoryStore(),
 ) : AutoCloseable {
+    /** What the Settings dialog allows; read when a session is created, so set it and then call [resetChain]. */
+    @Volatile var allowlists: Allowlists = Allowlists()
+
     // `>> path` saves work through the session; `<> path` links are kept in the file's .http-history, like the CLI and the plugin
     private val factory = SessionFactory(history = history)
-    private val controller = RunController(UpwardEnvironmentLocator()) { file -> policy().mapCatching { factory.create(file, it, defaultTimeoutMillis = defaultTimeout().getOrThrow()) } }
+    private val controller = RunController(UpwardEnvironmentLocator()) { file ->
+        val granted = allowlists
+        policy(granted).mapCatching {
+            factory.create(file, it, allowEnv = granted.envNames.toSet(), envHint = ENV_HINT, defaultTimeoutMillis = defaultTimeout().getOrThrow())
+        }
+    }
+
+    companion object {
+        /** Where to allow a folder, in the message of a refused `< path` / `>> path`. */
+        val FILE_HINT = "add the folder in Settings… (Allowed folders), or ${FileAccessPolicy.DEFAULT_HINT}"
+
+        /** Where to allow a name, in the message of a refused `{{$env.NAME}}`. */
+        const val ENV_HINT = "add it in Settings… (Allowed environment variables), or ${SystemEnvironmentVariables.DEFAULT_HINT}"
+    }
 
     /** Forgets remembered responses, so the next run sends the chained requests again. */
     fun resetChain() = controller.resetChain()
+
+    /** Drops every session, running ones included, after [allowlists] changed: no later run uses one made with the old lists. */
+    fun invalidateSessions() = controller.invalidateSessions()
 
     /**
      * Runs the request at [index] in [text] (with the requests it chains on, unless they already ran for this file

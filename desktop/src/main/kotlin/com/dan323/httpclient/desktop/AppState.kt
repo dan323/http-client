@@ -6,8 +6,11 @@ import androidx.compose.runtime.setValue
 import com.dan323.httpclient.core.application.RunOutcome
 import com.dan323.httpclient.core.application.RunReport
 import com.dan323.httpclient.adapters.UpwardEnvironmentLocator
+import com.dan323.httpclient.adapters.FileAccessPolicy
+import com.dan323.httpclient.core.port.out.Allowlists
 import com.dan323.httpclient.core.port.out.EnvironmentFileStoreLocator
 import com.dan323.httpclient.core.port.out.HistoryStore
+import com.dan323.httpclient.viewmodel.AllowlistForm
 import com.dan323.httpclient.viewmodel.EnvironmentEditor
 import com.dan323.httpclient.viewmodel.SaveOutcome
 import com.dan323.httpclient.core.domain.RequestTemplate
@@ -46,6 +49,53 @@ class AppState(
     /** True when the folder view is shown next to the request list. Remembered between sessions. */
     var folderOpen by mutableStateOf(settings?.current?.folderOpen ?: false)
         private set
+
+    /** What the Settings panel allows: `{{$env.NAME}}` names and `< path` folders, on top of the system property and environment variable. Remembered between sessions. */
+    var allowlists by mutableStateOf(settings?.current?.allowlists ?: Allowlists())
+        private set
+
+    init { runner.allowlists = allowlists }
+
+    /** The Settings panel while it is shown (it replaces the response pane); null otherwise. */
+    var settingsDraft by mutableStateOf<SettingsDraft?>(null)
+        private set
+
+    /**
+     * Shows the Settings panel with what is saved, or closes it (discarding what was typed). One form at a time: it does
+     * not open over the environment editor (whose unsaved edits it would hide), and an editor still loading is dropped.
+     */
+    fun showSettings(show: Boolean) {
+        if (!show) { settingsDraft = null; return }
+        synchronized(envEditorLock) {
+            if (envEditor != null) return
+            envEditorGeneration++   // a load that started before cannot open the editor behind the panel
+            settingsDraft = SettingsDraft(allowlists)
+        }
+    }
+
+    /**
+     * Checks the Settings panel and, when every entry is valid, saves it, closes the panel and forgets the remembered
+     * responses (sessions were made with the old lists). Otherwise the errors are shown in the panel. Returns whether it saved.
+     */
+    fun saveSettings(): Boolean {
+        val draft = settingsDraft ?: return false
+        return when (val checked = AllowlistForm.check(draft.envText, draft.rootsText, FileAccessPolicy::rootProblem)) {
+            is AllowlistForm.Checked.Invalid -> { draft.errors = checked.errors; false }
+            is AllowlistForm.Checked.Valid -> {
+                val changed = checked.allowlists != allowlists
+                allowlists = checked.allowlists
+                runner.allowlists = checked.allowlists
+                settings?.update { it.withAllowlists(checked.allowlists) }
+                settingsDraft = null
+                if (changed) {
+                    runner.invalidateSessions()   // running ones too: none made with the old lists is used again
+                    notice = SETTINGS_SAVED_NOTICE
+                    noticeId++
+                }
+                true
+            }
+        }
+    }
 
     /** The folder the folder view lists: the picked one, else the folder of a file shown (kept until a file outside it comes on screen), else none. */
     val folderRoot: Path? get() = chosenFolder ?: implicitFolder
@@ -267,7 +317,10 @@ class AppState(
     fun showEnvironmentEditor(show: Boolean) {
         val folderFile = file?.toAbsolutePath()
         if (!show || folderFile == null) { closeEnvironmentEditor(); return }
-        val generation = synchronized(envEditorLock) { ++envEditorGeneration }
+        val generation = synchronized(envEditorLock) {
+            if (settingsDraft != null) return   // one form at a time (see showSettings)
+            ++envEditorGeneration
+        }
         val editor = try {
             EnvironmentEditorState(EnvironmentEditor(environmentStores.storeFor(folderFile))).also { it.load() }
         } catch (e: Exception) {
@@ -588,6 +641,7 @@ internal fun canonical(path: Path): String = try {
 
 /** Shown after **Reset chain**; the plugin reports the same event. */
 internal const val CHAIN_RESET_NOTICE = "Chain reset"
+internal const val SETTINGS_SAVED_NOTICE = "Settings saved"   // like Reset chain, the next run sends the chained requests again
 
 /**
  * The label of each open file: its name, with parent folders added (`dev/api.http`) for the files whose names collide,

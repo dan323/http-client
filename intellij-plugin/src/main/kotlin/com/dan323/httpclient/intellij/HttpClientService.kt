@@ -36,7 +36,10 @@ class HttpClientService(private val project: Project) : Disposable, PersistentSt
     private val locator = UpwardEnvironmentLocator()
     private val history = FileHistoryStore()
     private val factory = SessionFactory(history = history)
-    private val clientState = ClientState(locator, history = history) { file -> factory.createConfigured(file) }
+    private val allowlists = AllowlistSettings.getInstance()
+    private val clientState = ClientState(locator, history = history) { file ->
+        factory.createConfigured(file, allowlists.allowlists, AllowlistSettings.FILE_HINT, AllowlistSettings.ENV_HINT)
+    }
 
     var environmentChoice: EnvironmentChoice
         get() = clientState.environmentChoice
@@ -58,6 +61,11 @@ class HttpClientService(private val project: Project) : Disposable, PersistentSt
                     .forEach { e -> e.file?.let { f -> if (f.extension == "http") clientState.forget(Path.of(f.path)) } }
             }
         })
+    }
+
+    init {
+        // Sessions were made with the old allowlists: the next run creates new ones (and sends the chained requests again).
+        allowlists.onChange(this) { clientState.accessChanged() }
     }
 
     init {
