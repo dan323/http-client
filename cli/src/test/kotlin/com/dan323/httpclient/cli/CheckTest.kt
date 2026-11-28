@@ -44,7 +44,7 @@ class CheckTest {
         assertContains(r.err, "1 error, 0 warnings")
     }
 
-    @Test fun `a header the HTTP client sets itself is a warning that does not fail`() {
+    @Test fun `a header the HTTP client controls is a warning that does not fail`() {
         val f = file("GET http://x/a\nHost: example.com\n")
         val r = cli(f, "--check")
         assertEquals(0, r.code, r.err)

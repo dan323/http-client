@@ -384,7 +384,7 @@ class VariableAnalysis private constructor(
             while (i < to && lines.text(i).isNotBlank()) {
                 val raw = lines.text(i)
                 val t = raw.trim()
-                if (HttpLineSyntax.isResponseHandler(t) || HttpLineSyntax.isResponseRedirect(t)) break
+                if (HttpLineSyntax.isResponseHandler(t) || HttpLineSyntax.isResponseRedirect(t) || HttpLineSyntax.isResponseSave(t)) break
                 if (!HttpLineSyntax.isComment(t)) {
                     val idx = t.indexOf(':')
                     if (idx < 0 && raw.first().isWhitespace() && headers > 0) {

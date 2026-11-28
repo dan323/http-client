@@ -125,7 +125,7 @@ The `{{...}}` of a `.http` text can be checked without running anything, for the
 | `invalid-reference-text`   | warning  | `{{ a b }}`: not a reference, sent as written                                                                                |
 | `duplicate-request-name`   | warning  | the later `# @name` repeats an earlier one                                                                                   |
 | `variable-defined-later`   | warning  | an `@a = {{b}}` value uses a file variable defined below it                                                                  |
-| `dropped-header`           | warning  | a `Host`, `Content-Length`, `Connection`, `Expect` or `Upgrade` header: the HTTP client sets it itself, so it is not sent    |
+| `dropped-header`           | warning  | a `Host`, `Content-Length`, `Connection`, `Expect` or `Upgrade` header: the HTTP client controls it, so it is not sent        |
 | `parse-error`              | error    | the parser rejected a line (its message, on that line); one per `###` block                                                  |
 
 A file that does not parse is still analysed: each rejected line is a `parse-error` and left out, so the other diagnostics keep working while a request is half typed. The rules are the run-time ones. Scanned: request and query lines, header values, body text, the path of a `< path` body or `>> path` / `>>! path` save, file variable values, `# @assert` expressions and the values of `@timeout`, `@no-redirect`, `@no-cookie-jar`, `@proxy`. Not scanned: comments, `# @name`, other settings. Never flagged, because they depend on run time: whether `body.$.x` finds anything, and `$env.X` / `$processEnv X`.

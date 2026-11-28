@@ -200,6 +200,12 @@ class VariableAnalysisTest {
         assertTrue(ds.all { it.severity == Severity.WARNING })
     }
 
+    @Test fun aHeaderNameAfterAResponseSaveIsBodyTextNotADroppedHeader() {
+        val text = "GET http://h\nHost: a\n>> note\nHost: body text"
+        val ds = analyze(text).diagnostics.filter { it.code == DiagnosticCodes.DROPPED_HEADER }
+        assertEquals(listOf(1), ds.map { it.range.line })
+    }
+
     @Test fun parseErrorIsReported() {
         val d = analyze("GTE http://h").diagnostics.single()
         assertEquals(DiagnosticCodes.PARSE_ERROR, d.code)

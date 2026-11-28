@@ -87,7 +87,7 @@ class JdkHttpExecutor(
         val builder = java.net.http.HttpRequest.newBuilder(URI.create(request.url))
             .method(request.method, request.body?.let(BodyPublishers::ofByteArray) ?: BodyPublishers.noBody())
         request.options.timeoutMillis?.let { builder.timeout(Duration.ofMillis(it)) }
-        // Restricted by java.net.http (the JDK sets them itself): dropped here; the parser and `--check` warn about them.
+        // Restricted by java.net.http (the JDK sets or omits them itself): dropped here; the parser and `--check` warn about them.
         request.headers.filter { !HttpLineSyntax.isClientControlledHeader(it.name) }.forEach { builder.header(it.name, it.value) }
 
         val start = System.nanoTime()

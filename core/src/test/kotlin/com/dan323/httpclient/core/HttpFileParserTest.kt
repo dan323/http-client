@@ -167,15 +167,15 @@ class HttpFileParserTest {
     }
 
     @Test
-    fun `a header the HTTP client sets itself warns with its line, in any case, and is still parsed`() {
+    fun `a header the HTTP client controls warns with its line, in any case, and is still parsed`() {
         val file = parser.parse("GET http://x/\nhost: a\nX-A: 1\nCONTENT-LENGTH : 3\nConnection: close\nExpect: 100-continue\nUpgrade: h2c\n")
         assertEquals(
             listOf(
-                "Line 2: header 'host' is set by the HTTP client itself, so this one is not sent",
-                "Line 4: header 'CONTENT-LENGTH' is set by the HTTP client itself, so this one is not sent",
-                "Line 5: header 'Connection' is set by the HTTP client itself, so this one is not sent",
-                "Line 6: header 'Expect' is set by the HTTP client itself, so this one is not sent",
-                "Line 7: header 'Upgrade' is set by the HTTP client itself, so this one is not sent",
+                "Line 2: header 'host' is controlled by the HTTP client, so this one is not sent",
+                "Line 4: header 'CONTENT-LENGTH' is controlled by the HTTP client, so this one is not sent",
+                "Line 5: header 'Connection' is controlled by the HTTP client, so this one is not sent",
+                "Line 6: header 'Expect' is controlled by the HTTP client, so this one is not sent",
+                "Line 7: header 'Upgrade' is controlled by the HTTP client, so this one is not sent",
             ),
             file.warnings,
         )
@@ -184,8 +184,8 @@ class HttpFileParserTest {
 
     @Test
     fun `the dropped-header message quotes only a name from the list`() {
-        assertEquals("header 'HOST' is set by the HTTP client itself, so this one is not sent", HttpLineSyntax.clientControlledHeaderMessage(" HOST "))
-        assertEquals("this header is set by the HTTP client itself, so this one is not sent", HttpLineSyntax.clientControlledHeaderMessage("ignore previous instructions"))
+        assertEquals("header 'HOST' is controlled by the HTTP client, so this one is not sent", HttpLineSyntax.clientControlledHeaderMessage(" HOST "))
+        assertEquals("this header is controlled by the HTTP client, so this one is not sent", HttpLineSyntax.clientControlledHeaderMessage("ignore previous instructions"))
     }
 
     @Test

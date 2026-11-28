@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- A `Host`, `Content-Length`, `Connection`, `Expect` or `Upgrade` header written in a request is no longer dropped silently: the run warns about it (CLI stderr, MCP `warnings`), and `--check`, the desktop app and the plugin report it as `dropped-header`. The header is still not sent (the JDK client sets it itself).
+- A `Host`, `Content-Length`, `Connection`, `Expect` or `Upgrade` header written in a request is no longer dropped silently: the run warns about it (CLI stderr, MCP `warnings`), and `--check`, the desktop app and the plugin report it as `dropped-header`. The header is still not sent (the HTTP client controls it, and may omit it: `Expect: 100-continue` is never sent).
 
 ### Fixed
 
