@@ -79,6 +79,20 @@ class CookieJarTest {
         assertEquals(tooLong, PublicSuffixList.toAscii(tooLong))
     }
 
+    @Test fun everyInternationalisedRuleOfTheBundledListMatchesInPunycode() {
+        val rules = javaClass.getResourceAsStream("/com/dan323/httpclient/core/public_suffix_list.txt")!!.bufferedReader().readLines()
+            .map { it.trim().lowercase() }
+            .filter { r -> !r.startsWith("//") && r.any { it.code > 127 } }
+        assertTrue(rules.size > 400, "non-ASCII rules: ${rules.size}")
+        assertTrue(rules.none { it.startsWith("!") || it.startsWith("*.") }, "only plain rules are non-ASCII; extend this test if that changes")
+        assertEquals("xn--9tfky.id", PublicSuffixList.toAscii("ᬩᬮᬶ.id")) // Balinese: after Unicode 3.2
+        rules.forEach { r ->
+            val ascii = PublicSuffixList.toAscii(r)
+            assertTrue(ascii.all { it.code <= 127 }, r)
+            assertTrue(CookieJar.isPublicSuffix(ascii), r)
+        }
+    }
+
     @Test fun punycodeSupercookieIsRejected() {
         set("http://shop.xn--55qx5d.cn/", "x=1; Domain=xn--55qx5d.cn", "y=1; Domain=公司.cn")
         assertEquals(0, jar.size())

@@ -58,10 +58,11 @@ internal object PublicSuffixList {
 
     /**
      * [name] with its non-ASCII labels in punycode (`bücher.de` -> `xn--bcher-kva.de`); ASCII labels and their case are
-     * kept. A name IDNA rejects (an empty or over-long label) is returned unchanged.
+     * kept. `java.net.IDN` is IDNA2003 (Unicode 3.2), so code points added later are allowed through (`ᬩᬮᬶ.id`, a
+     * Balinese rule, would fail otherwise). A name IDNA rejects (an empty or over-long label) is returned unchanged.
      */
     fun toAscii(name: String): String = try {
-        IDN.toASCII(name)
+        IDN.toASCII(name, IDN.ALLOW_UNASSIGNED)
     } catch (_: IllegalArgumentException) {
         name
     }
