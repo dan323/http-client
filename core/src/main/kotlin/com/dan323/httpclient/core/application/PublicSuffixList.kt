@@ -1,10 +1,13 @@
 package com.dan323.httpclient.core.application
 
+import java.net.IDN
+
 /**
  * The Mozilla Public Suffix List (ICANN and private sections), bundled as the classpath resource
  * `public_suffix_list.txt` next to this package's classes (rules only, comments stripped, so core keeps zero
  * third-party dependencies). Used by [CookieJar] to refuse `Domain` attributes that name a registry-controlled
- * suffix such as `com`, `co.uk` or `github.io`. Update procedure: see "Cookie jar" in `docs/design-notes.md#cookie-jar`.
+ * suffix such as `com`, `co.uk` or `github.io`. The list writes internationalised rules in Unicode (`公司.cn`); they are
+ * converted to punycode (`xn--55qx5d.cn`) when loaded, the form a request host has. Update procedure: see "Cookie jar" in `docs/design-notes.md#cookie-jar`.
  */
 internal object PublicSuffixList {
     private class Rules(val plain: Set<String>, val wildcardParents: Set<String>, val exceptions: Set<String>)
@@ -24,9 +27,9 @@ internal object PublicSuffixList {
                 val rule = line.trim().lowercase()
                 when {
                     rule.isEmpty() || rule.startsWith("//") -> {}
-                    rule.startsWith("!") -> exceptions += rule.substring(1)
-                    rule.startsWith("*.") -> wildcards += rule.substring(2)
-                    else -> plain += rule
+                    rule.startsWith("!") -> exceptions += toAscii(rule.substring(1))
+                    rule.startsWith("*.") -> wildcards += toAscii(rule.substring(2))
+                    else -> plain += toAscii(rule)
                 }
             }
         }
@@ -53,9 +56,19 @@ internal object PublicSuffixList {
         return best
     }
 
-    /** True when [domain] (lowercase, no leading dot) is itself a public suffix. */
+    /**
+     * [name] with its non-ASCII labels in punycode (`bücher.de` -> `xn--bcher-kva.de`); ASCII labels and their case are
+     * kept. A name IDNA rejects (an empty or over-long label) is returned unchanged.
+     */
+    fun toAscii(name: String): String = try {
+        IDN.toASCII(name)
+    } catch (_: IllegalArgumentException) {
+        name
+    }
+
+    /** True when [domain] (lowercase, no leading dot; Unicode or punycode) is itself a public suffix. */
     fun isPublicSuffix(domain: String): Boolean {
-        val labels = domain.trimEnd('.').split('.')
+        val labels = toAscii(domain).trimEnd('.').split('.')
         return labels.size <= suffixLength(labels)
     }
 }
