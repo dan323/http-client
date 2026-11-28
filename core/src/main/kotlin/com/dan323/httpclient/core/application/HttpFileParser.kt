@@ -102,6 +102,9 @@ class HttpFileParser : ParseHttpFile {
                 }
                 if (idx <= 0) throw HttpParseException(lineNo(i), "header line without ':' (expected 'Name: value'): $l")
                 headers += Header(l.substring(0, idx).trim(), l.substring(idx + 1).trim())
+                if (HttpLineSyntax.isClientControlledHeader(headers.last().name)) {
+                    warnings += "Line ${lineNo(i)}: ${HttpLineSyntax.clientControlledHeaderMessage(headers.last().name)}"
+                }
             }
             i++
         }

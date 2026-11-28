@@ -21,6 +21,23 @@ object HttpLineSyntax {
     /** Request types of the JetBrains format that are not supported; they must fail instead of being sent as plain HTTP. */
     val UNSUPPORTED_PROTOCOLS = setOf("GRAPHQL", "WEBSOCKET", "GRPC")
 
+    /**
+     * Headers the HTTP client controls (the JDK client refuses them, and sets or omits them itself): a header with one of these names written in a
+     * request is not sent. Lower case; compare with [isClientControlledHeader].
+     */
+    val CLIENT_CONTROLLED_HEADERS = setOf("host", "content-length", "connection", "expect", "upgrade")
+
+    fun isClientControlledHeader(name: String) = name.trim().lowercase() in CLIENT_CONTROLLED_HEADERS
+
+    /**
+     * The warning for a [CLIENT_CONTROLLED_HEADERS] header; the same text in the parser and the analyzer. The name is
+     * quoted only when it is one of that list (in any case), so text from the file never reaches the message otherwise.
+     */
+    fun clientControlledHeaderMessage(name: String): String {
+        val shown = name.trim().takeIf(::isClientControlledHeader)?.let { "header '$it'" } ?: "this header"
+        return "$shown is controlled by the HTTP client, so this one is not sent"
+    }
+
     private val fileVariable = Regex("""^@([^\s=]+)\s*=\s*(.*)$""")
     private val httpVersion = Regex("""\s+HTTP/\S+$""")
     private val letters = Regex("""[A-Za-z]+""")

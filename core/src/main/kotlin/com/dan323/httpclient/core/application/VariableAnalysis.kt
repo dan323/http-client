@@ -31,6 +31,7 @@ object DiagnosticCodes {
     const val INVALID_REFERENCE_TEXT = "invalid-reference-text"
     const val DUPLICATE_REQUEST_NAME = "duplicate-request-name"
     const val VARIABLE_DEFINED_LATER = "variable-defined-later"
+    const val DROPPED_HEADER = "dropped-header"
 }
 
 enum class VariableKind { ENVIRONMENT, FILE, REQUEST_RESPONSE, DYNAMIC }
@@ -383,7 +384,7 @@ class VariableAnalysis private constructor(
             while (i < to && lines.text(i).isNotBlank()) {
                 val raw = lines.text(i)
                 val t = raw.trim()
-                if (HttpLineSyntax.isResponseHandler(t) || HttpLineSyntax.isResponseRedirect(t)) break
+                if (HttpLineSyntax.isResponseHandler(t) || HttpLineSyntax.isResponseRedirect(t) || HttpLineSyntax.isResponseSave(t)) break
                 if (!HttpLineSyntax.isComment(t)) {
                     val idx = t.indexOf(':')
                     if (idx < 0 && raw.first().isWhitespace() && headers > 0) {
@@ -391,6 +392,10 @@ class VariableAnalysis private constructor(
                     } else if (idx > 0) {
                         scanLine(i, leadOf(i) + idx + 1)
                         headers++
+                        val name = t.substring(0, idx).trimEnd()
+                        if (HttpLineSyntax.isClientControlledHeader(name)) {
+                            add(DiagnosticCodes.DROPPED_HEADER, Severity.WARNING, HttpLineSyntax.clientControlledHeaderMessage(name), lines.range(lines.start(i) + leadOf(i), name.length))
+                        }
                     }
                 }
                 i++

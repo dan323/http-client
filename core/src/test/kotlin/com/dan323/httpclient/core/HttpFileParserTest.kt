@@ -1,6 +1,7 @@
 package com.dan323.httpclient.core
 
 import com.dan323.httpclient.core.application.HttpFileParser
+import com.dan323.httpclient.core.application.HttpLineSyntax
 import com.dan323.httpclient.core.application.HttpParseException
 import com.dan323.httpclient.core.application.RequestRunner
 import com.dan323.httpclient.core.application.UndefinedVariableException
@@ -163,6 +164,28 @@ class HttpFileParserTest {
             file.warnings,
         )
         assertEquals("GET", file.requests.single().method)
+    }
+
+    @Test
+    fun `a header the HTTP client controls warns with its line, in any case, and is still parsed`() {
+        val file = parser.parse("GET http://x/\nhost: a\nX-A: 1\nCONTENT-LENGTH : 3\nConnection: close\nExpect: 100-continue\nUpgrade: h2c\n")
+        assertEquals(
+            listOf(
+                "Line 2: header 'host' is controlled by the HTTP client, so this one is not sent",
+                "Line 4: header 'CONTENT-LENGTH' is controlled by the HTTP client, so this one is not sent",
+                "Line 5: header 'Connection' is controlled by the HTTP client, so this one is not sent",
+                "Line 6: header 'Expect' is controlled by the HTTP client, so this one is not sent",
+                "Line 7: header 'Upgrade' is controlled by the HTTP client, so this one is not sent",
+            ),
+            file.warnings,
+        )
+        assertEquals(6, file.requests.single().headers.size)
+    }
+
+    @Test
+    fun `the dropped-header message quotes only a name from the list`() {
+        assertEquals("header 'HOST' is controlled by the HTTP client, so this one is not sent", HttpLineSyntax.clientControlledHeaderMessage(" HOST "))
+        assertEquals("this header is controlled by the HTTP client, so this one is not sent", HttpLineSyntax.clientControlledHeaderMessage("ignore previous instructions"))
     }
 
     @Test

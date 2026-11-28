@@ -5,6 +5,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A `Host`, `Content-Length`, `Connection`, `Expect` or `Upgrade` header written in a request is no longer dropped silently: the run warns about it (CLI stderr, MCP `warnings`), and `--check`, the desktop app and the plugin report it as `dropped-header`. The header is still not sent (the HTTP client controls it, and may omit it: `Expect: 100-continue` is never sent).
+
 ### Fixed
 
 - MCP server: a chained request no longer blanks the earlier responses it refers to. The status (`{{login.response.status}}`), the whole body (`{{login.response.body.*}}`) and the plain headers (`content-type`, `content-length`, `content-encoding`, `content-language`, `date`, `server`, `etag`, `last-modified`, `cache-control`, `vary`, `accept-ranges`, `connection`, `allow`, `age`, `expires`) of an earlier response are shown as they are; values picked out of a body (`body.$.token`, an XPath) and every other header are still replaced by their variable name. `RequestSession.substitutedValues()` no longer lists the shown ones. Before, a `whole-body` request made the whole `login` body show as `{{login.response.body.*}}` and every `application/json` as `{{login.response.headers.content-type}}`.
